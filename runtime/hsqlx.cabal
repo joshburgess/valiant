@@ -154,6 +154,7 @@ benchmark hsqlx-bench
     , bytestring
     , criterion    >=1.6  && <1.7
     , hsqlx
+    , pg-wire
     , scientific
     , text
     , time

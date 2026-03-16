@@ -20,8 +20,8 @@ import Hsqlx.Binary.Decode ()
 import Hsqlx.Binary.Encode ()
 import Hsqlx.Binary.Interval (PgInterval (..))
 import Hsqlx.Binary.Scientific ()
-import Hsqlx.Binary.Types (PgDecode (..), PgEncode (..))
-import Hsqlx.Protocol.Oid
+import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
+import PgWire.Protocol.Oid
 
 benchmarks :: [Benchmark]
 benchmarks =
