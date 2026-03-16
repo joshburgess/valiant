@@ -3,9 +3,9 @@ name:            hsqlx
 version:         0.1.0.0
 synopsis:        Compile-time checked SQL for Haskell — runtime library
 description:
-  Custom PostgreSQL wire protocol driver with connection pooling,
-  binary format codecs, and the @Statement@ type for compile-time
-  validated SQL queries.
+  Runtime library for hsqlx. Provides the @Statement@ type, binary format
+  codecs, query execution functions, and re-exports from @pg-wire@ (the
+  underlying PostgreSQL wire protocol driver).
 license:         BSD-3-Clause
 license-file:    ../LICENSE
 build-type:      Simple
@@ -26,26 +26,15 @@ library
 
   exposed-modules:
     Hsqlx
+    -- Re-exports from pg-wire (backwards compatibility)
     Hsqlx.Auth.Cleartext
     Hsqlx.Auth.MD5
     Hsqlx.Auth.ScramSHA256
-    Hsqlx.Binary.Array
-    Hsqlx.Binary.Composite
-    Hsqlx.Binary.Decode
-    Hsqlx.Binary.Encode
-    Hsqlx.Binary.Interval
-    Hsqlx.Binary.Range
-    Hsqlx.Binary.Scientific
     Hsqlx.Binary.Types
     Hsqlx.Cancel
     Hsqlx.Connection
     Hsqlx.Connection.Config
-    Hsqlx.Copy
     Hsqlx.Error
-    Hsqlx.Execute
-    Hsqlx.FromRow
-    Hsqlx.Logging
-    Hsqlx.Notify
     Hsqlx.Pool
     Hsqlx.Pool.Config
     Hsqlx.Protocol.Backend
@@ -53,13 +42,29 @@ library
     Hsqlx.Protocol.Frontend
     Hsqlx.Protocol.Oid
     Hsqlx.Protocol.Parsers
+    Hsqlx.Wire
+    -- hsqlx-specific modules
+    Hsqlx.Binary.Array
+    Hsqlx.Binary.Composite
+    Hsqlx.Binary.Decode
+    Hsqlx.Binary.Encode
+    Hsqlx.Binary.Interval
+    Hsqlx.Binary.Range
+    Hsqlx.Binary.Scientific
+    Hsqlx.Copy
+    Hsqlx.Execute
+    Hsqlx.FromRow
+    Hsqlx.Logging
+    Hsqlx.Notify
     Hsqlx.Statement
     Hsqlx.Streaming
     Hsqlx.ToParams
     Hsqlx.Transaction
-    Hsqlx.Wire
 
   build-depends:
+    -- Wire protocol driver
+    , pg-wire
+
     -- Core
     , base                  >=4.17    && <5
     , bytestring            >=0.11    && <0.13
@@ -67,33 +72,18 @@ library
     , containers            >=0.6     && <0.8
     , vector                >=0.13    && <0.14
     , time                  >=1.12    && <1.15
-
-    -- Networking
-    , network               >=3.1     && <3.3
-
-    -- TLS
-    , tls                   >=1.7     && <2.2
-    , crypton-x509-store    >=1.6     && <1.7
-    , crypton-x509-system   >=1.6     && <1.7
-    , data-default-class    >=0.1     && <0.2
-
-    -- Crypto (auth)
-    , crypton               >=0.34    && <1.1
-    , cryptohash-md5        >=0.11    && <0.12
-    , memory                >=0.18    && <0.19
-    , base64-bytestring     >=1.2     && <1.3
+    , deepseq               >=1.4     && <1.6
 
     -- Binary codec helpers
     , scientific            >=0.3     && <0.4
     , uuid-types            >=1.0     && <1.1
     , aeson                 >=2.1     && <2.3
 
-    -- Misc
-    , deepseq               >=1.4     && <1.6
-
-    -- Concurrency / pool
-    , stm                   >=2.5     && <2.6
+    -- Concurrency (for Streaming, Notify)
     , async                 >=2.2     && <2.3
+
+    -- Network (for Cancel, Notify)
+    , network               >=3.1     && <3.3
 
 test-suite hsqlx-test
   import:           warnings
@@ -105,7 +95,6 @@ test-suite hsqlx-test
     OverloadedStrings
 
   other-modules:
-    Hsqlx.Auth.MD5Spec
     Hsqlx.Binary.ArraySpec
     Hsqlx.Binary.CompositeSpec
     Hsqlx.Binary.DecodeSpec
@@ -114,10 +103,7 @@ test-suite hsqlx-test
     Hsqlx.Binary.PropertySpec
     Hsqlx.Binary.RangeSpec
     Hsqlx.Binary.ScientificSpec
-    Hsqlx.Connection.ConfigSpec
     Hsqlx.FromRowSpec
-    Hsqlx.Protocol.BuildersSpec
-    Hsqlx.Protocol.ParsersSpec
 
   build-depends:
     , base           >=4.17 && <5

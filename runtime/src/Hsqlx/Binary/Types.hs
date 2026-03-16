@@ -1,19 +1,3 @@
-module Hsqlx.Binary.Types
-  ( PgEncode (..)
-  , PgDecode (..)
-  ) where
+module Hsqlx.Binary.Types (module PgWire.Binary.Types) where
 
-import Data.ByteString (ByteString)
-import Data.Proxy (Proxy)
-import Hsqlx.Protocol.Oid (Oid)
-
--- | Encode a Haskell value to PostgreSQL binary format.
-class PgEncode a where
-  pgEncode :: a -> ByteString
-  pgOid :: Proxy a -> Oid
-  {-# MINIMAL pgEncode, pgOid #-}
-
--- | Decode a Haskell value from PostgreSQL binary format.
-class PgDecode a where
-  pgDecode :: ByteString -> Either String a
-  {-# MINIMAL pgDecode #-}
+import PgWire.Binary.Types

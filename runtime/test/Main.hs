@@ -1,6 +1,5 @@
 module Main where
 
-import Hsqlx.Auth.MD5Spec qualified as MD5Spec
 import Hsqlx.Binary.ArraySpec qualified as ArraySpec
 import Hsqlx.Binary.CompositeSpec qualified as CompositeSpec
 import Hsqlx.Binary.DecodeSpec qualified as DecodeSpec
@@ -9,16 +8,11 @@ import Hsqlx.Binary.IntervalSpec qualified as IntervalSpec
 import Hsqlx.Binary.PropertySpec qualified as PropertySpec
 import Hsqlx.Binary.RangeSpec qualified as RangeSpec
 import Hsqlx.Binary.ScientificSpec qualified as ScientificSpec
-import Hsqlx.Connection.ConfigSpec qualified as ConfigSpec
 import Hsqlx.FromRowSpec qualified as FromRowSpec
-import Hsqlx.Protocol.BuildersSpec qualified as BuildersSpec
-import Hsqlx.Protocol.ParsersSpec qualified as ParsersSpec
 import Test.Hspec
 
 main :: IO ()
 main = hspec $ do
-  describe "Hsqlx.Protocol.Builders" BuildersSpec.spec
-  describe "Hsqlx.Protocol.Parsers" ParsersSpec.spec
   describe "Hsqlx.Binary.Encode" EncodeSpec.spec
   describe "Hsqlx.Binary.Decode" DecodeSpec.spec
   describe "Hsqlx.Binary.Array" ArraySpec.spec
@@ -27,6 +21,4 @@ main = hspec $ do
   describe "Hsqlx.Binary.Scientific" ScientificSpec.spec
   describe "Hsqlx.Binary.Interval" IntervalSpec.spec
   describe "Hsqlx.Binary.Property" PropertySpec.spec
-  describe "Hsqlx.Connection.Config" ConfigSpec.spec
-  describe "Hsqlx.Auth.MD5" MD5Spec.spec
   describe "Hsqlx.FromRow" FromRowSpec.spec
