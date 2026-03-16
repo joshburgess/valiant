@@ -8,12 +8,12 @@ module Hsqlx.Pool
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (Async, async, cancel, race)
 import Control.Concurrent.STM
-import Control.Exception (SomeException, catch, mask, onException)
+import Control.Exception (SomeException, catch, mask, onException, try)
 import Data.IORef
 import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
 import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
-import Hsqlx.Connection (Connection, close, connectString)
+import Hsqlx.Connection (Connection, close, connectString, simpleQuery)
 import Hsqlx.Error (HsqlxError (..), throwHsqlx)
 import Hsqlx.Pool.Config (PoolConfig (..))
 
@@ -93,10 +93,19 @@ acquire pool = do
           if isExpired (pConfig pool) entry now
             then do
               safeClose (peConn entry)
+              atomically $ modifyTVar' (pActive pool) (subtract 1)
               acquire pool -- retry
             else do
-              writeIORef (peLastUsed entry) now
-              pure (peConn entry)
+              -- Health check: verify the connection is still alive
+              healthy <- checkHealth (peConn entry)
+              if healthy
+                then do
+                  writeIORef (peLastUsed entry) now
+                  pure (peConn entry)
+                else do
+                  safeClose (peConn entry)
+                  atomically $ modifyTVar' (pActive pool) (subtract 1)
+                  acquire pool -- retry
         Nothing -> do
           -- Try to create a new connection
           canCreate <- atomically $ do
@@ -153,6 +162,15 @@ isExpired cfg entry now =
 
 safeClose :: Connection -> IO ()
 safeClose conn = close conn `catch` \(_ :: SomeException) -> pure ()
+
+-- | Lightweight health check: send an empty query and see if we get a response.
+-- Returns False if the connection is dead.
+checkHealth :: Connection -> IO Bool
+checkHealth conn = do
+  result <- try @SomeException (simpleQuery conn "")
+  pure $ case result of
+    Right _ -> True
+    Left _ -> False
 
 -- | Background thread that periodically reaps idle/expired connections.
 reaperThread :: Pool -> IO ()

@@ -72,9 +72,14 @@ module Hsqlx
 
     -- * Binary types
   , PgInterval (..)
+  , PgRange (..)
+  , RangeBound (..)
+  , CompositeField (..)
   ) where
 
+import Hsqlx.Binary.Composite (CompositeField (..))
 import Hsqlx.Binary.Interval (PgInterval (..))
+import Hsqlx.Binary.Range (PgRange (..), RangeBound (..))
 import Hsqlx.Connection (Connection, close, connect, connectString, withConnection)
 import Hsqlx.Connection.Config (ConnConfig (..), TlsMode (..), defaultConnConfig)
 import Hsqlx.Copy (CopyResult (..), copyIn, copyOut)

@@ -30,9 +30,11 @@ library
     Hsqlx.Auth.MD5
     Hsqlx.Auth.ScramSHA256
     Hsqlx.Binary.Array
+    Hsqlx.Binary.Composite
     Hsqlx.Binary.Decode
     Hsqlx.Binary.Encode
     Hsqlx.Binary.Interval
+    Hsqlx.Binary.Range
     Hsqlx.Binary.Scientific
     Hsqlx.Binary.Types
     Hsqlx.Connection
@@ -101,9 +103,12 @@ test-suite hsqlx-test
   other-modules:
     Hsqlx.Auth.MD5Spec
     Hsqlx.Binary.ArraySpec
+    Hsqlx.Binary.CompositeSpec
     Hsqlx.Binary.DecodeSpec
     Hsqlx.Binary.EncodeSpec
     Hsqlx.Binary.IntervalSpec
+    Hsqlx.Binary.PropertySpec
+    Hsqlx.Binary.RangeSpec
     Hsqlx.Binary.ScientificSpec
     Hsqlx.Connection.ConfigSpec
     Hsqlx.FromRowSpec
@@ -111,10 +116,11 @@ test-suite hsqlx-test
     Hsqlx.Protocol.ParsersSpec
 
   build-depends:
-    , base        >=4.17 && <5
+    , base           >=4.17 && <5
     , bytestring
-    , hspec       >=2.11 && <2.12
+    , hspec          >=2.11 && <2.12
     , hsqlx
+    , QuickCheck     >=2.14 && <2.16
     , scientific
     , text
     , time
