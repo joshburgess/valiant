@@ -1,4 +1,4 @@
-module Hsqlx.Wire
+module PgWire.Wire
   ( WireConn (..)
   , connectTcp
   , upgradeTls
@@ -15,11 +15,11 @@ import Data.ByteString.Builder qualified as B
 import Data.ByteString.Lazy qualified as LBS
 import Data.IORef
 import Data.Word (Word8)
-import Hsqlx.Error (HsqlxError (..), throwHsqlx)
-import Hsqlx.Protocol.Backend (BackendMsg)
-import Hsqlx.Protocol.Builders (buildFrontendMsg)
-import Hsqlx.Protocol.Frontend (FrontendMsg)
-import Hsqlx.Protocol.Parsers (parseBackendMsg)
+import PgWire.Error (HsqlxError (..), throwHsqlx)
+import PgWire.Protocol.Backend (BackendMsg)
+import PgWire.Protocol.Builders (buildFrontendMsg)
+import PgWire.Protocol.Frontend (FrontendMsg)
+import PgWire.Protocol.Parsers (parseBackendMsg)
 import Network.Socket (Socket)
 import Network.Socket qualified as NS
 import Network.Socket.ByteString qualified as NSB

@@ -1,4 +1,4 @@
-module Hsqlx.Connection
+module PgWire.Connection
   ( Connection (..)
   , connect
   , connectString
@@ -16,15 +16,15 @@ import Data.Map.Strict qualified as Map
 import Data.Int (Int32)
 import Data.Vector qualified as V
 import Data.Word (Word64)
-import Hsqlx.Auth.Cleartext (cleartextAuth)
-import Hsqlx.Auth.MD5 (md5Auth)
-import Hsqlx.Auth.ScramSHA256 (scramAuth)
-import Hsqlx.Connection.Config (ConnConfig (..), TlsMode (..), parseConnString)
-import Hsqlx.Error (HsqlxError (..), throwHsqlx)
-import Hsqlx.Protocol.Backend
-import Hsqlx.Protocol.Builders (buildStartup)
-import Hsqlx.Protocol.Frontend (FrontendMsg (..), StartupParams (..))
-import Hsqlx.Wire (WireConn (..), connectTcp, recvBackendMsg, sendFrontendMsg, sendRawBytes, upgradeTls)
+import PgWire.Auth.Cleartext (cleartextAuth)
+import PgWire.Auth.MD5 (md5Auth)
+import PgWire.Auth.ScramSHA256 (scramAuth)
+import PgWire.Connection.Config (ConnConfig (..), TlsMode (..), parseConnString)
+import PgWire.Error (HsqlxError (..), throwHsqlx)
+import PgWire.Protocol.Backend
+import PgWire.Protocol.Builders (buildStartup)
+import PgWire.Protocol.Frontend (FrontendMsg (..), StartupParams (..))
+import PgWire.Wire (WireConn (..), connectTcp, recvBackendMsg, sendFrontendMsg, sendRawBytes, upgradeTls)
 
 -- | A connection to a PostgreSQL database.
 data Connection = Connection

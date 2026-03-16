@@ -1,11 +1,11 @@
-module Hsqlx.Binary.Types
+module PgWire.Binary.Types
   ( PgEncode (..)
   , PgDecode (..)
   ) where
 
 import Data.ByteString (ByteString)
 import Data.Proxy (Proxy)
-import Hsqlx.Protocol.Oid (Oid)
+import PgWire.Protocol.Oid (Oid)
 
 -- | Encode a Haskell value to PostgreSQL binary format.
 class PgEncode a where

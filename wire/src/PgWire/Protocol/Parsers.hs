@@ -1,4 +1,4 @@
-module Hsqlx.Protocol.Parsers
+module PgWire.Protocol.Parsers
   ( parseBackendMsg
   , parseCommandTag
   ) where
@@ -9,7 +9,7 @@ import Data.ByteString qualified as BS
 import Data.Int (Int16, Int32, Int64)
 import Data.Vector qualified as V
 import Data.Word (Word8, Word32)
-import Hsqlx.Protocol.Backend
+import PgWire.Protocol.Backend
 
 -- | Parse a complete backend message from tag + payload bytes.
 -- The caller must have already read the tag byte and the 4-byte length,

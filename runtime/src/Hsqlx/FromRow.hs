@@ -78,6 +78,7 @@ instance (PgDecode a, PgDecode b, PgDecode c, PgDecode d, PgDecode e, PgDecode f
 -- Maybe instance for nullable results
 instance (PgDecode a) => PgDecode (Maybe a) where
   pgDecode bs = Just <$> pgDecode bs
+  {-# INLINE pgDecode #-}
 
 -- Helpers -----------------------------------------------------------------
 
@@ -87,3 +88,4 @@ decodeCol row idx
   | otherwise = case row V.! idx of
       Nothing -> Left $ "Column " <> show idx <> " is NULL but expected a non-nullable value"
       Just bs -> pgDecode bs
+{-# INLINE decodeCol #-}

@@ -1,4 +1,4 @@
-module Hsqlx.Pool
+module PgWire.Pool
   ( Pool
   , newPool
   , closePool
@@ -13,9 +13,9 @@ import Data.IORef
 import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
 import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
-import Hsqlx.Connection (Connection, close, connectString, simpleQuery)
-import Hsqlx.Error (HsqlxError (..), throwHsqlx)
-import Hsqlx.Pool.Config (PoolConfig (..))
+import PgWire.Connection (Connection, close, connectString, simpleQuery)
+import PgWire.Error (HsqlxError (..), throwHsqlx)
+import PgWire.Pool.Config (PoolConfig (..))
 import System.IO.Unsafe (unsafePerformIO)
 
 -- | A connection pool.

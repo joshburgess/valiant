@@ -18,10 +18,12 @@ class EncodeField a where
 
 instance {-# OVERLAPPABLE #-} (PgEncode a) => EncodeField a where
   encodeField = Just . pgEncode
+  {-# INLINE encodeField #-}
 
 instance (PgEncode a) => EncodeField (Maybe a) where
   encodeField Nothing = Nothing
   encodeField (Just a) = Just (pgEncode a)
+  {-# INLINE encodeField #-}
 
 -- | Encode query parameters into a vector of nullable byte strings.
 class ToParams a where

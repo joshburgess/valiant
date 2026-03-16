@@ -1,4 +1,4 @@
-module Hsqlx.Protocol.Builders
+module PgWire.Protocol.Builders
   ( buildFrontendMsg
   , buildStartup
   ) where
@@ -13,7 +13,7 @@ import Data.Int (Int16, Int32)
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 import Data.Word (Word32)
-import Hsqlx.Protocol.Frontend
+import PgWire.Protocol.Frontend
 
 -- | Build a complete frontend message as a strict 'ByteString'.
 buildFrontendMsg :: FrontendMsg -> ByteString
