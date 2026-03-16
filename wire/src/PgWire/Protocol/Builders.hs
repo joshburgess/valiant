@@ -25,39 +25,131 @@ buildStartup :: StartupParams -> ByteString
 buildStartup = LBS.toStrict . B.toLazyByteString . encodeStartup
 
 -- Encoding ----------------------------------------------------------------
+--
+-- Each message is [tag :: Word8] [length :: Int32] [payload].
+-- The length field includes itself (4 bytes) but not the tag byte.
+--
+-- We pre-compute the payload size from the message fields, then write
+-- tag + length + payload in a single Builder pass. This avoids the
+-- previous approach of materializing the payload to a ByteString just
+-- to compute its length (which caused a double-copy).
 
 encodeFrontendMsg :: FrontendMsg -> Builder
 encodeFrontendMsg = \case
   Startup params -> encodeStartup params
-  Parse name sql oids -> withTag 'P' $ encodeparse name sql oids
-  Bind portal stmt pfmts vals rfmts -> withTag 'B' $ encodeBind portal stmt pfmts vals rfmts
-  Describe target name -> withTag 'D' $ encodeDescribe target name
-  Execute portal maxRows -> withTag 'E' $ encodeExecute portal maxRows
-  Close target name -> withTag 'C' $ encodeDescribe target name -- same format as Describe
-  Sync -> withTag 'S' mempty
-  Flush -> withTag 'H' mempty
-  Terminate -> withTag 'X' mempty
-  Query sql -> withTag 'Q' $ cstring sql
-  PasswordMessage pw -> withTag 'p' $ cstring pw
+  Parse name sql oids ->
+    let !sz = cstringSize name + cstringSize sql + 2 + V.length oids * 4
+     in tag 'P' sz <> cstring name <> cstring sql
+          <> B.int16BE (fromIntegral (V.length oids) :: Int16)
+          <> V.foldl' (\b oid -> b <> B.word32BE oid) mempty oids
+  Bind portal stmt pfmts vals rfmts ->
+    let !sz = cstringSize portal + cstringSize stmt
+            + formatCodesSize pfmts
+            + 2 + paramValuesSize vals
+            + formatCodesSize rfmts
+     in tag 'B' sz <> cstring portal <> cstring stmt
+          <> encodeFormatCodes pfmts
+          <> B.int16BE (fromIntegral (V.length vals) :: Int16)
+          <> V.foldl' (\b mv -> b <> encodeParamValue mv) mempty vals
+          <> encodeFormatCodes rfmts
+  Describe target name ->
+    let !sz = 1 + cstringSize name
+     in tag 'D' sz <> B.char8 (targetChar target) <> cstring name
+  Execute portal maxRows ->
+    let !sz = cstringSize portal + 4
+     in tag 'E' sz <> cstring portal <> B.int32BE maxRows
+  Close target name ->
+    let !sz = 1 + cstringSize name
+     in tag 'C' sz <> B.char8 (targetChar target) <> cstring name
+  Sync -> tag 'S' 0
+  Flush -> tag 'H' 0
+  Terminate -> tag 'X' 0
+  Query sql ->
+    let !sz = cstringSize sql
+     in tag 'Q' sz <> cstring sql
+  PasswordMessage pw ->
+    let !sz = cstringSize pw
+     in tag 'p' sz <> cstring pw
   SASLInitialResponse mech clientFirst ->
-    withTag 'p' $
-      cstring mech
-        <> B.int32BE (fromIntegral (BS.length clientFirst))
-        <> B.byteString clientFirst
-  SASLResponse msg -> withTag 'p' $ B.byteString msg
-  CopyData dat -> withTag 'd' $ B.byteString dat
-  CopyDone -> withTag 'c' mempty
-  CopyFail msg -> withTag 'f' $ cstring msg
+    let !sz = cstringSize mech + 4 + BS.length clientFirst
+     in tag 'p' sz <> cstring mech
+          <> B.int32BE (fromIntegral (BS.length clientFirst))
+          <> B.byteString clientFirst
+  SASLResponse msg ->
+    let !sz = BS.length msg
+     in tag 'p' sz <> B.byteString msg
+  CopyData dat ->
+    let !sz = BS.length dat
+     in tag 'd' sz <> B.byteString dat
+  CopyDone -> tag 'c' 0
+  CopyFail msg ->
+    let !sz = cstringSize msg
+     in tag 'f' sz <> cstring msg
+{-# INLINE encodeFrontendMsg #-}
 
--- | Wrap a payload with [tag][length] header. Length includes itself (4 bytes).
-withTag :: Char -> Builder -> Builder
-withTag tag payload =
-  let payloadBs = LBS.toStrict (B.toLazyByteString payload)
-      len = fromIntegral (BS.length payloadBs + 4) :: Int32
-   in B.char8 tag <> B.int32BE len <> B.byteString payloadBs
-{-# INLINE withTag #-}
+-- | Write tag byte + length (payload size + 4 for the length field itself).
+tag :: Char -> Int -> Builder
+tag c payloadSize =
+  B.char8 c <> B.int32BE (fromIntegral (payloadSize + 4) :: Int32)
+{-# INLINE tag #-}
 
--- Startup message: [length :: Int32] [protocol :: Int32] [params] [NUL]
+-- Size computation helpers ------------------------------------------------
+
+-- | Size of a NUL-terminated C string: data bytes + 1 NUL byte.
+cstringSize :: ByteString -> Int
+cstringSize bs = BS.length bs + 1
+{-# INLINE cstringSize #-}
+
+-- | Size of format codes: 2 (count) + 2 per code.
+formatCodesSize :: Vector FormatCode -> Int
+formatCodesSize fmts = 2 + V.length fmts * 2
+{-# INLINE formatCodesSize #-}
+
+-- | Size of parameter values: sum of (4 + data) per non-NULL, 4 per NULL.
+paramValuesSize :: Vector (Maybe ByteString) -> Int
+paramValuesSize = V.foldl' (\acc mv -> acc + paramValueSize mv) 0
+{-# INLINE paramValuesSize #-}
+
+paramValueSize :: Maybe ByteString -> Int
+paramValueSize Nothing = 4
+paramValueSize (Just bs) = 4 + BS.length bs
+{-# INLINE paramValueSize #-}
+
+-- Payload encoding helpers ------------------------------------------------
+
+encodeFormatCodes :: Vector FormatCode -> Builder
+encodeFormatCodes fmts =
+  B.int16BE (fromIntegral (V.length fmts) :: Int16)
+    <> V.foldl' (\b fc -> b <> B.int16BE (formatCodeToInt16 fc)) mempty fmts
+{-# INLINE encodeFormatCodes #-}
+
+formatCodeToInt16 :: FormatCode -> Int16
+formatCodeToInt16 TextFormat = 0
+formatCodeToInt16 BinaryFormat = 1
+{-# INLINE formatCodeToInt16 #-}
+
+encodeParamValue :: Maybe ByteString -> Builder
+encodeParamValue Nothing = B.int32BE (-1)
+encodeParamValue (Just bs) =
+  B.int32BE (fromIntegral (BS.length bs))
+    <> B.byteString bs
+{-# INLINE encodeParamValue #-}
+
+targetChar :: DescribeTarget -> Char
+targetChar DescribeStatement = 'S'
+targetChar DescribePortal = 'P'
+{-# INLINE targetChar #-}
+
+-- | NUL-terminated C string.
+cstring :: ByteString -> Builder
+cstring bs = B.byteString bs <> B.word8 0
+{-# INLINE cstring #-}
+
+-- Startup message ---------------------------------------------------------
+-- Startup has a different format: [length :: Int32] [protocol] [params] [NUL]
+-- No tag byte. We still need to materialize to compute the length here,
+-- but startup is called once per connection, not on the hot path.
+
 encodeStartup :: StartupParams -> Builder
 encodeStartup StartupParams {..} =
   let params =
@@ -67,63 +159,6 @@ encodeStartup StartupParams {..} =
           <> mconcat [cstring k <> cstring v | (k, v) <- spExtraParams]
           <> B.word8 0 -- terminator
       paramsBs = LBS.toStrict (B.toLazyByteString params)
-      -- length includes itself (4) + protocol version (4) + params
       len = fromIntegral (4 + 4 + BS.length paramsBs) :: Int32
       protocolVersion = (3 :: Int32) `shiftL` 16 -- 3.0
    in B.int32BE len <> B.int32BE protocolVersion <> B.byteString paramsBs
-
--- Parse: [name NUL] [sql NUL] [nparams :: Int16] [oid :: Int32 ...]
-encodeparse :: ByteString -> ByteString -> Vector Word32 -> Builder
-encodeparse name sql oids =
-  cstring name
-    <> cstring sql
-    <> B.int16BE (fromIntegral (V.length oids) :: Int16)
-    <> V.foldl' (\b oid -> b <> B.word32BE oid) mempty oids
-
--- Bind: [portal NUL] [stmt NUL] [nfmts :: Int16] [fmts :: Int16 ...]
---       [nparams :: Int16] [len :: Int32, data | -1 for NULL ...]
---       [nrfmts :: Int16] [rfmts :: Int16 ...]
-encodeBind :: ByteString -> ByteString -> Vector FormatCode -> Vector (Maybe ByteString) -> Vector FormatCode -> Builder
-encodeBind portal stmt pfmts vals rfmts =
-  cstring portal
-    <> cstring stmt
-    <> encodeFormatCodes pfmts
-    <> B.int16BE (fromIntegral (V.length vals) :: Int16)
-    <> V.foldl' (\b mv -> b <> encodeParamValue mv) mempty vals
-    <> encodeFormatCodes rfmts
-
-encodeFormatCodes :: Vector FormatCode -> Builder
-encodeFormatCodes fmts =
-  B.int16BE (fromIntegral (V.length fmts) :: Int16)
-    <> V.foldl' (\b fc -> b <> B.int16BE (formatCodeToInt16 fc)) mempty fmts
-
-formatCodeToInt16 :: FormatCode -> Int16
-formatCodeToInt16 TextFormat = 0
-formatCodeToInt16 BinaryFormat = 1
-
-encodeParamValue :: Maybe ByteString -> Builder
-encodeParamValue Nothing = B.int32BE (-1)
-encodeParamValue (Just bs) =
-  B.int32BE (fromIntegral (BS.length bs))
-    <> B.byteString bs
-
--- Describe/Close: [target :: Char] [name NUL]
-encodeDescribe :: DescribeTarget -> ByteString -> Builder
-encodeDescribe target name =
-  B.char8 (targetChar target) <> cstring name
-
-targetChar :: DescribeTarget -> Char
-targetChar DescribeStatement = 'S'
-targetChar DescribePortal = 'P'
-
--- Execute: [portal NUL] [max_rows :: Int32]
-encodeExecute :: ByteString -> Int32 -> Builder
-encodeExecute portal maxRows =
-  cstring portal <> B.int32BE maxRows
-
--- Helpers -----------------------------------------------------------------
-
--- | NUL-terminated C string.
-cstring :: ByteString -> Builder
-cstring bs = B.byteString bs <> B.word8 0
-{-# INLINE cstring #-}
