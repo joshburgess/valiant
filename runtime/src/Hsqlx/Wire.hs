@@ -2,6 +2,7 @@ module Hsqlx.Wire
   ( WireConn (..)
   , connectTcp
   , sendFrontendMsg
+  , sendFrontendMsgs
   , sendRawBytes
   , recvBackendMsg
   ) where
@@ -19,6 +20,7 @@ import Hsqlx.Protocol.Parsers (parseBackendMsg)
 import Network.Socket (Socket)
 import Network.Socket qualified as NS
 import Network.Socket.ByteString qualified as NSB
+import Network.Socket (setSocketOption, SocketOption(..))
 
 -- | Abstraction over a Postgres wire connection (plain TCP or TLS).
 data WireConn = WireConn
@@ -38,6 +40,8 @@ connectTcp host port = do
     (addr : _) -> do
       sock <- NS.socket (NS.addrFamily addr) NS.Stream NS.defaultProtocol
       NS.connect sock (NS.addrAddress addr)
+      -- Disable Nagle's algorithm for lower latency on small messages
+      setSocketOption sock NoDelay 1
       mkWireConn sock
 
 mkWireConn :: Socket -> IO WireConn
@@ -54,6 +58,12 @@ mkWireConn sock = do
 -- | Send a frontend message over the wire.
 sendFrontendMsg :: WireConn -> FrontendMsg -> IO ()
 sendFrontendMsg wc msg = wcSend wc (buildFrontendMsg msg)
+
+-- | Send multiple frontend messages in a single syscall (message coalescing).
+-- This is critical for pipelining: Bind+Execute+Bind+Execute+...+Sync
+-- should be sent as one TCP segment, not N separate sends.
+sendFrontendMsgs :: WireConn -> [FrontendMsg] -> IO ()
+sendFrontendMsgs wc msgs = wcSend wc (BS.concat (map buildFrontendMsg msgs))
 
 -- | Send raw bytes (for startup message which has a different format).
 sendRawBytes :: WireConn -> ByteString -> IO ()

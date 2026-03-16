@@ -4,6 +4,7 @@ module BenchHsqlx
   , fetchOneByPK
   , fetchN
   , insertN
+  , insertNPipelined
   , updateN
   ) where
 
@@ -112,6 +113,16 @@ insertN url n = do
         email = Just (name <> "@test.com")
     execute conn stmtInsert (name, email)
     ) [1 :: Int .. n]
+
+insertNPipelined :: ByteString -> Int -> IO ()
+insertNPipelined url n = do
+  conn <- getConn url
+  let paramsList =
+        [ ("pins_" <> T.pack (show i), Just ("pins_" <> T.pack (show i) <> "@test.com"))
+        | i <- [1 :: Int .. n]
+        ]
+  _ <- executeBatch conn stmtInsert paramsList
+  pure ()
 
 updateN :: ByteString -> Int -> IO ()
 updateN url n = do

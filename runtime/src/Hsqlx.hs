@@ -14,6 +14,7 @@ module Hsqlx
   , fetchAll
   , fetchScalar
   , execute
+  , executeBatch
 
     -- * Connection
   , Connection
@@ -84,7 +85,7 @@ import Hsqlx.Binary.Range (PgRange (..), RangeBound (..))
 import Hsqlx.Connection (Connection, close, connect, connectString, simpleQuery, withConnection)
 import Hsqlx.Connection.Config (ConnConfig (..), TlsMode (..), defaultConnConfig)
 import Hsqlx.Copy (CopyResult (..), copyIn, copyOut)
-import Hsqlx.Execute (execute, fetchAll, fetchOne, fetchScalar)
+import Hsqlx.Execute (execute, executeBatch, fetchAll, fetchOne, fetchScalar)
 import Hsqlx.FromRow (FromRow (..))
 import Hsqlx.Logging (LogEvent (..), LogLevel (..), Logger, nullLogger, stderrLogger)
 import Hsqlx.Notify (Notification (..), listen, unlisten, waitForNotification, waitForNotificationTimeout)

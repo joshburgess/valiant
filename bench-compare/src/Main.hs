@@ -1,6 +1,9 @@
 module Main where
 
-import Criterion.Main
+import Criterion
+import Criterion.Main (defaultMainWith, defaultConfig)
+import Criterion.Main.Options (defaultConfig)
+import Criterion.Types (Config(..))
 import Data.ByteString.Char8 qualified as BS8
 import System.Environment (lookupEnv)
 
@@ -18,14 +21,14 @@ main = do
       putStrLn "  Then: cabal run bench-compare"
     Just url -> do
       let bs = BS8.pack url
-      putStrLn $ "Connecting to: " <> take 40 url <> "..."
 
-      -- Seed with 10000 rows (enough for all benchmarks)
+      putStrLn $ "Connecting to: " <> take 40 url <> "..."
       putStrLn "Setting up schema and seeding 10000 rows..."
       BenchHsqlx.setup bs 10000
 
       putStrLn "Running benchmarks..."
-      defaultMain
+      let cfg = defaultConfig { timeLimit = 3 }
+      defaultMainWith cfg
         -- ── Single-row operations ─────────────────────────────────
         [ bgroup "SELECT 1"
             [ bench "hsqlx"             $ whnfIO (BenchHsqlx.selectOne bs)
@@ -55,32 +58,22 @@ main = do
             , bench "postgresql-simple" $ whnfIO (BenchPgSimple.fetchN bs 10000)
             ]
 
-        -- ── Batch inserts (N individual INSERT statements) ────────
+        -- ── Inserts ───────────────────────────────────────────────
         , bgroup "insert 100 rows"
             [ bench "hsqlx"             $ whnfIO (BenchHsqlx.insertN bs 100)
+            , bench "hsqlx (pipelined)" $ whnfIO (BenchHsqlx.insertNPipelined bs 100)
             , bench "hasql"             $ whnfIO (BenchHasql.insertN url 100)
             , bench "postgresql-simple" $ whnfIO (BenchPgSimple.insertN bs 100)
             ]
-        , bgroup "insert 1000 rows"
-            [ bench "hsqlx"             $ whnfIO (BenchHsqlx.insertN bs 1000)
-            , bench "hasql"             $ whnfIO (BenchHasql.insertN url 1000)
-            , bench "postgresql-simple" $ whnfIO (BenchPgSimple.insertN bs 1000)
+        , bgroup "insert 100 pipelined vs sequential"
+            [ bench "hsqlx sequential"  $ whnfIO (BenchHsqlx.insertN bs 100)
+            , bench "hsqlx pipelined"   $ whnfIO (BenchHsqlx.insertNPipelined bs 100)
             ]
 
-        -- ── Bulk update (single UPDATE affecting N rows) ──────────
+        -- ── Update ────────────────────────────────────────────────
         , bgroup "update ~100 rows"
             [ bench "hsqlx"             $ whnfIO (BenchHsqlx.updateN bs 100)
             , bench "hasql"             $ whnfIO (BenchHasql.updateN url 100)
             , bench "postgresql-simple" $ whnfIO (BenchPgSimple.updateN bs 100)
-            ]
-        , bgroup "update ~1000 rows"
-            [ bench "hsqlx"             $ whnfIO (BenchHsqlx.updateN bs 1000)
-            , bench "hasql"             $ whnfIO (BenchHasql.updateN url 1000)
-            , bench "postgresql-simple" $ whnfIO (BenchPgSimple.updateN bs 1000)
-            ]
-        , bgroup "update ~5000 rows"
-            [ bench "hsqlx"             $ whnfIO (BenchHsqlx.updateN bs 5000)
-            , bench "hasql"             $ whnfIO (BenchHasql.updateN url 5000)
-            , bench "postgresql-simple" $ whnfIO (BenchPgSimple.updateN bs 5000)
             ]
         ]

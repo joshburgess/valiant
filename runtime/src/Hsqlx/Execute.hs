@@ -3,6 +3,7 @@ module Hsqlx.Execute
   , fetchAll
   , fetchScalar
   , execute
+  , executeBatch
   ) where
 
 import Data.ByteString (ByteString)
@@ -18,7 +19,7 @@ import Hsqlx.Error (HsqlxError (..), throwHsqlx)
 import Hsqlx.Protocol.Backend
 import Hsqlx.Protocol.Frontend
 import Hsqlx.Statement (Statement (..))
-import Hsqlx.Wire (recvBackendMsg, sendFrontendMsg)
+import Hsqlx.Wire (recvBackendMsg, sendFrontendMsg, sendFrontendMsgs)
 
 -- | Fetch zero or one row.
 fetchOne :: Connection -> Statement p r -> p -> IO (Maybe r)
@@ -57,20 +58,70 @@ execute conn stmt params = do
   stmtName <- ensurePrepared conn stmt
   let encodedParams = stmtEncode stmt params
 
-  -- Bind + Execute + Sync
-  sendFrontendMsg (connWire conn) $
-    Bind
-      ""
-      stmtName
-      (V.singleton BinaryFormat) -- all params in binary
-      encodedParams
-      (V.empty) -- no result columns for commands
-  sendFrontendMsg (connWire conn) (Execute "" 0)
-  sendFrontendMsg (connWire conn) Sync
+  -- Coalesce Bind + Execute + Sync into a single send
+  sendFrontendMsgs (connWire conn)
+    [ Bind "" stmtName (V.singleton BinaryFormat) encodedParams V.empty
+    , Execute "" 0
+    , Sync
+    ]
 
   -- Collect responses
   rowsAffected <- collectCommandResult conn
   pure rowsAffected
+
+-- | Execute a batch of commands using pipeline mode.
+-- Sends all Bind+Execute messages with a single Sync at the end,
+-- eliminating per-row round-trip overhead. Returns total rows affected.
+executeBatch :: Connection -> Statement p () -> [p] -> IO Int64
+executeBatch _ _ [] = pure 0
+executeBatch conn stmt paramsList = do
+  stmtName <- ensurePrepared conn stmt
+
+  -- Build all messages: [Bind, Execute, Bind, Execute, ..., Sync]
+  let msgs = concatMap (\params ->
+        let encodedParams = stmtEncode stmt params
+         in [ Bind "" stmtName (V.singleton BinaryFormat) encodedParams V.empty
+            , Execute "" 0
+            ]) paramsList
+        ++ [Sync]
+
+  -- Send everything in a single syscall
+  sendFrontendMsgs (connWire conn) msgs
+
+  -- Collect all responses: N * (BindComplete + CommandComplete) + ReadyForQuery
+  collectBatchResult conn (length paramsList)
+
+collectBatchResult :: Connection -> Int -> IO Int64
+collectBatchResult conn remaining = go 0 remaining
+  where
+    go total 0 = do
+      -- Wait for final ReadyForQuery
+      waitReady conn
+      pure total
+    go total n = do
+      msg <- recvBackendMsg (connWire conn)
+      case msg of
+        BindComplete -> go total n
+        CommandComplete tag -> go (total + tagRows tag) (n - 1)
+        ErrorResponse err -> do
+          -- Drain remaining responses
+          drainUntilReady conn
+          throwHsqlx (QueryError err)
+        NoticeResponse _ -> go total n
+        other -> throwHsqlx (ProtocolError ("Unexpected in batch: " <> BS8.pack (show other)))
+
+    tagRows (InsertTag r) = r
+    tagRows (UpdateTag r) = r
+    tagRows (DeleteTag r) = r
+    tagRows (SelectTag r) = r
+    tagRows (OtherTag _) = 0
+
+drainUntilReady :: Connection -> IO ()
+drainUntilReady conn = do
+  msg <- recvBackendMsg (connWire conn)
+  case msg of
+    ReadyForQuery status -> writeIORef (connTxStatus conn) status
+    _ -> drainUntilReady conn
 
 -- Extended query protocol -------------------------------------------------
 
@@ -79,17 +130,12 @@ executeExtended conn stmt params = do
   stmtName <- ensurePrepared conn stmt
   let encodedParams = stmtEncode stmt params
 
-  -- Bind + Execute + Sync
-  -- Use a single format code = BinaryFormat, which PG applies to all columns
-  sendFrontendMsg (connWire conn) $
-    Bind
-      ""
-      stmtName
-      (V.singleton BinaryFormat) -- all params in binary
-      encodedParams
-      (V.singleton BinaryFormat) -- all results in binary
-  sendFrontendMsg (connWire conn) (Execute "" 0)
-  sendFrontendMsg (connWire conn) Sync
+  -- Coalesce Bind + Execute + Sync into a single send
+  sendFrontendMsgs (connWire conn)
+    [ Bind "" stmtName (V.singleton BinaryFormat) encodedParams (V.singleton BinaryFormat)
+    , Execute "" 0
+    , Sync
+    ]
 
   -- Collect rows
   collectRows conn
