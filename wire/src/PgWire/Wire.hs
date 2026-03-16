@@ -1,6 +1,7 @@
 module PgWire.Wire
   ( WireConn (..)
   , connectTcp
+  , connectTcpTimeout
   , upgradeTls
   , sendFrontendMsg
   , sendFrontendMsgs
@@ -14,8 +15,10 @@ import Data.ByteString.Char8 qualified as BS8
 import Data.ByteString.Builder qualified as B
 import Data.ByteString.Lazy qualified as LBS
 import Data.IORef
+import Data.Time (NominalDiffTime)
 import Data.Word (Word8)
 import PgWire.Error (HsqlxError (..), throwHsqlx)
+import System.Timeout (timeout)
 import PgWire.Protocol.Backend (BackendMsg)
 import PgWire.Protocol.Builders (buildFrontendMsg)
 import PgWire.Protocol.Frontend (FrontendMsg)
@@ -36,16 +39,30 @@ data WireConn = WireConn
   , wcBuffer :: IORef ByteString
   }
 
--- | Connect via TCP to the given host and port.
+-- | Connect via TCP to the given host and port (no timeout).
 connectTcp :: NS.HostName -> NS.PortNumber -> IO WireConn
-connectTcp host port = do
+connectTcp = connectTcpTimeout 0
+
+-- | Connect via TCP with a timeout in seconds (0 = no timeout).
+connectTcpTimeout :: NominalDiffTime -> NS.HostName -> NS.PortNumber -> IO WireConn
+connectTcpTimeout timeoutSecs host port = do
   let hints = NS.defaultHints {NS.addrSocketType = NS.Stream}
   addrs <- NS.getAddrInfo (Just hints) (Just host) (Just (show port))
   case addrs of
     [] -> throwHsqlx (ConnectionError "No address found")
     (addr : _) -> do
       sock <- NS.socket (NS.addrFamily addr) NS.Stream NS.defaultProtocol
-      NS.connect sock (NS.addrAddress addr)
+      let doConnect = NS.connect sock (NS.addrAddress addr)
+      if timeoutSecs > 0
+        then do
+          let micros = round (timeoutSecs * 1000000) :: Int
+          result <- timeout micros doConnect
+          case result of
+            Nothing -> do
+              NS.close sock
+              throwHsqlx (ConnectionError "Connect timed out")
+            Just () -> pure ()
+        else doConnect
       -- Disable Nagle's algorithm for lower latency on small messages
       setSocketOption sock NoDelay 1
       mkWireConn sock

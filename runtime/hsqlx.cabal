@@ -37,6 +37,7 @@ library
     Hsqlx.Binary.Range
     Hsqlx.Binary.Scientific
     Hsqlx.Binary.Types
+    Hsqlx.Cancel
     Hsqlx.Connection
     Hsqlx.Connection.Config
     Hsqlx.Copy

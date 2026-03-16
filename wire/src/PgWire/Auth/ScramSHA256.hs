@@ -1,5 +1,6 @@
 module PgWire.Auth.ScramSHA256
   ( scramAuth
+  , scramAuthWithChannelBinding
   ) where
 
 import Crypto.Hash (SHA256 (..), hashWith)
@@ -17,23 +18,43 @@ import PgWire.Protocol.Backend (AuthType (..), BackendMsg (..), PgError (..))
 import PgWire.Protocol.Frontend (FrontendMsg (..))
 import PgWire.Wire (WireConn, recvBackendMsg, sendFrontendMsg)
 
--- | Perform SCRAM-SHA-256 authentication.
+-- | Perform SCRAM-SHA-256 authentication without channel binding.
 scramAuth :: WireConn -> ByteString -> ByteString -> IO ()
-scramAuth wc user password = do
-  -- Client first message (bare, without "n,,")
+scramAuth wc user password = scramAuthInternal wc user password Nothing
+
+-- | Perform SCRAM-SHA-256-PLUS authentication with tls-server-end-point
+-- channel binding. The ByteString argument is the SHA-256 hash of the
+-- server's TLS certificate (DER encoded).
+scramAuthWithChannelBinding :: WireConn -> ByteString -> ByteString -> ByteString -> IO ()
+scramAuthWithChannelBinding wc user password certHash =
+  scramAuthInternal wc user password (Just certHash)
+
+scramAuthInternal :: WireConn -> ByteString -> ByteString -> Maybe ByteString -> IO ()
+scramAuthInternal wc user password mCertHash = do
   nonceBytes <- getRandomBytes 18 :: IO ByteString
   let clientNonce = B64.encode nonceBytes
+
+      -- Channel binding header:
+      --   "n,," for no channel binding
+      --   "p=tls-server-end-point,," for tls-server-end-point
+      (gs2Header, cbData, mechName) = case mCertHash of
+        Nothing ->
+          ("n,,", "n,,", "SCRAM-SHA-256")
+        Just certHash ->
+          let hdr = "p=tls-server-end-point,,"
+           in (hdr, hdr <> certHash, "SCRAM-SHA-256-PLUS")
+
       clientFirstBare = "n=" <> user <> ",r=" <> clientNonce
-      clientFirstMsg = "n,," <> clientFirstBare
+      clientFirstMsg = gs2Header <> clientFirstBare
 
   -- Send SASL initial response
-  sendFrontendMsg wc (SASLInitialResponse "SCRAM-SHA-256" clientFirstMsg)
+  sendFrontendMsg wc (SASLInitialResponse mechName clientFirstMsg)
 
   -- Receive server first message
   msg1 <- recvBackendMsg wc
   serverFirstMsg <- case msg1 of
     Authentication (AuthSASLContinue serverData) -> pure serverData
-    Authentication (AuthOk) -> pure "" -- some PG versions might accept immediately
+    Authentication AuthOk -> pure ""
     ErrorResponse err -> throwHsqlx (AuthError (pgMessage err))
     other -> throwHsqlx (AuthError ("Unexpected message during SCRAM: " <> BS8.pack (show other)))
 
@@ -59,7 +80,7 @@ scramAuth wc user password = do
       storedKey = hashSHA256 clientKey
       serverKey = hmacSHA256 saltedPassword "Server Key"
 
-      channelBinding = B64.encode "n,,"
+      channelBinding = B64.encode cbData
       clientFinalWithoutProof = "c=" <> channelBinding <> ",r=" <> serverNonce
       authMessage = clientFirstBare <> "," <> serverFirstMsg <> "," <> clientFinalWithoutProof
 
@@ -100,9 +121,11 @@ scramAuth wc user password = do
 
 hmacSHA256 :: ByteString -> ByteString -> ByteString
 hmacSHA256 key msg = BA.convert (hmac key msg :: HMAC SHA256)
+{-# INLINE hmacSHA256 #-}
 
 hashSHA256 :: ByteString -> ByteString
 hashSHA256 bs = BA.convert (hashWith SHA256 bs)
+{-# INLINE hashSHA256 #-}
 
 -- | PBKDF2-SHA256 (called "Hi" in SCRAM spec).
 hi :: ByteString -> ByteString -> Int -> ByteString

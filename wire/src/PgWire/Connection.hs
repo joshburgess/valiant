@@ -24,7 +24,7 @@ import PgWire.Error (HsqlxError (..), throwHsqlx)
 import PgWire.Protocol.Backend
 import PgWire.Protocol.Builders (buildStartup)
 import PgWire.Protocol.Frontend (FrontendMsg (..), StartupParams (..))
-import PgWire.Wire (WireConn (..), connectTcp, recvBackendMsg, sendFrontendMsg, sendRawBytes, upgradeTls)
+import PgWire.Wire (WireConn (..), connectTcpTimeout, recvBackendMsg, sendFrontendMsg, sendRawBytes, upgradeTls)
 
 -- | A connection to a PostgreSQL database.
 data Connection = Connection
@@ -41,7 +41,7 @@ data Connection = Connection
 -- | Connect using a 'ConnConfig'.
 connect :: ConnConfig -> IO Connection
 connect cfg = do
-  wc0 <- connectTcp (ccHost cfg) (ccPort cfg)
+  wc0 <- connectTcpTimeout (ccConnectTimeout cfg) (ccHost cfg) (ccPort cfg)
 
   -- Optionally upgrade to TLS
   wc <- case ccTls cfg of
@@ -55,7 +55,7 @@ connect cfg = do
         Left _ -> do
           -- The SSLRequest already consumed the connection; reconnect
           wcClose wc0
-          connectTcp (ccHost cfg) (ccPort cfg)
+          connectTcpTimeout (ccConnectTimeout cfg) (ccHost cfg) (ccPort cfg)
 
   -- Send startup message
   let startup =

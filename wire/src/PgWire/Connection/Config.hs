@@ -7,6 +7,7 @@ module PgWire.Connection.Config
 
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
+import Data.Time (NominalDiffTime)
 import Data.Word (Word16)
 import Network.Socket (HostName, PortNumber)
 
@@ -23,6 +24,11 @@ data ConnConfig = ConnConfig
   , ccPassword :: ByteString
   , ccTls :: TlsMode
   , ccAppName :: ByteString
+  , ccConnectTimeout :: NominalDiffTime
+  -- ^ Timeout for establishing the TCP connection (seconds). 0 = no timeout.
+  , ccQueryTimeout :: NominalDiffTime
+  -- ^ Default timeout for query execution (seconds). 0 = no timeout.
+  -- Can be overridden per-query with 'withQueryTimeout'.
   }
   deriving stock (Show)
 
@@ -35,7 +41,9 @@ defaultConnConfig =
     , ccUser = ""
     , ccPassword = ""
     , ccTls = TlsDisable
-    , ccAppName = "hsqlx"
+    , ccAppName = "pg-wire"
+    , ccConnectTimeout = 10
+    , ccQueryTimeout = 0
     }
 
 -- | Parse a PostgreSQL connection string.
@@ -94,8 +102,16 @@ parseUri bs = do
       , ccUser = user
       , ccPassword = pass
       , ccTls = tlsMode
-      , ccAppName = "hsqlx"
+      , ccAppName = "pg-wire"
+      , ccConnectTimeout = readTimeout (lookup "connect_timeout" params)
+      , ccQueryTimeout = 0
       }
+
+readTimeout :: Maybe ByteString -> NominalDiffTime
+readTimeout Nothing = 10
+readTimeout (Just bs) = case BS8.readInt bs of
+  Just (n, _) | n > 0 -> fromIntegral n
+  _ -> 10
 
 parseKeyValue :: ByteString -> Either String ConnConfig
 parseKeyValue bs =
@@ -115,7 +131,13 @@ parseKeyValue bs =
           , ccUser = get "user" ""
           , ccPassword = get "password" ""
           , ccTls = tlsMode
-          , ccAppName = get "application_name" "hsqlx"
+          , ccAppName = get "application_name" "pg-wire"
+          , ccConnectTimeout = case BS8.readInt (get "connect_timeout" "10") of
+              Just (n, _) | n > 0 -> fromIntegral n
+              _ -> 10
+          , ccQueryTimeout = case BS8.readInt (get "query_timeout" "0") of
+              Just (n, _) | n > 0 -> fromIntegral n
+              _ -> 0
           }
   where
     parsePair p =

@@ -31,6 +31,7 @@ library
     PgWire.Auth.MD5
     PgWire.Auth.ScramSHA256
     PgWire.Binary.Types
+    PgWire.Cancel
     PgWire.Connection
     PgWire.Connection.Config
     PgWire.Error
@@ -70,3 +71,30 @@ library
     -- Concurrency / pool
     , stm                   >=2.5     && <2.6
     , async                 >=2.2     && <2.3
+
+test-suite pg-wire-test
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Main.hs
+  default-language: GHC2021
+  default-extensions:
+    OverloadedStrings
+
+  other-modules:
+    PgWire.Auth.MD5Spec
+    PgWire.Auth.ScramFieldsSpec
+    PgWire.CancelSpec
+    PgWire.Connection.ConfigSpec
+    PgWire.Protocol.BuildersSpec
+    PgWire.Protocol.OidSpec
+    PgWire.Protocol.ParsersSpec
+
+  build-depends:
+    , base         >=4.17 && <5
+    , bytestring
+    , crypton
+    , hspec        >=2.11 && <2.12
+    , memory
+    , pg-wire
+    , vector

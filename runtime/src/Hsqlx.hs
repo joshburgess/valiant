@@ -41,6 +41,10 @@ module Hsqlx
   , withTransaction
   , withTransactionLevel
 
+    -- * Cancellation
+  , cancelQuery
+  , withQueryTimeout
+
     -- * Streaming (cursors)
   , CursorState (..)
   , withCursor
@@ -80,6 +84,7 @@ module Hsqlx
   ) where
 
 import Hsqlx.Binary.Composite (CompositeField (..))
+import Hsqlx.Cancel (cancelQuery, withQueryTimeout)
 import Hsqlx.Binary.Interval (PgInterval (..))
 import Hsqlx.Binary.Range (PgRange (..), RangeBound (..))
 import Hsqlx.Connection (Connection, close, connect, connectString, simpleQuery, withConnection)
