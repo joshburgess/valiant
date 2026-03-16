@@ -21,8 +21,8 @@ import Data.Time
   , toModifiedJulianDay
   )
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
-import Hsqlx.Binary.Types (PgEncode (..))
-import Hsqlx.Protocol.Oid
+import PgWire.Binary.Types (PgEncode (..))
+import PgWire.Protocol.Oid
 
 -- PG epoch: 2000-01-01 00:00:00 UTC
 -- Microseconds between Unix epoch (1970-01-01) and PG epoch (2000-01-01)

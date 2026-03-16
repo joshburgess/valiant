@@ -12,8 +12,8 @@ import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as LBS
 import Data.UUID.Types (UUID)
 import Data.UUID.Types qualified as UUID
-import Hsqlx.Binary.Types (PgDecode (..), PgEncode (..))
-import Hsqlx.Protocol.Oid (oidUuid)
+import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
+import PgWire.Protocol.Oid (oidUuid)
 
 instance PgEncode UUID where
   pgEncode = LBS.toStrict . UUID.toByteString

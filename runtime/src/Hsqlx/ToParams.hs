@@ -10,7 +10,7 @@ import Data.ByteString (ByteString)
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 import Hsqlx.Binary.Encode ()
-import Hsqlx.Binary.Types (PgEncode (..))
+import PgWire.Binary.Types (PgEncode (..))
 
 -- | Encode a single field, handling @Maybe@ for nullable parameters.
 class EncodeField a where

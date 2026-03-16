@@ -21,7 +21,7 @@ import Data.Time
 import Data.Time.Calendar (addDays)
 import Data.Word (Word32, Word64)
 import GHC.Float (castWord32ToFloat, castWord64ToDouble)
-import Hsqlx.Binary.Types (PgDecode (..))
+import PgWire.Binary.Types (PgDecode (..))
 
 -- PG epoch offset from Unix epoch in seconds
 pgEpochOffsetSeconds :: Int64

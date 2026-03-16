@@ -8,62 +8,41 @@ Last updated: 2026-03-16
 
 ---
 
-## Critical
+## Completed
 
-### TLS: SCRAM channel binding
+The following items were previously tracked as gaps and have since been
+implemented:
 
-**Status:** SCRAM-SHA-256 authentication is implemented, but channel binding
-is hardcoded to non-channel-binding mode (`"n,,"`). This means
-`tls-unique` and `tls-server-end-point` channel binding variants are
-not supported.
-
-**Impact:** Some Postgres configurations that require channel binding will
-reject authentication.
-
-**Implementation:** Parse the channel binding type from the SASL mechanism
-name (`SCRAM-SHA-256-PLUS`), extract the channel binding data from the
-TLS context via `Network.TLS.getFinished`, and include it in the SCRAM
-exchange.
-
----
-
-### Query cancellation
-
-**Status:** `BackendKeyData` (PID + secret key) is received and stored on
-the `Connection`, but there is no API to cancel an in-flight query.
-
-**Impact:** Long-running queries cannot be cancelled. The only option is
-to close the connection, which is destructive.
-
-**Implementation:** Open a separate TCP connection to the same host/port,
-send a `CancelRequest` message (not a normal frontend message — it has
-its own format: `[length=16][code=80877102][pid][key]`), then close the
-cancel connection. The original connection's query will receive an
-`ErrorResponse` with SQLSTATE `57014` (query_canceled).
-
-**API design:**
-```haskell
-cancelQuery :: Connection -> IO ()
--- or with timeout:
-withQueryTimeout :: Connection -> NominalDiffTime -> IO a -> IO a
-```
-
----
-
-### Connection timeouts
-
-**Status:** Socket read/write operations can block indefinitely. There is
-no timeout on connect, query, or idle operations.
-
-**Impact:** A hung Postgres server or network partition will cause the
-application to hang forever.
-
-**Implementation:**
-- Connect timeout: use `System.Timeout.timeout` around `NS.connect`
-- Query timeout: use `System.Timeout.timeout` around the execute cycle,
-  combined with query cancellation to clean up the server side
-- Socket-level: set `SO_RCVTIMEO`/`SO_SNDTIMEO` on the socket
-- Add timeout fields to `ConnConfig` and `PoolConfig`
+- **TLS support** — SSLRequest subprotocol, TLS handshake via the `tls`
+  library, TlsDisable/TlsPrefer/TlsRequire modes.
+- **SCRAM channel binding** — `scramAuthWithChannelBinding` supports
+  SCRAM-SHA-256-PLUS with `tls-server-end-point` binding.
+- **Query cancellation** — `cancelQuery` opens a separate TCP connection
+  and sends CancelRequest. `withQueryTimeout` for deadline-based
+  cancellation.
+- **Connection timeouts** — `ccConnectTimeout` in ConnConfig, parsed from
+  connection strings (`connect_timeout=N`). `connectTcpTimeout` wraps
+  `NS.connect` in `System.Timeout.timeout`.
+- **Savepoints** — `withSavepoint` for nested partial rollbacks within
+  transactions. Automatic ROLLBACK TO on exception, RELEASE on success.
+- **Prepared statement eviction** — LRU cache capped at 256 per
+  connection. Oldest statement closed on the server via Close message.
+- **Parameterized cursors** — `withCursor` uses Parse/Bind/Execute to
+  declare cursors with bound parameters. Queries with WHERE clauses
+  work correctly with streaming.
+- **UUID binary codec** — 16-byte encode/decode via `uuid-types`.
+- **JSON/JSONB binary codec** — Handles both json (raw UTF-8) and jsonb
+  (version byte prefix) binary formats via `aeson`.
+- **INLINE pragmas** — All binary encode/decode instances, protocol
+  builders/parsers, wire send/recv, and field encode/decode.
+- **TCP_NODELAY** — Disabled Nagle's algorithm on all connections.
+- **Message coalescing** — `sendFrontendMsgs` batches multiple protocol
+  messages into a single `send()` syscall.
+- **Pipelined batch execution** — `executeBatch` sends N Bind+Execute
+  pairs with a single Sync, eliminating N-1 round-trips.
+- **Connection health checking** — Pool validates idle connections with
+  an empty query before reuse; dead connections are discarded.
+- **Comprehensive PgError** — All 17 protocol error fields parsed.
 
 ---
 
@@ -79,57 +58,6 @@ application to hang forever.
 **Implementation:** Parse multiple hosts from the connection string,
 attempt connection to each in order, fall back on failure. libpq supports
 `target_session_attrs` to distinguish primary vs standby.
-
----
-
-### Savepoints
-
-**Status:** Transactions are top-level only (`BEGIN`/`COMMIT`/`ROLLBACK`).
-No savepoint API.
-
-**Impact:** Cannot do partial rollbacks within a transaction.
-
-**Implementation:**
-```haskell
-withSavepoint :: Transaction -> (Transaction -> IO a) -> IO a
-withSavepoint tx action = do
-  let name = "sp_" <> uniqueId
-  simpleQuery (txConn tx) ("SAVEPOINT " <> name)
-  result <- action tx `onException` simpleQuery (txConn tx) ("ROLLBACK TO " <> name)
-  simpleQuery (txConn tx) ("RELEASE " <> name)
-  pure result
-```
-
----
-
-### Prepared statement eviction
-
-**Status:** The per-connection statement cache (`connStmtCache`) grows
-unboundedly. Every unique SQL string adds a new prepared statement that
-is never deallocated.
-
-**Impact:** Long-lived connections with many distinct queries will
-accumulate server-side prepared statements, consuming memory on both
-client and server.
-
-**Implementation:** Add an LRU eviction policy. When the cache exceeds
-a configurable limit (e.g., 256 statements), close the least-recently-used
-statement via the `Close` protocol message.
-
----
-
-### Parameterized cursors
-
-**Status:** `Hsqlx.Streaming.withCursor` declares cursors using the simple
-query protocol, which means parameters cannot be bound. Only
-parameterless queries work with cursors.
-
-**Impact:** Streaming queries with WHERE clauses require workarounds
-(e.g., creating a temporary view).
-
-**Implementation:** Use the extended query protocol for cursor declaration:
-`DECLARE cursor_name CURSOR FOR $prepared_statement_name`, then bind
-parameters via `Bind`.
 
 ---
 
@@ -223,7 +151,7 @@ process each `DataRow` as it arrives.
 ### Direct byte writing for fixed-size encodes
 
 **Status:** Fixed-size type encoders (Int32, Int64, etc.) go through
-`Builder → LazyByteString → toStrict`. For 4-8 bytes, this is
+`Builder -> LazyByteString -> toStrict`. For 4-8 bytes, this is
 unnecessary overhead.
 
 **Implementation:** Use `ByteString.Internal.unsafeCreate` with direct
@@ -262,24 +190,3 @@ is a boxed pointer to a heap-allocated `ByteString`.
 
 **Implementation:** For columns of known fixed-size types (Int32, Bool,
 etc.), use unboxed vectors to avoid per-value heap allocation.
-
----
-
-## Ecosystem
-
-### UUID binary codec
-
-**Status:** UUID type (OID 2950) is mapped in the CLI TypeMap but has no
-binary encode/decode instances in the runtime.
-
-**Implementation:** UUID is 16 bytes, big-endian. Trivial to implement
-using `uuid-types` (already a dependency).
-
-### JSON/JSONB binary codec
-
-**Status:** JSON (OID 114) and JSONB (OID 3802) are mapped in TypeMap
-but have no binary encode/decode instances.
-
-**Implementation:** JSON binary format is just the UTF-8 JSON text.
-JSONB binary format is `\x01` version byte followed by UTF-8 JSON text.
-Use `aeson` (already a dependency) for encode/decode.

@@ -26,13 +26,13 @@ import Data.IORef
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 import Data.Word (Word64)
-import Hsqlx.Connection (Connection (..), simpleQuery)
-import Hsqlx.Error (HsqlxError (..), throwHsqlx)
-import Hsqlx.Protocol.Backend
-import Hsqlx.Protocol.Frontend
-import Hsqlx.Protocol.Oid qualified as Oid
+import PgWire.Connection (Connection (..), simpleQuery)
+import PgWire.Error (HsqlxError (..), throwHsqlx)
+import PgWire.Protocol.Backend
+import PgWire.Protocol.Frontend
+import PgWire.Protocol.Oid qualified as Oid
 import Hsqlx.Statement (Statement (..))
-import Hsqlx.Wire (recvBackendMsg, sendFrontendMsg, sendFrontendMsgs)
+import PgWire.Wire (recvBackendMsg, sendFrontendMsg, sendFrontendMsgs)
 import System.IO.Unsafe (unsafePerformIO)
 
 -- | State of an open cursor.

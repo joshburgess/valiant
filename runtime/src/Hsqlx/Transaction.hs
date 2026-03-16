@@ -21,8 +21,8 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
 import Data.Word (Word64)
-import Hsqlx.Connection (Connection (..), simpleQuery)
-import Hsqlx.Pool (Pool, withResource)
+import PgWire.Connection (Connection (..), simpleQuery)
+import PgWire.Pool (Pool, withResource)
 import System.IO.Unsafe (unsafePerformIO)
 
 -- | A database transaction. Wraps a 'Connection'.

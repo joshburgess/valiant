@@ -17,8 +17,8 @@ import Data.Aeson (Value, eitherDecodeStrict', encode)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as LBS
-import Hsqlx.Binary.Types (PgDecode (..), PgEncode (..))
-import Hsqlx.Protocol.Oid (oidJson)
+import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
+import PgWire.Protocol.Oid (oidJson)
 
 -- | Encode a JSON Value. Works for both json and jsonb columns.
 -- For jsonb, PG expects a version byte (0x01) prefix in binary format.

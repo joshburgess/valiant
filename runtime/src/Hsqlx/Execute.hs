@@ -24,13 +24,13 @@ import Data.Sequence (Seq, (|>))
 import Data.Sequence qualified as Seq
 import Data.Vector (Vector)
 import Data.Vector qualified as V
-import Hsqlx.Connection (Connection (..))
-import Hsqlx.Protocol.Oid qualified as Oid
-import Hsqlx.Error (HsqlxError (..), throwHsqlx)
-import Hsqlx.Protocol.Backend
-import Hsqlx.Protocol.Frontend
+import PgWire.Connection (Connection (..))
+import PgWire.Protocol.Oid qualified as Oid
+import PgWire.Error (HsqlxError (..), throwHsqlx)
+import PgWire.Protocol.Backend
+import PgWire.Protocol.Frontend
 import Hsqlx.Statement (Statement (..))
-import Hsqlx.Wire (recvBackendMsg, sendFrontendMsg, sendFrontendMsgs)
+import PgWire.Wire (recvBackendMsg, sendFrontendMsg, sendFrontendMsgs)
 
 -- | Fetch zero or one row. Returns 'Nothing' if the query produces no results.
 --

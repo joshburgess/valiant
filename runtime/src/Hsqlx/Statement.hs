@@ -18,7 +18,7 @@ import Data.Vector (Vector)
 import Data.Vector qualified as V
 import Data.Word (Word32)
 import Hsqlx.FromRow (FromRow (..))
-import Hsqlx.Protocol.Oid (Oid (..))
+import PgWire.Protocol.Oid (Oid (..))
 import Hsqlx.ToParams (ToParams (..))
 
 -- | A compile-time validated SQL statement.

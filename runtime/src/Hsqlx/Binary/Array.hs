@@ -14,8 +14,8 @@ import Data.Int (Int32)
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 import Data.Word (Word32)
-import Hsqlx.Binary.Types (PgDecode (..), PgEncode (..))
-import Hsqlx.Protocol.Oid (Oid (..))
+import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
+import PgWire.Protocol.Oid (Oid (..))
 
 -- | Encode a Vector as a PostgreSQL one-dimensional array in binary format.
 --

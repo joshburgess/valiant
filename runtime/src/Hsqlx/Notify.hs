@@ -12,10 +12,10 @@ import Control.Concurrent.Async (race)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.Int (Int32)
-import Hsqlx.Connection (Connection (..), simpleQuery)
-import Hsqlx.Error (HsqlxError (..), throwHsqlx)
-import Hsqlx.Protocol.Backend
-import Hsqlx.Wire (recvBackendMsg)
+import PgWire.Connection (Connection (..), simpleQuery)
+import PgWire.Error (HsqlxError (..), throwHsqlx)
+import PgWire.Protocol.Backend
+import PgWire.Wire (recvBackendMsg)
 
 -- | A notification received from PostgreSQL.
 data Notification = Notification

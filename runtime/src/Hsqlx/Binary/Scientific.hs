@@ -19,8 +19,8 @@ import Data.ByteString.Lazy qualified as LBS
 import Data.Int (Int16)
 import Data.Scientific (Scientific)
 import Data.Scientific qualified as Sci
-import Hsqlx.Binary.Types (PgDecode (..), PgEncode (..))
-import Hsqlx.Protocol.Oid (oidNumeric)
+import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
+import PgWire.Protocol.Oid (oidNumeric)
 
 -- Constants
 signPositive, signNegative, signNaN :: Int16

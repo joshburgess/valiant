@@ -15,7 +15,7 @@ import Data.Kind (Type)
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 import Hsqlx.Binary.Decode ()
-import Hsqlx.Binary.Types (PgDecode (..))
+import PgWire.Binary.Types (PgDecode (..))
 
 -- | Closed type family: is this type @Maybe a@?
 type family Nullable (a :: Type) :: Bool where

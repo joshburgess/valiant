@@ -19,8 +19,8 @@ import Data.ByteString qualified as BS
 import Data.ByteString.Builder qualified as B
 import Data.ByteString.Lazy qualified as LBS
 import Data.Int (Int32, Int64)
-import Hsqlx.Binary.Types (PgDecode (..), PgEncode (..))
-import Hsqlx.Protocol.Oid (oidInterval)
+import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
+import PgWire.Protocol.Oid (oidInterval)
 
 -- | A PostgreSQL interval value.
 data PgInterval = PgInterval

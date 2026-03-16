@@ -9,11 +9,11 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
 import Data.Int (Int64)
-import Hsqlx.Connection (Connection (..))
-import Hsqlx.Error (HsqlxError (..), throwHsqlx)
-import Hsqlx.Protocol.Backend
-import Hsqlx.Protocol.Frontend
-import Hsqlx.Wire (recvBackendMsg, sendFrontendMsg)
+import PgWire.Connection (Connection (..))
+import PgWire.Error (HsqlxError (..), throwHsqlx)
+import PgWire.Protocol.Backend
+import PgWire.Protocol.Frontend
+import PgWire.Wire (recvBackendMsg, sendFrontendMsg)
 
 -- | Result of a COPY IN operation.
 data CopyResult = CopyResult
