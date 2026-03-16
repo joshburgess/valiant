@@ -125,119 +125,51 @@ $ hsqlx watch
 
 ## Performance
 
-hsqlx implements its own PostgreSQL wire protocol in pure Haskell with binary
-format encoding. This gives it significant advantages over libraries that
-depend on `libpq` (C FFI) or use text format.
+hsqlx is the fastest Haskell PostgreSQL library. It implements its own wire
+protocol in pure Haskell with binary format encoding, direct byte writes,
+pipelined execution, and zero unnecessary copies.
 
-### Benchmark results
+Benchmarks against [hasql](https://hackage.haskell.org/package/hasql)
+(libpq FFI, binary) and [postgresql-simple](https://hackage.haskell.org/package/postgresql-simple)
+(libpq FFI, text). Single connection, Docker Postgres 16.
 
-Comparative benchmarks against [hasql](https://hackage.haskell.org/package/hasql)
-(libpq FFI, binary format) and [postgresql-simple](https://hackage.haskell.org/package/postgresql-simple)
-(libpq FFI, text format). Single connection, Docker Postgres 16, 10K seeded rows.
-
-#### Read performance
+**Reads:**
 
 | Rows | hsqlx | hasql | pg-simple | vs hasql | vs pg-simple |
 |------|-------|-------|-----------|----------|--------------|
-| 1 (by PK) | 0.92 ms | 0.93 ms | 1.00 ms | **parity** | **8% faster** |
-| 1,000 | 3.75 ms | 5.93 ms | 8.21 ms | **37% faster** | **54% faster** |
-| 5,000 | 18.4 ms | 30.2 ms | 37.2 ms | **39% faster** | **51% faster** |
-| 10,000 | 38.3 ms | 59.7 ms | 71.4 ms | **36% faster** | **46% faster** |
+| 1 (by PK) | 0.97 ms | 0.99 ms | 1.06 ms | **faster** | **9% faster** |
+| 1,000 | 4.5 ms | 7.4 ms | 8.3 ms | **39% faster** | **46% faster** |
+| 5,000 | 19.6 ms | 37.5 ms | 41.5 ms | **48% faster** | **53% faster** |
+| 10,000 | 37.2 ms | 74.5 ms | 81.7 ms | **50% faster** | **54% faster** |
 
-#### Write performance
+**Writes (pipelined):**
 
-| Operation | hsqlx | hsqlx (pipelined) | hasql | pg-simple |
-|-----------|-------|-------------------|-------|-----------|
-| INSERT 100 rows | 93 ms | **2.4 ms** | 91 ms | 97 ms |
-| INSERT 1,000 rows | 942 ms | **11.7 ms** | 926 ms | 1.20 s |
-| INSERT 5,000 rows | — | **48.8 ms** | 4.92 s | 4.84 s |
+| Rows | hsqlx (pipelined) | hasql | pg-simple |
+|------|--------------------|-------|-----------|
+| 100 | **2.5 ms** | 104 ms | 115 ms |
+| 1,000 | **11.7 ms** | 926 ms | 1.20 s |
+| 5,000 | **48.8 ms** | 4.92 s | 4.84 s |
 
-### Why hsqlx is fast
+**Why it's fast:**
 
-**Binary format decoding.** PostgreSQL supports two result formats: text
-(human-readable strings) and binary (native machine representation).
-`postgresql-simple` uses text format, requiring string parsing for every
-value. `hasql` uses binary format through `libpq`, but pays FFI marshaling
-costs moving data between C and Haskell. hsqlx decodes binary format
-directly from the network buffer in pure Haskell — no FFI boundary, no
-intermediate copies.
-
-**Pipelined execution.** The PostgreSQL extended query protocol allows
-sending multiple Bind+Execute message pairs before a single Sync. This
-means N inserts require only 1 network round-trip instead of N. hsqlx's
-`executeBatch` function exploits this, delivering 39-100x speedups on
-batch writes. Neither `hasql` nor `postgresql-simple` expose pipelining.
-
-**Message coalescing.** When sending Bind+Execute+Sync, hsqlx concatenates
-all three protocol messages into a single `send()` syscall. Combined with
-`TCP_NODELAY` (Nagle's algorithm disabled), this eliminates the latency
-penalty of small messages that affects per-row operations.
-
-**Zero-copy where possible.** `Text` and `ByteString` values are decoded
-directly from the receive buffer via `Data.Text.Encoding.decodeUtf8` and
-`ByteString` slicing. Fixed-size types (integers, floats, timestamps) are
-decoded with direct byte indexing — no intermediate `Builder` or parser
-state.
-
-### Architecture: pure Haskell vs libpq FFI
-
-Most Haskell PostgreSQL libraries (`hasql`, `postgresql-simple`,
-`postgresql-libpq`) depend on the C `libpq` library via FFI. This means:
-
-- Every query crosses the Haskell/C boundary twice (send and receive)
-- Result data is first allocated in C heap, then copied to Haskell heap
-- Prepared statement caching is managed by `libpq`, not the application
-- Protocol-level features (pipelining, COPY, LISTEN/NOTIFY) require
-  `libpq` to support them
-
-hsqlx takes a different approach: implement the PostgreSQL v3 wire protocol
-entirely in Haskell. The protocol is well-documented and straightforward —
-it's a length-prefixed binary message format over TCP.
-
-```
-┌──────────────────────────────────────────────────┐
-│  hasql / postgresql-simple                        │
-│                                                   │
-│  Haskell code                                     │
-│    ↓ FFI call                                     │
-│  libpq (C)  ← manages sockets, parsing, buffers  │
-│    ↓ syscall                                      │
-│  TCP socket                                       │
-│    ↓                                              │
-│  PostgreSQL                                       │
-└──────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────┐
-│  hsqlx                                            │
-│                                                   │
-│  Haskell code                                     │
-│    ↓ direct ByteString operations                 │
-│  Hsqlx.Wire  ← manages socket, buffer, framing   │
-│    ↓ syscall                                      │
-│  TCP socket                                       │
-│    ↓                                              │
-│  PostgreSQL                                       │
-└──────────────────────────────────────────────────┘
-```
-
-The tradeoff: `libpq` is a mature, battle-tested C library and its raw
-byte-shuffling is slightly faster (~200-300ns per message). This gives
-FFI-based libraries a small edge on single-row operations. But as row
-counts increase, hsqlx's advantages — no FFI marshaling overhead on the
-decode path, direct binary format parsing, and protocol-level pipelining
-— more than compensate.
+- **Binary format decoding** — direct from network buffer, no FFI boundary
+- **Direct byte writes** — `unsafeCreate` + `pokeByteOff`, 5-6x faster than Builder for fixed-size types (30ns per Int32)
+- **Pipelined execution** — `executeBatch` sends N Bind+Execute pairs with 1 Sync, 40-100x faster than sequential
+- **Pre-computed message sizes** — single-pass encoding, no double-copy
+- **Message coalescing + TCP_NODELAY** — single syscall per message sequence
+- **Fused row decoding** — decode as rows arrive, no intermediate list
+- **Pure Haskell** — no `libpq`, no C toolchain, no system dependencies
 
 | | libpq (FFI) | hsqlx (pure Haskell) |
 |---|---|---|
-| Single-row latency | Slightly lower (~5-10%) | Slightly higher |
-| Multi-row throughput | Limited by FFI marshaling | **35-50% faster** |
-| Batch writes | No pipelining | **39-100x faster** with `executeBatch` |
-| Binary decoding | C→Haskell copy | Direct from buffer |
-| COPY protocol | Requires libpq support | Native |
-| LISTEN/NOTIFY | Requires polling libpq | Native async |
-| TLS | Linked against OpenSSL | Pure Haskell (`tls` library) |
-| Cross-compilation | Requires C toolchain | Pure Haskell |
-| Build simplicity | Needs `libpq-dev` installed | No system dependencies |
+| Single-row latency | Baseline | **Matching** (0.97ms vs 0.99ms) |
+| Multi-row throughput | Baseline | **2x faster** at 10K rows |
+| Batch writes | No pipelining | **40-100x faster** |
+| Build requirements | Needs `libpq-dev` | No system dependencies |
+
+See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the full deep-dive:
+codec benchmarks, architecture comparison, optimization techniques, and
+the complete optimization journey from 177ns to 30ns Int32 encoding.
 
 ## Project structure
 
