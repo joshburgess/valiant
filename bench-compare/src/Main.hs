@@ -66,11 +66,13 @@ main = do
             ]
         , bgroup "insert 1000 rows"
             [ bench "hsqlx (pipelined)" $ whnfIO (BenchHsqlx.insertNPipelined bs 1000)
+            , bench "hsqlx (sequential)" $ whnfIO (BenchHsqlx.insertN bs 1000)
             , bench "hasql"             $ whnfIO (BenchHasql.insertN url 1000)
             , bench "postgresql-simple" $ whnfIO (BenchPgSimple.insertN bs 1000)
             ]
-        , bgroup "insert 5000 rows (hsqlx pipelined)"
+        , bgroup "insert 5000 rows"
             [ bench "hsqlx (pipelined)" $ whnfIO (BenchHsqlx.insertNPipelined bs 5000)
+            , bench "hsqlx (sequential)" $ whnfIO (BenchHsqlx.insertN bs 5000)
             ]
 
         -- ── Updates (single UPDATE affecting N rows) ─────────────
