@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-full-laziness #-}
+
 -- | COPY protocol support for bulk data import/export.
 module Hsqlx.Copy
   ( copyIn

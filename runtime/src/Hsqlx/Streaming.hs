@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-full-laziness #-}
+
 -- | Streaming query results using server-side cursors.
 --
 -- Instead of fetching all rows at once, a cursor fetches rows in batches,

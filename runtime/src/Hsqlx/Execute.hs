@@ -51,15 +51,20 @@ fetchOne conn stmt params = do
 
 -- | Fetch all result rows as a list.
 --
+-- Uses fused collection+decoding: each row is decoded as it arrives from
+-- the wire, eliminating the intermediate @[Vector (Maybe ByteString)]@.
+--
 -- For large result sets, consider 'Hsqlx.Streaming.withCursor' instead.
 fetchAll :: Connection -> Statement p r -> p -> IO [r]
 fetchAll conn stmt params = do
-  rows <- executeExtended conn stmt params
-  mapM decodeRow rows
-  where
-    decodeRow row = case stmtDecode stmt row of
-      Left err -> throwHsqlx (DecodeError (BS8.pack err))
-      Right val -> pure val
+  stmtName <- ensurePrepared conn stmt
+  let encodedParams = stmtEncode stmt params
+  sendFrontendMsgs (connWire conn)
+    [ Bind "" stmtName (V.singleton BinaryFormat) encodedParams (V.singleton BinaryFormat)
+    , Execute "" 0
+    , Sync
+    ]
+  collectAndDecodeRows conn (stmtDecode stmt)
 
 -- | Fetch a single scalar value. Throws 'DecodeError' if the query
 -- returns zero or more than one row.
@@ -234,6 +239,27 @@ collectRows conn = go []
       case msg of
         BindComplete -> go acc
         DataRow vals -> go (vals : acc)
+        CommandComplete _ -> go acc
+        EmptyQueryResponse -> go acc
+        ReadyForQuery status -> do
+          writeIORef (connTxStatus conn) status
+          pure (reverse acc)
+        ErrorResponse err -> throwHsqlx (QueryError err)
+        NoticeResponse _ -> go acc
+        other -> throwHsqlx (ProtocolError ("Unexpected in query: " <> BS8.pack (show other)))
+
+-- | Fused row collection + decoding. Decodes each DataRow as it arrives,
+-- avoiding the intermediate [Vector (Maybe ByteString)].
+collectAndDecodeRows :: Connection -> (Vector (Maybe ByteString) -> Either String r) -> IO [r]
+collectAndDecodeRows conn decode = go []
+  where
+    go !acc = do
+      msg <- recvBackendMsg (connWire conn)
+      case msg of
+        BindComplete -> go acc
+        DataRow vals -> case decode vals of
+          Left err -> throwHsqlx (DecodeError (BS8.pack err))
+          Right !val -> go (val : acc)
         CommandComplete _ -> go acc
         EmptyQueryResponse -> go acc
         ReadyForQuery status -> do
