@@ -25,7 +25,7 @@ data Pool = Pool
   , pActive :: TVar Int
   , pWaiters :: TVar (Seq (TMVar Connection))
   , pClosed :: TVar Bool
-  , pReaper :: Async ()
+  , pReaper :: IORef (Async ())
   }
 
 data PoolEntry = PoolEntry
@@ -41,6 +41,7 @@ newPool cfg = do
   active <- newTVarIO 0
   waiters <- newTVarIO Seq.empty
   closed <- newTVarIO False
+  reaperRef <- newIORef (error "reaper not started")
   let pool =
         Pool
           { pConfig = cfg
@@ -48,16 +49,18 @@ newPool cfg = do
           , pActive = active
           , pWaiters = waiters
           , pClosed = closed
-          , pReaper = undefined -- set below
+          , pReaper = reaperRef
           }
   reaper <- async (reaperThread pool)
-  pure pool {pReaper = reaper}
+  writeIORef reaperRef reaper
+  pure pool
 
 -- | Close the pool and all connections.
 closePool :: Pool -> IO ()
 closePool pool = do
   atomically $ writeTVar (pClosed pool) True
-  cancel (pReaper pool)
+  reaper <- readIORef (pReaper pool)
+  cancel reaper
   entries <- atomically $ do
     idle <- readTVar (pIdle pool)
     writeTVar (pIdle pool) []
