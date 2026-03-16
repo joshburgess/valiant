@@ -261,23 +261,197 @@ scripts/pg-teardown.sh
 
 ## Optimization journey
 
-The encode path alone improved 5-6x through targeted optimizations:
+The performance work was done in multiple passes, each informed by profiling,
+auditing, and benchmarking. Here's the complete story.
 
-| Technique | Int32 encode | Effect |
-|-----------|-------------|--------|
-| Initial (Builder pipeline) | 177 ns | Baseline |
-| + INLINE pragmas | ~160 ns | GHC can specialize |
-| + -funbox-strict-fields | ~140 ns | Unboxed field access |
-| + unsafeCreate direct writes | **30 ns** | **5.9x faster** |
+### Pass 1: Wire-level optimizations
 
-The full-stack improvement came from eliminating overhead at every layer:
+The first pass focused on reducing network overhead — the biggest win
+for a database driver.
+
+**TCP_NODELAY.** Nagle's algorithm batches small TCP segments for
+efficiency, but introduces latency on individual protocol messages.
+Disabling it with `TCP_NODELAY` immediately improved single-row
+operations by ~25%.
+
+**Message coalescing.** Instead of calling `send()` once per protocol
+message, `sendFrontendMsgs` concatenates multiple messages (Bind,
+Execute, Sync) into a single `ByteString` and sends them in one syscall.
+For a typical query this reduces 3 `send()` calls to 1.
+
+**Pipelined batch execution.** The PostgreSQL extended query protocol
+allows multiple Bind+Execute pairs before a single Sync. `executeBatch`
+exploits this to send N inserts in a single network round-trip. This
+alone delivered 40-100x speedups on batch writes — the single biggest
+improvement in the project.
+
+*Result: single-row latency dropped from ~30% slower than hasql to parity.*
+
+### Pass 2: Strictness audit (plugin-assisted)
+
+A comprehensive strictness audit using the `haskell-strictness` plugin
+identified and fixed every lazy accumulation pattern in the codebase.
+
+**Lazy `foldl` in Scientific codec.** Two uses of `foldl` (not `foldl'`)
+in the numeric encoder were building chains of `(* 10 + ...)` and
+`(* 10000 + ...)` thunks. Fixed to `foldl'`.
+
+**Missing bang patterns on loop accumulators.** Nine loops across six
+files had accumulators without bang patterns:
+
+```haskell
+-- Before: acc is a lazy thunk chain
+go acc = do
+  ...
+  DataRow vals -> go (vals : acc)
+
+-- After: acc is forced on each iteration
+go !acc = do
+  ...
+  DataRow vals -> go (vals : acc)
+```
+
+The most impactful were `decodeInt64BE` (building `shiftL`/`.|.` thunk
+chains across 8 iterations on every Int64/timestamp decode),
+`collectBatchResult` (building `(+)` thunks on the row counter), and
+`parseErrorFields` (accumulating the PgError record lazily).
+
+**`unsafePerformIO` in pool reaper.** The `isIdle` check used
+`unsafePerformIO` to read an `IORef`, which GHC could cache via CSE.
+Replaced with an `IO`-native `partitionM` in the reaper thread.
+
+**Missing `{-# UNPACK #-}`** on numeric fields in hot-path records.
+`FieldInfo` (6 numeric fields allocated per column per `RowDescription`)
+and `Connection` (PID + secret key) were boxed. Adding `UNPACK` lets GHC
+store the values directly in the constructor.
+
+**Cabal flags.** Added `-funbox-strict-fields` (auto-unbox all strict
+fields, since `StrictData` makes them all strict) and
+`-fspecialise-aggressively` (ensure cross-module specialization of
+`PgEncode`/`PgDecode` type class methods).
+
+**Stack limit on tests.** Added `-with-rtsopts=-K8K` to test suites.
+Any space leak immediately stack-overflows, providing fail-fast leak
+detection in CI.
+
+*Result: all tests pass with K8K stack limit — zero hidden space leaks.*
+
+### Pass 3: Allocation reduction
+
+The third pass focused on eliminating unnecessary allocations in the
+hottest code paths.
+
+**Direct byte writes.** The fixed-size encoders (`int16BE`, `int32BE`,
+`int64BE`, `floatBE`, `doubleBE`) were going through
+`Builder → toLazyByteString → toStrict` — three allocations for 4 bytes.
+Replaced with `Data.ByteString.Internal.unsafeCreate` + `pokeByteOff`:
+
+```haskell
+-- Before: 177 ns per Int32
+int32BE = LBS.toStrict . B.toLazyByteString . B.int32BE
+
+-- After: 30 ns per Int32 (5.9x faster)
+int32BE n = unsafeCreate 4 $ \p -> pokeInt32BE p 0 n
+```
+
+**Unrolled Int64 decode.** The `decodeInt64BE` function used a
+tail-recursive loop to read 8 bytes. Replaced with fully unrolled
+direct indexing (matching the style already used for `decodeInt32BE`):
+
+```haskell
+-- Before: loop with accumulator
+let go !acc !i
+      | i >= 8 = acc
+      | otherwise = go (acc `shiftL` 8 .|. fromIntegral (BS.index bs i)) (i + 1)
+
+-- After: 8 direct reads, no loop overhead
+let !b0 = fromIntegral (BS.index bs 0) :: Int64
+    -- ... b1 through b7 ...
+ in Right (b0 `shiftL` 56 .|. b1 `shiftL` 48 .|. ... .|. b7)
+```
+
+**`V.fromListN` for known-size Vectors.** The `DataRow` parser and all
+`ToParams` tuple instances were using `V.fromList`, which scans the list
+to determine the length before allocating. Since the column count and
+tuple arity are known statically, `V.fromListN` pre-allocates the exact
+buffer size.
+
+**Fused row collection and decoding.** `fetchAll` previously did two
+passes: collect all raw rows into `[Vector (Maybe ByteString)]`, then
+`mapM decodeRow`. The new `collectAndDecodeRows` decodes each `DataRow`
+as it arrives from the wire, eliminating the intermediate list entirely.
+
+**Difference lists.** The row accumulators in `collectRows` and
+`collectAndDecodeRows` used prepend-then-reverse (`val : acc` followed
+by `reverse acc`). Replaced with difference lists (`acc . (val :)`
+followed by `acc []`), eliminating the O(n) reverse traversal.
+
+**Scientific encoder rewrite.** The numeric encoder used `String`
+(`[Char]`) for digit manipulation — linked lists of boxed characters.
+Rewritten to use `ByteString` operations throughout (`BS8.pack`,
+`BS.replicate`, `BS.foldl'`, `BS.splitAt`).
+
+*Result: Int32 encode 5.9x faster (177ns → 30ns), array encode 4.5x
+faster, Scientific encode 1.5x faster.*
+
+### Pass 4: Protocol-level optimizations
+
+The final pass targeted the protocol encoding and wire framing layers.
+
+**Pre-computed message sizes.** The `withTag` helper was materializing
+the payload `Builder` into a `ByteString` just to call `BS.length`,
+then wrapping it back into a `Builder` — copying the payload bytes
+twice. Replaced with per-message-type size computation functions:
+
+```haskell
+-- Before: double-copy
+withTag tag payload =
+  let payloadBs = LBS.toStrict (B.toLazyByteString payload)  -- copy 1
+      len = fromIntegral (BS.length payloadBs + 4) :: Int32
+   in B.char8 tag <> B.int32BE len <> B.byteString payloadBs  -- copy 2
+
+-- After: single-pass
+Bind portal stmt pfmts vals rfmts ->
+  let !sz = cstringSize portal + cstringSize stmt + ...
+   in tag 'B' sz <> cstring portal <> cstring stmt <> ...
+```
+
+Each message type computes its payload size from field lengths in O(1)
+(`cstringSize bs = BS.length bs + 1`, `formatCodesSize fmts = 2 + n * 2`,
+etc.), then writes tag + length + payload in a single `Builder` pass.
+
+**Merged header recv.** Each PostgreSQL backend message has a 1-byte tag
+followed by a 4-byte length. These were read in two separate `recv()`
+calls. Merged into a single 5-byte read, reducing syscalls from 3 to 2
+per message (tag+length, then payload).
+
+**`-fno-full-laziness` on streaming modules.** GHC's full laziness
+transformation can float expressions out of lambdas, accidentally
+creating sharing that retains data in streaming code. Added the pragma
+to `Streaming.hs` and `Copy.hs` as a safety measure.
+
+*Result: every protocol message now encodes in a single pass with zero
+intermediate allocations for the payload.*
+
+### Summary: encode path improvement
+
+| Stage | Int32 encode | Cumulative |
+|-------|-------------|------------|
+| Initial (Builder pipeline) | 177 ns | 1x |
+| + INLINE pragmas | ~160 ns | 1.1x |
+| + -funbox-strict-fields | ~140 ns | 1.3x |
+| + unsafeCreate direct writes | **30 ns** | **5.9x** |
+
+### Summary: full-stack improvements
 
 | Layer | Technique | Impact |
 |-------|-----------|--------|
-| Encode | Direct byte writes | 5-6x per value |
+| Encode | Direct byte writes (`unsafeCreate`) | 5-6x per value |
 | Decode | Unrolled int64, bang patterns | 1.2-1.4x per value |
 | Protocol | Pre-computed message sizes | Eliminated double-copy |
 | Wire | Merged 5-byte header recv | 1 fewer syscall/message |
+| Wire | TCP_NODELAY + message coalescing | Latency parity with C |
 | Execute | Fused decode + DList accumulation | Eliminated intermediate list + reverse |
 | Batch | Pipelined Bind+Execute | 40-100x for N inserts |
-| All | TCP_NODELAY + message coalescing | Latency parity with C |
+| Strictness | Bang patterns, foldl', UNPACK | Zero space leaks |
+| Safety | -fno-full-laziness, K8K stack tests | Regression-proof |
