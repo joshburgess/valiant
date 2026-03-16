@@ -1,0 +1,38 @@
+cabal-version:   3.0
+name:            bench-compare
+version:         0.1.0.0
+synopsis:        Comparative benchmarks: hsqlx vs hasql vs postgresql-simple
+license:         BSD-3-Clause
+license-file:    ../LICENSE
+build-type:      Simple
+
+executable bench-compare
+  hs-source-dirs:   src
+  main-is:          Main.hs
+  default-language: GHC2021
+  default-extensions:
+    OverloadedStrings
+
+  other-modules:
+    BenchHsqlx
+    BenchHasql
+    BenchPgSimple
+
+  build-depends:
+    , base                >=4.17 && <5
+    , bytestring
+    , contravariant
+    , criterion           >=1.6  && <1.7
+    , text
+    , vector
+
+    -- hsqlx (our runtime)
+    , hsqlx
+
+    -- hasql ecosystem
+    , hasql               >=1.6  && <1.11
+
+    -- postgresql-simple
+    , postgresql-simple   >=0.6  && <0.8
+
+  ghc-options: -threaded -rtsopts -O2
