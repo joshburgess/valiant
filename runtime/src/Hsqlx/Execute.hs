@@ -18,7 +18,10 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
 import Data.Int (Int64)
+import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Sequence (Seq, (|>))
+import Data.Sequence qualified as Seq
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 import Hsqlx.Connection (Connection (..))
@@ -171,7 +174,13 @@ executeExtended conn stmt params = do
   -- Collect rows
   collectRows conn
 
+-- | Maximum number of prepared statements cached per connection.
+-- When exceeded, the least-recently-used statement is closed on the server.
+maxCachedStatements :: Int
+maxCachedStatements = 256
+
 -- | Ensure a statement is prepared on this connection. Returns the statement name.
+-- Uses LRU eviction when the cache exceeds 'maxCachedStatements'.
 ensurePrepared :: Connection -> Statement p r -> IO ByteString
 ensurePrepared conn stmt = do
   cache <- readIORef (connStmtCache conn)
@@ -179,6 +188,9 @@ ensurePrepared conn stmt = do
   case Map.lookup sql cache of
     Just name -> pure name
     Nothing -> do
+      -- Evict oldest if cache is full
+      evictIfNeeded conn cache
+
       counter <- atomicModifyIORef' (connStmtCounter conn) (\n -> (n + 1, n))
       let name = "s" <> BS8.pack (show counter)
           oids = V.map Oid.unOid (stmtParamOids stmt)
@@ -189,6 +201,30 @@ ensurePrepared conn stmt = do
       waitParseComplete conn
       modifyIORef' (connStmtCache conn) (Map.insert sql name)
       pure name
+
+-- | If the cache has reached its limit, close the oldest prepared statement.
+evictIfNeeded :: Connection -> Map ByteString ByteString -> IO ()
+evictIfNeeded conn cache
+  | Map.size cache < maxCachedStatements = pure ()
+  | otherwise = case Map.lookupMin cache of
+      Nothing -> pure ()
+      Just (oldSql, oldName) -> do
+        -- Send Close for the prepared statement
+        sendFrontendMsgs (connWire conn)
+          [ Close DescribeStatement oldName
+          , Sync
+          ]
+        -- Wait for CloseComplete + ReadyForQuery
+        waitCloseComplete conn
+        modifyIORef' (connStmtCache conn) (Map.delete oldSql)
+
+waitCloseComplete :: Connection -> IO ()
+waitCloseComplete conn = do
+  msg <- recvBackendMsg (connWire conn)
+  case msg of
+    CloseComplete -> waitReady conn
+    ErrorResponse _ -> waitReady conn -- best-effort
+    _ -> waitCloseComplete conn
 
 collectRows :: Connection -> IO [Vector (Maybe ByteString)]
 collectRows conn = go []

@@ -87,6 +87,7 @@ module Hsqlx
   , IsolationLevel (..)
   , withTransaction
   , withTransactionLevel
+  , withSavepoint
 
     -- * Cancellation
     -- | Cancel in-flight queries. 'cancelQuery' opens a separate TCP
@@ -162,4 +163,4 @@ import Hsqlx.Pool.Config (PoolConfig (..), defaultPoolConfig)
 import Hsqlx.Statement (Statement (..), mkStatement, queryFile, queryFileAs)
 import Hsqlx.Streaming (CursorState (..), fetchBatch, withCursor)
 import Hsqlx.ToParams (EncodeField (..), ToParams (..))
-import Hsqlx.Transaction (IsolationLevel (..), Transaction (..), withTransaction, withTransactionLevel)
+import Hsqlx.Transaction (IsolationLevel (..), Transaction (..), withSavepoint, withTransaction, withTransactionLevel)
