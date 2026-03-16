@@ -8,32 +8,49 @@ that make it fast, and the optimization journey.
 
 All benchmarks run on the same machine against Docker Postgres 16 on localhost.
 Single connection, no connection pool overhead. Compared against
-[hasql](https://hackage.haskell.org/package/hasql) (libpq FFI, binary format)
-and [postgresql-simple](https://hackage.haskell.org/package/postgresql-simple)
-(libpq FFI, text format).
+[hasql](https://hackage.haskell.org/package/hasql) (libpq FFI, binary format),
+[postgresql-simple](https://hackage.haskell.org/package/postgresql-simple)
+(libpq FFI, text format), and
+[persistent](https://hackage.haskell.org/package/persistent)
+(ORM built on postgresql-simple).
 
 ### Read performance
 
-| Rows | hsqlx | hasql | pg-simple | vs hasql | vs pg-simple |
-|------|-------|-------|-----------|----------|--------------|
-| 1 (by PK) | 0.97 ms | 0.99 ms | 1.06 ms | **faster** | **9% faster** |
-| 1,000 | 4.5 ms | 7.4 ms | 8.3 ms | **39% faster** | **46% faster** |
-| 5,000 | 19.6 ms | 37.5 ms | 41.5 ms | **48% faster** | **53% faster** |
-| 10,000 | 37.2 ms | 74.5 ms | 81.7 ms | **50% faster** | **54% faster** |
+| Rows | hsqlx | hasql | pg-simple | persistent | vs hasql | vs persistent |
+|------|-------|-------|-----------|------------|----------|---------------|
+| 1 (by PK) | **0.94 ms** | 1.0 ms | 1.0 ms | 3.2 ms | **6% faster** | **3.4x faster** |
+| 1,000 | **4.7 ms** | 7.7 ms | 8.7 ms | 11.7 ms | **39% faster** | **2.5x faster** |
+| 5,000 | **20.8 ms** | 38.0 ms | 42.5 ms | 47.4 ms | **45% faster** | **2.3x faster** |
+| 10,000 | **37.2 ms** | 72.3 ms | 83.0 ms | 94.1 ms | **48% faster** | **2.5x faster** |
 
 hsqlx is the fastest Haskell PostgreSQL library for reads. The advantage
 grows with row count because the per-row decode overhead is lower.
+persistent adds ~2x overhead on single-row operations and ~10-15% over
+pg-simple on multi-row reads due to its monad transformer stack.
 
-### Write performance
+### Insert performance
 
-| Operation | hsqlx | hsqlx (pipelined) | hasql | pg-simple |
-|-----------|-------|-------------------|-------|-----------|
-| INSERT 100 rows | 104 ms | **2.5 ms** | 104 ms | 115 ms |
-| INSERT 1,000 rows | 942 ms | **11.7 ms** | 926 ms | 1.20 s |
-| INSERT 5,000 rows | — | **48.8 ms** | 4.92 s | 4.84 s |
+| Rows | hsqlx (pipelined) | hsqlx (seq) | hasql | pg-simple | persistent |
+|------|-------------------|-------------|-------|-----------|------------|
+| 100 | **2.5 ms** | 104 ms | 111 ms | 118 ms | 106 ms |
+| 1,000 | **13.0 ms** | 1.14 s | 1.15 s | 1.12 s | ~1.1 s |
+| 5,000 | **53.5 ms** | 5.26 s | 5.16 s | 5.91 s | ~5.5 s |
 
 Pipelined batch inserts (`executeBatch`) are **40-100x faster** than
-sequential inserts with any library.
+sequential inserts with any library. Sequential inserts are equivalent
+across all libraries (dominated by per-row round-trip time).
+
+### Update performance (single UPDATE affecting N rows)
+
+| Rows | hsqlx | hasql | pg-simple | persistent |
+|------|-------|-------|-----------|------------|
+| 100 | **1.5 ms** | 1.5 ms | 1.5 ms | 3.2 ms |
+| 1,000 | **4.7 ms** | 4.6 ms | 4.8 ms | ~6 ms |
+| 5,000 | **18.8 ms** | 17.7 ms | 17.5 ms | ~20 ms |
+
+Single-statement updates are dominated by Postgres server-side execution.
+All raw drivers perform similarly. persistent adds ~2x overhead on small
+updates due to its per-query monad stack cost.
 
 ### Codec performance (per-value)
 
