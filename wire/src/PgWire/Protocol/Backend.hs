@@ -42,12 +42,12 @@ data AuthType
 -- | Column metadata from RowDescription.
 data FieldInfo = FieldInfo
   { fiName :: ByteString
-  , fiTableOid :: Word32
-  , fiColumnNum :: Int16
-  , fiTypeOid :: Word32
-  , fiTypeSize :: Int16
-  , fiTypeMod :: Int32
-  , fiFormatCode :: Int16
+  , fiTableOid :: {-# UNPACK #-} !Word32
+  , fiColumnNum :: {-# UNPACK #-} !Int16
+  , fiTypeOid :: {-# UNPACK #-} !Word32
+  , fiTypeSize :: {-# UNPACK #-} !Int16
+  , fiTypeMod :: {-# UNPACK #-} !Int32
+  , fiFormatCode :: {-# UNPACK #-} !Int16
   }
   deriving stock (Show, Eq)
 
@@ -59,8 +59,8 @@ data PgError = PgError
   , pgMessage :: ByteString
   , pgDetail :: Maybe ByteString
   , pgHint :: Maybe ByteString
-  , pgPosition :: Maybe Int32
-  , pgInternalPosition :: Maybe Int32
+  , pgPosition :: !(Maybe Int32)
+  , pgInternalPosition :: !(Maybe Int32)
   , pgInternalQuery :: Maybe ByteString
   , pgWhere :: Maybe ByteString
   , pgSchema :: Maybe ByteString
@@ -69,7 +69,7 @@ data PgError = PgError
   , pgDataType :: Maybe ByteString
   , pgConstraint :: Maybe ByteString
   , pgFile :: Maybe ByteString
-  , pgLine :: Maybe Int32
+  , pgLine :: !(Maybe Int32)
   , pgRoutine :: Maybe ByteString
   }
   deriving stock (Show, Eq)

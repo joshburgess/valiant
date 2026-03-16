@@ -13,7 +13,7 @@ license-file:    ../LICENSE
 build-type:      Simple
 
 common warnings
-  ghc-options: -Wall -Wcompat -Wno-unticked-promoted-constructors
+  ghc-options: -Wall -Wcompat -Wno-unticked-promoted-constructors -funbox-strict-fields -fspecialise-aggressively
 
 library
   import:           warnings
@@ -92,6 +92,7 @@ test-suite pg-wire-test
     PgWire.Protocol.OidSpec
     PgWire.Protocol.ParsersSpec
 
+  ghc-options: -rtsopts "-with-rtsopts=-K8K"
   build-depends:
     , base         >=4.17 && <5
     , bytestring

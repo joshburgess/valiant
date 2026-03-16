@@ -17,6 +17,7 @@ import Data.ByteString qualified as BS
 import Data.ByteString.Builder qualified as B
 import Data.ByteString.Lazy qualified as LBS
 import Data.Int (Int16)
+import Data.List (foldl')
 import Data.Scientific (Scientific)
 import Data.Scientific qualified as Sci
 import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
@@ -120,7 +121,7 @@ toBase10000Groups :: String -> [Int]
 toBase10000Groups [] = []
 toBase10000Groups s =
   let (chunk, rest) = splitAt 4 s
-      val = foldl (\acc c -> acc * 10 + fromEnum c - 48) 0 chunk
+      val = foldl' (\acc c -> acc * 10 + fromEnum c - 48) 0 chunk
    in val : toBase10000Groups rest
 
 int16 :: Int16 -> B.Builder
@@ -151,7 +152,7 @@ decodeNumeric bs
               -- = sum(digits[i] * 10^(4*(weight - i)))
 
               -- Build the integer value by accumulating
-              intVal = foldl (\acc d -> acc * 10000 + fromIntegral d) (0 :: Integer) digits
+              intVal = foldl' (\acc d -> acc * 10000 + fromIntegral d) (0 :: Integer) digits
 
               -- The exponent adjustment:
               -- The first digit has power 4*weight, last has 4*(weight - ndigits + 1)

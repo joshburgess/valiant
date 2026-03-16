@@ -48,8 +48,8 @@ data Connection = Connection
   { connWire :: WireConn
   , connConfig :: ConnConfig
   , connParams :: IORef (Map ByteString ByteString)
-  , connBackendPid :: Int32
-  , connBackendKey :: Int32
+  , connBackendPid :: {-# UNPACK #-} !Int32
+  , connBackendKey :: {-# UNPACK #-} !Int32
   , connTxStatus :: IORef TxStatus
   , connStmtCache :: IORef (Map ByteString ByteString)
   , connStmtCounter :: IORef Word64

@@ -30,7 +30,6 @@ import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
 import PgWire.Connection (Connection, close, connectString, simpleQuery)
 import PgWire.Error (HsqlxError (..), throwHsqlx)
 import PgWire.Pool.Config (PoolConfig (..))
-import System.IO.Unsafe (unsafePerformIO)
 
 -- | A connection pool.
 data Pool = Pool
@@ -197,24 +196,24 @@ reaperThread pool = go
     go = do
       threadDelay (30 * 1000000) -- check every 30 seconds
       now <- getCurrentTime
-      expired <- atomically $ do
-        idle <- readTVar (pIdle pool)
-        let (keep, reap) = partition (not . shouldReap now) idle
-        writeTVar (pIdle pool) keep
-        pure reap
-      mapM_ (\e -> safeClose (peConn e) >> atomically (modifyTVar' (pActive pool) (subtract 1))) expired
+      -- Read all idle entries and check which to reap (in IO, not STM)
+      entries <- atomically $ readTVar (pIdle pool)
+      (keep, reap) <- partitionM (shouldKeep now) entries
+      atomically $ writeTVar (pIdle pool) keep
+      mapM_ (\e -> safeClose (peConn e) >> atomically (modifyTVar' (pActive pool) (subtract 1))) reap
       go
 
-    shouldReap now entry =
-      isExpired (pConfig pool) entry now
-        || isIdle (pConfig pool) entry now
+    shouldKeep now entry = do
+      if isExpired (pConfig pool) entry now
+        then pure False
+        else do
+          lastUsed <- readIORef (peLastUsed entry)
+          pure (diffUTCTime now lastUsed <= poolIdleTime (pConfig pool))
 
-    isIdle cfg entry now = unsafePerformIO $ do
-      lastUsed <- readIORef (peLastUsed entry)
-      pure (diffUTCTime now lastUsed > poolIdleTime cfg)
+    partitionM _ [] = pure ([], [])
+    partitionM p (x : xs) = do
+      b <- p x
+      (ys, zs) <- partitionM p xs
+      pure (if b then (x : ys, zs) else (ys, x : zs))
 
-    partition _ [] = ([], [])
-    partition p (x : xs) =
-      let (ys, zs) = partition p xs
-       in if p x then (x : ys, zs) else (ys, x : zs)
 

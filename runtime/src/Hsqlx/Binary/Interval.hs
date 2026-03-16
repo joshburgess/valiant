@@ -24,9 +24,9 @@ import PgWire.Protocol.Oid (oidInterval)
 
 -- | A PostgreSQL interval value.
 data PgInterval = PgInterval
-  { intervalMicroseconds :: Int64
-  , intervalDays :: Int32
-  , intervalMonths :: Int32
+  { intervalMicroseconds :: {-# UNPACK #-} !Int64
+  , intervalDays :: {-# UNPACK #-} !Int32
+  , intervalMonths :: {-# UNPACK #-} !Int32
   }
   deriving stock (Show, Eq, Ord, Generic)
 
