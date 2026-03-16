@@ -1,0 +1,70 @@
+{
+    "columns": [
+        {
+            "haskell_module": "Data.Int",
+            "haskell_type": "Int32",
+            "name": "id",
+            "nullable": false,
+            "pg_oid": 23,
+            "pg_type_name": "int4",
+            "source_column_number": 1,
+            "source_table_oid": 16392
+        },
+        {
+            "haskell_module": "Data.Text",
+            "haskell_type": "Text",
+            "name": "name",
+            "nullable": false,
+            "pg_oid": 25,
+            "pg_type_name": "text",
+            "source_column_number": 2,
+            "source_table_oid": 16392
+        },
+        {
+            "haskell_module": "Data.Text",
+            "haskell_type": "Maybe Text",
+            "name": "email",
+            "nullable": true,
+            "pg_oid": 25,
+            "pg_type_name": "text",
+            "source_column_number": 3,
+            "source_table_oid": 16392
+        },
+        {
+            "haskell_module": "Prelude",
+            "haskell_type": "Bool",
+            "name": "is_active",
+            "nullable": false,
+            "pg_oid": 16,
+            "pg_type_name": "bool",
+            "source_column_number": 4,
+            "source_table_oid": 16392
+        },
+        {
+            "haskell_module": "Data.Time",
+            "haskell_type": "UTCTime",
+            "name": "created_at",
+            "nullable": false,
+            "pg_oid": 1184,
+            "pg_type_name": "timestamptz",
+            "source_column_number": 5,
+            "source_table_oid": 16392
+        }
+    ],
+    "database_url_hash": "f89d3fdecad2c5849bb76880c33597d66f4b151d9731ae72a74d700847d4090b",
+    "file": "users/find_by_id.sql",
+    "hsqlx_version": "0.1.0",
+    "parameters": [
+        {
+            "haskell_module": "Data.Int",
+            "haskell_type": "Int32",
+            "index": 1,
+            "pg_oid": 23,
+            "pg_type_name": "int4"
+        }
+    ],
+    "prepared_at": "2026-03-15T12:35:27.617246Z",
+    "sql": "SELECT id, name, email, is_active, created_at\nFROM users\nWHERE id = $1\n",
+    "sql_hash": "43fd3b484e2842707f711cd4aa6d3fa709f3dfc62a90f9b4830e61425f0cf94f",
+    "statement_type": "select"
+}

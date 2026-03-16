@@ -1,0 +1,50 @@
+{
+    "columns": [
+        {
+            "haskell_module": "Data.Int",
+            "haskell_type": "Int32",
+            "name": "id",
+            "nullable": false,
+            "pg_oid": 23,
+            "pg_type_name": "int4",
+            "source_column_number": 1,
+            "source_table_oid": 16403
+        },
+        {
+            "haskell_module": "Data.Text",
+            "haskell_type": "Text",
+            "name": "title",
+            "nullable": false,
+            "pg_oid": 25,
+            "pg_type_name": "text",
+            "source_column_number": 3,
+            "source_table_oid": 16403
+        },
+        {
+            "haskell_module": "Data.Time",
+            "haskell_type": "Maybe UTCTime",
+            "name": "published_at",
+            "nullable": true,
+            "pg_oid": 1184,
+            "pg_type_name": "timestamptz",
+            "source_column_number": 5,
+            "source_table_oid": 16403
+        }
+    ],
+    "database_url_hash": "f89d3fdecad2c5849bb76880c33597d66f4b151d9731ae72a74d700847d4090b",
+    "file": "posts/list_recent.sql",
+    "hsqlx_version": "0.1.0",
+    "parameters": [
+        {
+            "haskell_module": "Data.Int",
+            "haskell_type": "Int64",
+            "index": 1,
+            "pg_oid": 20,
+            "pg_type_name": "int8"
+        }
+    ],
+    "prepared_at": "2026-03-15T12:35:27.609591Z",
+    "sql": "SELECT id, title, published_at\nFROM posts\nWHERE published_at IS NOT NULL\nORDER BY published_at DESC\nLIMIT $1\n",
+    "sql_hash": "e644bb33f356bf4efba8ef23bb1339959ed3f858c8f74b0a75a2a660f9a80a00",
+    "statement_type": "select"
+}

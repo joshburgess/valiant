@@ -1,0 +1,73 @@
+cabal-version:   3.0
+name:            hsqlx-plugin
+version:         0.1.0.0
+synopsis:        Compile-time checked SQL for Haskell — GHC source plugin
+description:
+  GHC source plugin that validates @queryFile@ calls at compile time
+  by reading cached metadata from the @.hsqlx/@ directory.
+license:         BSD-3-Clause
+license-file:    ../LICENSE
+build-type:      Simple
+
+common warnings
+  ghc-options: -Wall -Wcompat -Wno-unticked-promoted-constructors
+
+library
+  import:           warnings
+  hs-source-dirs:   src
+  default-language: GHC2021
+  default-extensions:
+    DerivingStrategies
+    LambdaCase
+    OverloadedStrings
+    RecordWildCards
+    StrictData
+
+  exposed-modules:
+    Hsqlx.Plugin
+    Hsqlx.Plugin.Cache
+    Hsqlx.Plugin.Compat
+    Hsqlx.Plugin.Config
+    Hsqlx.Plugin.Errors
+    Hsqlx.Plugin.Hash
+    Hsqlx.Plugin.Rewrite
+    Hsqlx.Plugin.Traverse
+    Hsqlx.Plugin.TypeMap
+    Hsqlx.Plugin.Verify
+
+  build-depends:
+    , base                  >=4.17    && <5
+    , bytestring            >=0.11    && <0.13
+    , text                  >=2.0     && <2.2
+    , containers            >=0.6     && <0.8
+    , filepath              >=1.4     && <1.6
+    , directory             >=1.3     && <1.4
+    , aeson                 >=2.1     && <2.3
+    , cryptohash-sha256     >=0.11    && <0.12
+    , ghc                   >=9.4     && <9.5
+    , time                  >=1.12    && <1.15
+    , edit-distance         >=0.2     && <0.3
+
+test-suite hsqlx-plugin-test
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Main.hs
+  default-language: GHC2021
+  default-extensions:
+    OverloadedStrings
+
+  other-modules:
+    Hsqlx.Plugin.ConfigSpec
+    Hsqlx.Plugin.CacheSpec
+
+  build-depends:
+    , base          >=4.17 && <5
+    , aeson
+    , bytestring
+    , directory
+    , filepath
+    , hspec         >=2.11 && <2.12
+    , hsqlx-plugin
+    , temporary     >=1.3  && <1.4
+    , text

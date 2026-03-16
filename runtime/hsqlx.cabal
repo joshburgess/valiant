@@ -1,0 +1,121 @@
+cabal-version:   3.0
+name:            hsqlx
+version:         0.1.0.0
+synopsis:        Compile-time checked SQL for Haskell — runtime library
+description:
+  Custom PostgreSQL wire protocol driver with connection pooling,
+  binary format codecs, and the @Statement@ type for compile-time
+  validated SQL queries.
+license:         BSD-3-Clause
+license-file:    ../LICENSE
+build-type:      Simple
+
+common warnings
+  ghc-options: -Wall -Wcompat -Wno-unticked-promoted-constructors
+
+library
+  import:           warnings
+  hs-source-dirs:   src
+  default-language: GHC2021
+  default-extensions:
+    DerivingStrategies
+    LambdaCase
+    OverloadedStrings
+    RecordWildCards
+    StrictData
+
+  exposed-modules:
+    Hsqlx
+    Hsqlx.Auth.Cleartext
+    Hsqlx.Auth.MD5
+    Hsqlx.Auth.ScramSHA256
+    Hsqlx.Binary.Array
+    Hsqlx.Binary.Decode
+    Hsqlx.Binary.Encode
+    Hsqlx.Binary.Interval
+    Hsqlx.Binary.Scientific
+    Hsqlx.Binary.Types
+    Hsqlx.Connection
+    Hsqlx.Connection.Config
+    Hsqlx.Copy
+    Hsqlx.Error
+    Hsqlx.Execute
+    Hsqlx.FromRow
+    Hsqlx.Logging
+    Hsqlx.Notify
+    Hsqlx.Pool
+    Hsqlx.Pool.Config
+    Hsqlx.Protocol.Backend
+    Hsqlx.Protocol.Builders
+    Hsqlx.Protocol.Frontend
+    Hsqlx.Protocol.Oid
+    Hsqlx.Protocol.Parsers
+    Hsqlx.Statement
+    Hsqlx.Streaming
+    Hsqlx.ToParams
+    Hsqlx.Transaction
+    Hsqlx.Wire
+
+  build-depends:
+    -- Core
+    , base                  >=4.17    && <5
+    , bytestring            >=0.11    && <0.13
+    , text                  >=2.0     && <2.2
+    , containers            >=0.6     && <0.8
+    , vector                >=0.13    && <0.14
+    , time                  >=1.12    && <1.15
+
+    -- Networking
+    , network               >=3.1     && <3.3
+
+    -- TLS
+    , tls                   >=1.7     && <2.2
+    , crypton-x509-store    >=1.6     && <1.7
+    , crypton-x509-system   >=1.6     && <1.7
+    , data-default-class    >=0.1     && <0.2
+
+    -- Crypto (auth)
+    , crypton               >=0.34    && <1.1
+    , cryptohash-md5        >=0.11    && <0.12
+    , memory                >=0.18    && <0.19
+    , base64-bytestring     >=1.2     && <1.3
+
+    -- Binary codec helpers
+    , scientific            >=0.3     && <0.4
+    , uuid-types            >=1.0     && <1.1
+    , aeson                 >=2.1     && <2.3
+
+    -- Concurrency / pool
+    , stm                   >=2.5     && <2.6
+    , async                 >=2.2     && <2.3
+
+test-suite hsqlx-test
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Main.hs
+  default-language: GHC2021
+  default-extensions:
+    OverloadedStrings
+
+  other-modules:
+    Hsqlx.Auth.MD5Spec
+    Hsqlx.Binary.ArraySpec
+    Hsqlx.Binary.DecodeSpec
+    Hsqlx.Binary.EncodeSpec
+    Hsqlx.Binary.IntervalSpec
+    Hsqlx.Binary.ScientificSpec
+    Hsqlx.Connection.ConfigSpec
+    Hsqlx.FromRowSpec
+    Hsqlx.Protocol.BuildersSpec
+    Hsqlx.Protocol.ParsersSpec
+
+  build-depends:
+    , base        >=4.17 && <5
+    , bytestring
+    , hspec       >=2.11 && <2.12
+    , hsqlx
+    , scientific
+    , text
+    , time
+    , vector

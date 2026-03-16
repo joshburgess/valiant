@@ -1,0 +1,19 @@
+{
+    "columns": [],
+    "database_url_hash": "f89d3fdecad2c5849bb76880c33597d66f4b151d9731ae72a74d700847d4090b",
+    "file": "users/delete_by_id.sql",
+    "hsqlx_version": "0.1.0",
+    "parameters": [
+        {
+            "haskell_module": "Data.Int",
+            "haskell_type": "Int32",
+            "index": 1,
+            "pg_oid": 23,
+            "pg_type_name": "int4"
+        }
+    ],
+    "prepared_at": "2026-03-15T12:35:27.612409Z",
+    "sql": "DELETE FROM users\nWHERE id = $1\n",
+    "sql_hash": "db861c80d95aef5700494c054c6aed43a2f6b9b20d85856f585cdb212e21d972",
+    "statement_type": "delete"
+}

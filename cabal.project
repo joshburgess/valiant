@@ -1,0 +1,5 @@
+with-compiler: ghc-9.4.4
+packages: . runtime plugin
+
+package text
+  flags: -simdutf
