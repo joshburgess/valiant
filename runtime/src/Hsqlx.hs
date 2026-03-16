@@ -1,15 +1,54 @@
 -- | Hsqlx — compile-time checked SQL for Haskell.
 --
--- This is the main entry point for the runtime library.
--- Import this module to get access to all user-facing types and functions.
+-- This is the main entry point for the runtime library. Import this module
+-- to get access to all user-facing types and functions.
+--
+-- == Quick start
+--
+-- @
+-- {\-\# OPTIONS_GHC -fplugin=Hsqlx.Plugin
+--                 -fplugin-opt=Hsqlx.Plugin:sql-dir=sql \#-\}
+--
+-- module MyApp.Queries.Users where
+--
+-- import Hsqlx
+--
+-- -- sql\/users\/find_by_id.sql:
+-- --   SELECT id, name, email FROM users WHERE id = $1
+-- findById :: Statement Int32 (Maybe (Int32, Text, Maybe Text))
+-- findById = queryFile \"users\/find_by_id.sql\"
+-- @
+--
+-- == Runtime usage
+--
+-- @
+-- pool <- 'newPool' 'defaultPoolConfig' { poolConnString = \"postgres:\/\/...\" }
+--
+-- -- Fetch one row
+-- mUser <- 'withResource' pool $ \\conn ->
+--   'fetchOne' conn findById 42
+--
+-- -- Batch insert (pipelined)
+-- 'withResource' pool $ \\conn ->
+--   'executeBatch' conn insertStmt [(\"Alice\", email1), (\"Bob\", email2)]
+--
+-- -- Transaction
+-- 'withTransaction' pool $ \\tx ->
+--   'execute' ('txConn' tx) insertStmt (\"Carol\", email3)
+-- @
 module Hsqlx
   ( -- * Statement
+    -- | A 'Statement' represents a compile-time validated SQL query with
+    -- typed parameters and results. Create them with 'queryFile' (validated
+    -- by the GHC plugin) or 'mkStatement' (for manual construction).
     Statement (..)
   , queryFile
   , queryFileAs
   , mkStatement
 
     -- * Execution
+    -- | Execute statements against a 'Connection'. All functions use the
+    -- PostgreSQL extended query protocol with binary format encoding.
   , fetchOne
   , fetchAll
   , fetchScalar
@@ -17,6 +56,9 @@ module Hsqlx
   , executeBatch
 
     -- * Connection
+    -- | Manage connections to PostgreSQL. Use 'connectString' for simple
+    -- usage or 'connect' with a 'ConnConfig' for full control. For
+    -- production use, prefer 'Pool' over direct connections.
   , Connection
   , ConnConfig (..)
   , TlsMode (..)
@@ -28,6 +70,9 @@ module Hsqlx
   , simpleQuery
 
     -- * Pool
+    -- | Thread-safe connection pool with configurable size, idle reaping,
+    -- max lifetime, and health checking. Use 'withResource' to acquire
+    -- and automatically release connections.
   , Pool
   , PoolConfig (..)
   , defaultPoolConfig
@@ -36,21 +81,30 @@ module Hsqlx
   , withResource
 
     -- * Transactions
+    -- | Run actions inside a database transaction. If an exception is
+    -- thrown, the transaction is automatically rolled back.
   , Transaction (..)
   , IsolationLevel (..)
   , withTransaction
   , withTransactionLevel
 
     -- * Cancellation
+    -- | Cancel in-flight queries. 'cancelQuery' opens a separate TCP
+    -- connection and sends a CancelRequest to the server.
+    -- 'withQueryTimeout' wraps any action with a deadline.
   , cancelQuery
   , withQueryTimeout
 
     -- * Streaming (cursors)
+    -- | Stream large result sets using server-side cursors, fetching
+    -- rows in batches without loading everything into memory.
+    -- Must be used inside a transaction.
   , CursorState (..)
   , withCursor
   , fetchBatch
 
-    -- * LISTEN/NOTIFY
+    -- * LISTEN\/NOTIFY
+    -- | Subscribe to PostgreSQL asynchronous notification channels.
   , Notification (..)
   , listen
   , unlisten
@@ -58,11 +112,13 @@ module Hsqlx
   , waitForNotificationTimeout
 
     -- * COPY
+    -- | Bulk data import\/export using the PostgreSQL COPY protocol.
   , CopyResult (..)
   , copyIn
   , copyOut
 
     -- * Logging
+    -- | Hooks for instrumenting query timing and connection events.
   , LogEvent (..)
   , LogLevel (..)
   , Logger
@@ -70,13 +126,20 @@ module Hsqlx
   , stderrLogger
 
     -- * Row decoding
+    -- | Decode result rows into Haskell types. Instances are provided
+    -- for tuples up to 6 elements, 'Maybe' for nullable columns, and
+    -- @()@ for commands that return no rows.
   , FromRow (..)
 
     -- * Parameter encoding
+    -- | Encode query parameters. Instances are provided for single
+    -- values, 'Maybe' for nullable parameters, @()@ for no parameters,
+    -- and tuples up to 6 elements.
   , ToParams (..)
   , EncodeField (..)
 
     -- * Binary types
+    -- | PostgreSQL types that don't have a standard Haskell equivalent.
   , PgInterval (..)
   , PgRange (..)
   , RangeBound (..)

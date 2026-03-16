@@ -1,3 +1,17 @@
+-- | Thread-safe connection pool for PostgreSQL.
+--
+-- Manages a set of reusable 'Connection's with configurable pool size,
+-- idle timeout, max lifetime, and health checking. Connections are
+-- validated with an empty query before reuse.
+--
+-- @
+-- pool <- 'newPool' 'PgWire.Pool.Config.defaultPoolConfig'
+--   { poolConnString = \"postgres:\/\/...\"
+--   , poolSize = 10
+--   }
+-- 'withResource' pool $ \\conn -> ...
+-- 'closePool' pool
+-- @
 module PgWire.Pool
   ( Pool
   , newPool

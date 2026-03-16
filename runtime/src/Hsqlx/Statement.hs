@@ -1,3 +1,10 @@
+-- | The 'Statement' type: a compile-time validated SQL query.
+--
+-- @p@ is the parameter type, @r@ is the result type. The GHC source plugin
+-- verifies that these types match the SQL query's parameters and columns.
+--
+-- Create statements with 'queryFile' (validated by the plugin) or
+-- 'mkStatement' (for manual\/test construction).
 module Hsqlx.Statement
   ( Statement (..)
   , queryFile
@@ -15,14 +22,22 @@ import Hsqlx.Protocol.Oid (Oid (..))
 import Hsqlx.ToParams (ToParams (..))
 
 -- | A compile-time validated SQL statement.
--- @p@ is the parameter type, @r@ is the result type.
+--
+-- @p@ is the parameter type (e.g., @Int32@ or @(Text, Maybe Text)@).
+-- @r@ is the result type (e.g., @(Int32, Text)@ or @()@ for commands).
 data Statement p r = Statement
   { stmtSQL :: ByteString
+  -- ^ The raw SQL text.
   , stmtFile :: FilePath
+  -- ^ The source @.sql@ file path (for error messages).
   , stmtParamOids :: Vector Oid
+  -- ^ PostgreSQL type OIDs for each parameter.
   , stmtEncode :: p -> Vector (Maybe ByteString)
+  -- ^ Encode parameters to binary format.
   , stmtDecode :: Vector (Maybe ByteString) -> Either String r
+  -- ^ Decode a result row from binary format.
   , stmtColumns :: Vector ByteString
+  -- ^ Column names from the query result.
   }
 
 -- | Reference a @.sql@ file for compile-time validation.

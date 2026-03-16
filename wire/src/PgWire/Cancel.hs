@@ -4,6 +4,15 @@
 -- and sending a CancelRequest message containing the backend PID and
 -- secret key from the original connection's BackendKeyData. The server
 -- then signals the backend process to cancel its current query.
+--
+-- @
+-- -- Cancel a long-running query from another thread:
+-- 'cancelQuery' conn
+--
+-- -- Or use a timeout wrapper:
+-- 'withQueryTimeout' conn 5.0 $ do
+--   fetchAll conn expensiveQuery ()
+-- @
 module PgWire.Cancel
   ( cancelQuery
   , withQueryTimeout

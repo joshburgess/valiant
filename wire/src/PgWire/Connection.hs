@@ -1,9 +1,26 @@
+-- | PostgreSQL connection management.
+--
+-- A 'Connection' represents an active TCP (or TLS) session with a
+-- PostgreSQL server. It handles authentication, parameter negotiation,
+-- and prepared statement caching.
+--
+-- For production use, prefer 'PgWire.Pool' over direct connections.
+--
+-- @
+-- conn <- 'connectString' \"postgres:\/\/user:pass\@localhost:5432\/mydb\"
+-- (rows, _) <- 'simpleQuery' conn \"SELECT 1\"
+-- 'close' conn
+-- @
 module PgWire.Connection
-  ( Connection (..)
+  ( -- * Connection type
+    Connection (..)
+    -- * Connecting
   , connect
   , connectString
+    -- * Closing
   , close
   , withConnection
+    -- * Simple queries
   , simpleQuery
   ) where
 

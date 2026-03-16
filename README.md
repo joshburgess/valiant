@@ -367,7 +367,7 @@ Requires GHC 9.4 and Cabal 3.0+.
 git clone https://github.com/joshburgess/hsqlx.git
 cd hsqlx
 cabal build all
-cabal test all    # 331 tests
+cabal test all    # 461 tests
 ```
 
 ## Design decisions

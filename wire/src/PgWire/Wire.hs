@@ -1,11 +1,24 @@
+-- | Low-level PostgreSQL wire protocol I\/O.
+--
+-- 'WireConn' abstracts over a TCP or TLS connection, providing
+-- send\/recv operations for protocol messages. This module handles
+-- message framing (tag + length + payload), buffering, and
+-- TLS upgrades via the SSLRequest subprotocol.
+--
+-- Most users should use 'PgWire.Connection' instead of this module.
 module PgWire.Wire
-  ( WireConn (..)
+  ( -- * Wire connection
+    WireConn (..)
+    -- * Connecting
   , connectTcp
   , connectTcpTimeout
+    -- * TLS
   , upgradeTls
+    -- * Sending messages
   , sendFrontendMsg
   , sendFrontendMsgs
   , sendRawBytes
+    -- * Receiving messages
   , recvBackendMsg
   ) where
 
