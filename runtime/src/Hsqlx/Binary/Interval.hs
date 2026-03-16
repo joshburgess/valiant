@@ -11,8 +11,10 @@ module Hsqlx.Binary.Interval
   ( PgInterval (..)
   ) where
 
+import Control.DeepSeq (NFData)
 import Data.Bits (shiftL, (.|.))
 import Data.ByteString (ByteString)
+import GHC.Generics (Generic)
 import Data.ByteString qualified as BS
 import Data.ByteString.Builder qualified as B
 import Data.ByteString.Lazy qualified as LBS
@@ -26,7 +28,9 @@ data PgInterval = PgInterval
   , intervalDays :: Int32
   , intervalMonths :: Int32
   }
-  deriving stock (Show, Eq, Ord)
+  deriving stock (Show, Eq, Ord, Generic)
+
+instance NFData PgInterval
 
 instance PgEncode PgInterval where
   pgEncode (PgInterval micros days months) =

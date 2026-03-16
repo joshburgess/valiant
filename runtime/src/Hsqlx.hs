@@ -24,6 +24,7 @@ module Hsqlx
   , connectString
   , close
   , withConnection
+  , simpleQuery
 
     -- * Pool
   , Pool
@@ -80,7 +81,7 @@ module Hsqlx
 import Hsqlx.Binary.Composite (CompositeField (..))
 import Hsqlx.Binary.Interval (PgInterval (..))
 import Hsqlx.Binary.Range (PgRange (..), RangeBound (..))
-import Hsqlx.Connection (Connection, close, connect, connectString, withConnection)
+import Hsqlx.Connection (Connection, close, connect, connectString, simpleQuery, withConnection)
 import Hsqlx.Connection.Config (ConnConfig (..), TlsMode (..), defaultConnConfig)
 import Hsqlx.Copy (CopyResult (..), copyIn, copyOut)
 import Hsqlx.Execute (execute, fetchAll, fetchOne, fetchScalar)

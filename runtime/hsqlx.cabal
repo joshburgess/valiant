@@ -87,6 +87,9 @@ library
     , uuid-types            >=1.0     && <1.1
     , aeson                 >=2.1     && <2.3
 
+    -- Misc
+    , deepseq               >=1.4     && <1.6
+
     -- Concurrency / pool
     , stm                   >=2.5     && <2.6
     , async                 >=2.2     && <2.3
@@ -125,3 +128,57 @@ test-suite hsqlx-test
     , text
     , time
     , vector
+
+test-suite hsqlx-integration
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   integration
+  main-is:          Main.hs
+  default-language: GHC2021
+  default-extensions:
+    OverloadedStrings
+
+  other-modules:
+    ConnectionSpec
+    CopySpec
+    ExecuteSpec
+    PoolSpec
+    TestSupport
+    TransactionSpec
+
+  build-depends:
+    , async        >=2.2  && <2.3
+    , base         >=4.17 && <5
+    , bytestring
+    , hspec        >=2.11 && <2.12
+    , hsqlx
+    , text
+
+  -- Requires DATABASE_URL. Run with:
+  --   eval $(scripts/pg-setup.sh)
+  --   cabal test hsqlx-integration --test-show-details=direct
+
+benchmark hsqlx-bench
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   bench
+  main-is:          Main.hs
+  default-language: GHC2021
+  default-extensions:
+    OverloadedStrings
+
+  other-modules:
+    BenchCodec
+    BenchQuery
+    TestSupport
+
+  build-depends:
+    , base         >=4.17 && <5
+    , bytestring
+    , criterion    >=1.6  && <1.7
+    , hsqlx
+    , scientific
+    , text
+    , time
+    , vector
+  ghc-options: -threaded -rtsopts -O2
