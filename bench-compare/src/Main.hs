@@ -9,6 +9,7 @@ import System.Environment (lookupEnv)
 import qualified BenchHsqlx
 import qualified BenchHasql
 import qualified BenchPgSimple
+import qualified BenchPersistent
 
 main :: IO ()
 main = do
@@ -58,26 +59,31 @@ readBenches bs url =
       [ bench "hsqlx"             $ whnfIO (BenchHsqlx.selectOne bs)
       , bench "hasql"             $ whnfIO (BenchHasql.selectOne url)
       , bench "postgresql-simple" $ whnfIO (BenchPgSimple.selectOne bs)
+      , bench "persistent"        $ whnfIO (BenchPersistent.selectOne bs)
       ]
   , bgroup "fetchOne by PK"
       [ bench "hsqlx"             $ whnfIO (BenchHsqlx.fetchOneByPK bs)
       , bench "hasql"             $ whnfIO (BenchHasql.fetchOneByPK url)
       , bench "postgresql-simple" $ whnfIO (BenchPgSimple.fetchOneByPK bs)
+      , bench "persistent"        $ whnfIO (BenchPersistent.fetchOneByPK bs)
       ]
   , bgroup "fetch 1000 rows"
       [ bench "hsqlx"             $ whnfIO (BenchHsqlx.fetchN bs 1000)
       , bench "hasql"             $ whnfIO (BenchHasql.fetchN url 1000)
       , bench "postgresql-simple" $ whnfIO (BenchPgSimple.fetchN bs 1000)
+      , bench "persistent"        $ whnfIO (BenchPersistent.fetchN bs 1000)
       ]
   , bgroup "fetch 5000 rows"
       [ bench "hsqlx"             $ whnfIO (BenchHsqlx.fetchN bs 5000)
       , bench "hasql"             $ whnfIO (BenchHasql.fetchN url 5000)
       , bench "postgresql-simple" $ whnfIO (BenchPgSimple.fetchN bs 5000)
+      , bench "persistent"        $ whnfIO (BenchPersistent.fetchN bs 5000)
       ]
   , bgroup "fetch 10000 rows"
       [ bench "hsqlx"             $ whnfIO (BenchHsqlx.fetchN bs 10000)
       , bench "hasql"             $ whnfIO (BenchHasql.fetchN url 10000)
       , bench "postgresql-simple" $ whnfIO (BenchPgSimple.fetchN bs 10000)
+      , bench "persistent"        $ whnfIO (BenchPersistent.fetchN bs 10000)
       ]
   ]
 
@@ -90,18 +96,21 @@ insertBenches bs url =
       , bench "hsqlx (sequential)" $ whnfIO (BenchHsqlx.insertN bs 100)
       , bench "hasql"              $ whnfIO (BenchHasql.insertN url 100)
       , bench "postgresql-simple"  $ whnfIO (BenchPgSimple.insertN bs 100)
+      , bench "persistent"         $ whnfIO (BenchPersistent.insertN bs 100)
       ]
   , bgroup "insert 1000 rows"
       [ bench "hsqlx (pipelined)"  $ whnfIO (BenchHsqlx.insertNPipelined bs 1000)
       , bench "hsqlx (sequential)" $ whnfIO (BenchHsqlx.insertN bs 1000)
       , bench "hasql"              $ whnfIO (BenchHasql.insertN url 1000)
       , bench "postgresql-simple"  $ whnfIO (BenchPgSimple.insertN bs 1000)
+      , bench "persistent"         $ whnfIO (BenchPersistent.insertN bs 1000)
       ]
   , bgroup "insert 5000 rows"
       [ bench "hsqlx (pipelined)"  $ whnfIO (BenchHsqlx.insertNPipelined bs 5000)
       , bench "hsqlx (sequential)" $ whnfIO (BenchHsqlx.insertN bs 5000)
       , bench "hasql"              $ whnfIO (BenchHasql.insertN url 5000)
       , bench "postgresql-simple"  $ whnfIO (BenchPgSimple.insertN bs 5000)
+      , bench "persistent"         $ whnfIO (BenchPersistent.insertN bs 5000)
       ]
   ]
 
@@ -113,16 +122,19 @@ updateBenches bs url =
       [ bench "hsqlx"             $ whnfIO (BenchHsqlx.updateN bs 100)
       , bench "hasql"             $ whnfIO (BenchHasql.updateN url 100)
       , bench "postgresql-simple" $ whnfIO (BenchPgSimple.updateN bs 100)
+      , bench "persistent"        $ whnfIO (BenchPersistent.updateN bs 100)
       ]
   , bgroup "update 1000 rows"
       [ bench "hsqlx"             $ whnfIO (BenchHsqlx.updateN bs 1000)
       , bench "hasql"             $ whnfIO (BenchHasql.updateN url 1000)
       , bench "postgresql-simple" $ whnfIO (BenchPgSimple.updateN bs 1000)
+      , bench "persistent"        $ whnfIO (BenchPersistent.updateN bs 1000)
       ]
   , bgroup "update 5000 rows"
       [ bench "hsqlx"             $ whnfIO (BenchHsqlx.updateN bs 5000)
       , bench "hasql"             $ whnfIO (BenchHasql.updateN url 5000)
       , bench "postgresql-simple" $ whnfIO (BenchPgSimple.updateN bs 5000)
+      , bench "persistent"        $ whnfIO (BenchPersistent.updateN bs 5000)
       ]
   ]
 
@@ -136,6 +148,7 @@ quickBenches bs url =
           , bench "hsqlx (sequential)" $ whnfIO (BenchHsqlx.insertN bs 100)
           , bench "hasql"              $ whnfIO (BenchHasql.insertN url 100)
           , bench "postgresql-simple"  $ whnfIO (BenchPgSimple.insertN bs 100)
+          , bench "persistent"         $ whnfIO (BenchPersistent.insertN bs 100)
           ]
        , bgroup "insert 1000 rows (pipelined)"
           [ bench "hsqlx (pipelined)"  $ whnfIO (BenchHsqlx.insertNPipelined bs 1000)
@@ -144,6 +157,7 @@ quickBenches bs url =
           [ bench "hsqlx"             $ whnfIO (BenchHsqlx.updateN bs 100)
           , bench "hasql"             $ whnfIO (BenchHasql.updateN url 100)
           , bench "postgresql-simple" $ whnfIO (BenchPgSimple.updateN bs 100)
+          , bench "persistent"        $ whnfIO (BenchPersistent.updateN bs 100)
           ]
        ]
 
