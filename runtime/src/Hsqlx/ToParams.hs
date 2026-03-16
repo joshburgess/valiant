@@ -36,16 +36,21 @@ instance {-# OVERLAPPABLE #-} (EncodeField a) => ToParams a where
   toParams a = V.singleton (encodeField a)
 
 instance (EncodeField a, EncodeField b) => ToParams (a, b) where
-  toParams (a, b) = V.fromList [encodeField a, encodeField b]
+  toParams (a, b) = V.fromListN 2 [encodeField a, encodeField b]
+  {-# INLINE toParams #-}
 
 instance (EncodeField a, EncodeField b, EncodeField c) => ToParams (a, b, c) where
-  toParams (a, b, c) = V.fromList [encodeField a, encodeField b, encodeField c]
+  toParams (a, b, c) = V.fromListN 3 [encodeField a, encodeField b, encodeField c]
+  {-# INLINE toParams #-}
 
 instance (EncodeField a, EncodeField b, EncodeField c, EncodeField d) => ToParams (a, b, c, d) where
-  toParams (a, b, c, d) = V.fromList [encodeField a, encodeField b, encodeField c, encodeField d]
+  toParams (a, b, c, d) = V.fromListN 4 [encodeField a, encodeField b, encodeField c, encodeField d]
+  {-# INLINE toParams #-}
 
 instance (EncodeField a, EncodeField b, EncodeField c, EncodeField d, EncodeField e) => ToParams (a, b, c, d, e) where
-  toParams (a, b, c, d, e) = V.fromList [encodeField a, encodeField b, encodeField c, encodeField d, encodeField e]
+  toParams (a, b, c, d, e) = V.fromListN 5 [encodeField a, encodeField b, encodeField c, encodeField d, encodeField e]
+  {-# INLINE toParams #-}
 
 instance (EncodeField a, EncodeField b, EncodeField c, EncodeField d, EncodeField e, EncodeField f) => ToParams (a, b, c, d, e, f) where
-  toParams (a, b, c, d, e, f) = V.fromList [encodeField a, encodeField b, encodeField c, encodeField d, encodeField e, encodeField f]
+  toParams (a, b, c, d, e, f) = V.fromListN 6 [encodeField a, encodeField b, encodeField c, encodeField d, encodeField e, encodeField f]
+  {-# INLINE toParams #-}

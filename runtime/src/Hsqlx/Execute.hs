@@ -230,18 +230,18 @@ waitCloseComplete conn = do
     _ -> waitCloseComplete conn
 
 collectRows :: Connection -> IO [Vector (Maybe ByteString)]
-collectRows conn = go []
+collectRows conn = go id
   where
     go !acc = do
       msg <- recvBackendMsg (connWire conn)
       case msg of
         BindComplete -> go acc
-        DataRow vals -> go (vals : acc)
+        DataRow vals -> go (acc . (vals :))
         CommandComplete _ -> go acc
         EmptyQueryResponse -> go acc
         ReadyForQuery status -> do
           writeIORef (connTxStatus conn) status
-          pure (reverse acc)
+          pure (acc [])
         ErrorResponse err -> throwHsqlx (QueryError err)
         NoticeResponse _ -> go acc
         other -> throwHsqlx (ProtocolError ("Unexpected in query: " <> BS8.pack (show other)))
@@ -249,7 +249,7 @@ collectRows conn = go []
 -- | Fused row collection + decoding. Decodes each DataRow as it arrives,
 -- avoiding the intermediate [Vector (Maybe ByteString)].
 collectAndDecodeRows :: Connection -> (Vector (Maybe ByteString) -> Either String r) -> IO [r]
-collectAndDecodeRows conn decode = go []
+collectAndDecodeRows conn decode = go id
   where
     go !acc = do
       msg <- recvBackendMsg (connWire conn)
@@ -257,12 +257,12 @@ collectAndDecodeRows conn decode = go []
         BindComplete -> go acc
         DataRow vals -> case decode vals of
           Left err -> throwHsqlx (DecodeError (BS8.pack err))
-          Right !val -> go (val : acc)
+          Right !val -> go (acc . (val :))
         CommandComplete _ -> go acc
         EmptyQueryResponse -> go acc
         ReadyForQuery status -> do
           writeIORef (connTxStatus conn) status
-          pure (reverse acc)
+          pure (acc [])
         ErrorResponse err -> throwHsqlx (QueryError err)
         NoticeResponse _ -> go acc
         other -> throwHsqlx (ProtocolError ("Unexpected in query: " <> BS8.pack (show other)))

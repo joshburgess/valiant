@@ -142,22 +142,25 @@ parseFields n bs = do
 
 -- DataRow -----------------------------------------------------------------
 
+-- | Parse a DataRow message. Uses V.fromListN with the known column count
+-- to pre-allocate the Vector at the correct size.
 parseDataRow :: ByteString -> Either String BackendMsg
 parseDataRow bs = do
   nCols <- getInt16 bs 0
-  (vals, _) <- parseColValues (fromIntegral nCols) (BS.drop 2 bs)
-  Right (DataRow (V.fromList vals))
+  let !n = fromIntegral nCols
+  (vals, _) <- parseColValues n (BS.drop 2 bs)
+  Right (DataRow (V.fromListN n vals))
 
 parseColValues :: Int -> ByteString -> Either String ([Maybe ByteString], ByteString)
 parseColValues 0 rest = Right ([], rest)
-parseColValues n bs = do
+parseColValues !n bs = do
   len <- getInt32 bs 0
   if len == -1
     then do
       (vals, rest) <- parseColValues (n - 1) (BS.drop 4 bs)
       Right (Nothing : vals, rest)
     else do
-      let dataLen = fromIntegral len
+      let !dataLen = fromIntegral len
       val <- getBytes bs 4 dataLen
       (vals, rest) <- parseColValues (n - 1) (BS.drop (4 + dataLen) bs)
       Right (Just val : vals, rest)

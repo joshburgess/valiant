@@ -197,13 +197,11 @@ sendRawBytes wc = wcSend wc
 -- | Receive and parse a single backend message.
 recvBackendMsg :: WireConn -> IO BackendMsg
 recvBackendMsg wc = do
-  -- Read 1-byte tag
-  tagBs <- wcRecv wc 1
-  let tag = BS.index tagBs 0 :: Word8
-  -- Read 4-byte length
-  lenBs <- wcRecv wc 4
-  let len = decodeInt32BE lenBs
-      payloadLen = len - 4
+  -- Read tag (1 byte) + length (4 bytes) together in a single recv
+  header <- wcRecv wc 5
+  let !tag = BS.index header 0
+      !len = decodeInt32At header 1
+      !payloadLen = len - 4
   -- Read payload
   payload <-
     if payloadLen > 0
@@ -213,13 +211,12 @@ recvBackendMsg wc = do
     Left err -> throwHsqlx (ProtocolError (BS8.pack err))
     Right msg -> pure msg
   where
-    -- Inline helper to avoid depending on binary codecs for protocol parsing
-    decodeInt32BE :: ByteString -> Int
-    decodeInt32BE bs =
-      let b0 = fromIntegral (BS.index bs 0)
-          b1 = fromIntegral (BS.index bs 1)
-          b2 = fromIntegral (BS.index bs 2)
-          b3 = fromIntegral (BS.index bs 3)
+    decodeInt32At :: ByteString -> Int -> Int
+    decodeInt32At bs off =
+      let !b0 = fromIntegral (BS.index bs off)
+          !b1 = fromIntegral (BS.index bs (off + 1))
+          !b2 = fromIntegral (BS.index bs (off + 2))
+          !b3 = fromIntegral (BS.index bs (off + 3))
        in b0 * 16777216 + b1 * 65536 + b2 * 256 + b3
 
 -- Socket helpers ----------------------------------------------------------

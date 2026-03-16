@@ -58,10 +58,16 @@ decodeInt64BE :: ByteString -> Either String Int64
 decodeInt64BE bs
   | BS.length bs /= 8 = Left $ "int64: expected 8 bytes, got " <> show (BS.length bs)
   | otherwise =
-      let go !acc !i
-            | i >= 8 = acc
-            | otherwise = go (acc `shiftL` 8 .|. fromIntegral (BS.index bs i)) (i + 1)
-       in Right (go 0 0)
+      let !b0 = fromIntegral (BS.index bs 0) :: Int64
+          !b1 = fromIntegral (BS.index bs 1) :: Int64
+          !b2 = fromIntegral (BS.index bs 2) :: Int64
+          !b3 = fromIntegral (BS.index bs 3) :: Int64
+          !b4 = fromIntegral (BS.index bs 4) :: Int64
+          !b5 = fromIntegral (BS.index bs 5) :: Int64
+          !b6 = fromIntegral (BS.index bs 6) :: Int64
+          !b7 = fromIntegral (BS.index bs 7) :: Int64
+       in Right (b0 `shiftL` 56 .|. b1 `shiftL` 48 .|. b2 `shiftL` 40 .|. b3 `shiftL` 32
+            .|. b4 `shiftL` 24 .|. b5 `shiftL` 16 .|. b6 `shiftL` 8 .|. b7)
 {-# INLINE decodeInt64BE #-}
 
 decodeWord32BE :: ByteString -> Either String Word32
