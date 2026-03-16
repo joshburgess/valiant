@@ -57,30 +57,34 @@ main = do
             , bench "postgresql-simple" $ whnfIO (BenchPgSimple.fetchN bs 10000)
             ]
 
-        -- ── Inserts (pipelined hsqlx at 100/1K/5K, competitors at 100 only) ──
+        -- ── Inserts ───────────────────────────────────────────────
         , bgroup "insert 100 rows"
             [ bench "hsqlx (pipelined)" $ whnfIO (BenchHsqlx.insertNPipelined bs 100)
             , bench "hsqlx (sequential)" $ whnfIO (BenchHsqlx.insertN bs 100)
             , bench "hasql"             $ whnfIO (BenchHasql.insertN url 100)
             , bench "postgresql-simple" $ whnfIO (BenchPgSimple.insertN bs 100)
             ]
-        , bgroup "insert 1000 rows (hsqlx pipelined)"
+        , bgroup "insert 1000 rows"
             [ bench "hsqlx (pipelined)" $ whnfIO (BenchHsqlx.insertNPipelined bs 1000)
+            , bench "hasql"             $ whnfIO (BenchHasql.insertN url 1000)
+            , bench "postgresql-simple" $ whnfIO (BenchPgSimple.insertN bs 1000)
             ]
         , bgroup "insert 5000 rows (hsqlx pipelined)"
             [ bench "hsqlx (pipelined)" $ whnfIO (BenchHsqlx.insertNPipelined bs 5000)
             ]
 
-        -- ── Updates (hsqlx at 100/1K/5K, competitors at 100 only) ────
-        , bgroup "update ~100 rows"
+        -- ── Updates (single UPDATE affecting N rows) ─────────────
+        , bgroup "update 100 rows"
             [ bench "hsqlx"             $ whnfIO (BenchHsqlx.updateN bs 100)
             , bench "hasql"             $ whnfIO (BenchHasql.updateN url 100)
             , bench "postgresql-simple" $ whnfIO (BenchPgSimple.updateN bs 100)
             ]
-        , bgroup "update ~1000 rows (hsqlx)"
+        , bgroup "update 1000 rows"
             [ bench "hsqlx"             $ whnfIO (BenchHsqlx.updateN bs 1000)
+            , bench "hasql"             $ whnfIO (BenchHasql.updateN url 1000)
+            , bench "postgresql-simple" $ whnfIO (BenchPgSimple.updateN bs 1000)
             ]
-        , bgroup "update ~5000 rows (hsqlx)"
+        , bgroup "update 5000 rows"
             [ bench "hsqlx"             $ whnfIO (BenchHsqlx.updateN bs 5000)
             ]
         ]

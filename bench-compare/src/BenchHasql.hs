@@ -104,7 +104,7 @@ stmtInsert = HSt.Statement
 
 stmtUpdate :: HSt.Statement (Int32, Int32) Int64
 stmtUpdate = HSt.Statement
-  "UPDATE bench_users SET score = score + $1 WHERE score < $2"
+  "UPDATE bench_users SET score = score + $1 WHERE id <= $2"
   encoder
   HD.rowsAffected
   True
@@ -153,10 +153,7 @@ insertN url n = do
 updateN :: String -> Int -> IO ()
 updateN url n = do
   conn <- getConn url
-  -- Reset scores so update always has work
-  _ <- HS.run (HS.sql "UPDATE bench_users SET score = id % 100") conn
-  let threshold = max 1 (min 100 (fromIntegral n * 100 `div` 10000)) :: Int32
-  result <- HS.run (HS.statement (1, threshold) stmtUpdate) conn
+  result <- HS.run (HS.statement (1, fromIntegral n :: Int32) stmtUpdate) conn
   case result of
     Left err -> error $ "hasql: " <> show err
     Right _ -> pure ()

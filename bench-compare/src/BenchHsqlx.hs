@@ -81,9 +81,9 @@ stmtInsert = mkStatement
   "INSERT INTO bench_users (name, email) VALUES ($1, $2)"
   [25, 25] [] "<bench>"
 
-stmtUpdateByScore :: Statement (Int32, Int32) ()
-stmtUpdateByScore = mkStatement
-  "UPDATE bench_users SET score = score + $1 WHERE score < $2"
+stmtUpdateById :: Statement (Int32, Int32) ()
+stmtUpdateById = mkStatement
+  "UPDATE bench_users SET score = score + $1 WHERE id <= $2"
   [23, 23] [] "<bench>"
 
 -- Benchmarks
@@ -127,10 +127,6 @@ insertNPipelined url n = do
 updateN :: ByteString -> Int -> IO ()
 updateN url n = do
   conn <- getConn url
-  -- Reset scores first so the update always has work to do
-  _ <- simpleQuery conn "UPDATE bench_users SET score = id % 100"
-  -- Update rows where score < threshold, affecting ~n rows
-  -- score is i % 100, so score < t affects t% of 10000 rows
-  let threshold = max 1 (min 100 (fromIntegral n * 100 `div` 10000)) :: Int32
-  _ <- execute conn stmtUpdateByScore (1, threshold)
+  -- UPDATE ... WHERE id <= n — always affects exactly n rows, no reset needed
+  _ <- execute conn stmtUpdateById (1, fromIntegral n :: Int32)
   pure ()

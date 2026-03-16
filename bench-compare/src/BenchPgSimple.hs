@@ -67,10 +67,7 @@ insertN url n = do
 updateN :: ByteString -> Int -> IO ()
 updateN url n = do
   conn <- getConn url
-  -- Reset scores so update always has work
-  _ <- PG.execute_ conn "UPDATE bench_users SET score = id % 100"
-  let threshold = max 1 (min 100 (fromIntegral n * 100 `div` 10000)) :: Int32
   _ <- PG.execute conn
-    "UPDATE bench_users SET score = score + ? WHERE score < ?"
-    (1 :: Int32, threshold)
+    "UPDATE bench_users SET score = score + ? WHERE id <= ?"
+    (1 :: Int32, fromIntegral n :: Int32)
   pure ()
