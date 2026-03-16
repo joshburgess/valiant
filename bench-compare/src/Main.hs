@@ -2,7 +2,6 @@ module Main where
 
 import Criterion
 import Criterion.Main (defaultMainWith, defaultConfig)
-import Criterion.Main.Options (defaultConfig)
 import Criterion.Types (Config(..))
 import Data.ByteString.Char8 qualified as BS8
 import System.Environment (lookupEnv)
@@ -58,22 +57,30 @@ main = do
             , bench "postgresql-simple" $ whnfIO (BenchPgSimple.fetchN bs 10000)
             ]
 
-        -- ── Inserts ───────────────────────────────────────────────
+        -- ── Inserts (pipelined hsqlx at 100/1K/5K, competitors at 100 only) ──
         , bgroup "insert 100 rows"
-            [ bench "hsqlx"             $ whnfIO (BenchHsqlx.insertN bs 100)
-            , bench "hsqlx (pipelined)" $ whnfIO (BenchHsqlx.insertNPipelined bs 100)
+            [ bench "hsqlx (pipelined)" $ whnfIO (BenchHsqlx.insertNPipelined bs 100)
+            , bench "hsqlx (sequential)" $ whnfIO (BenchHsqlx.insertN bs 100)
             , bench "hasql"             $ whnfIO (BenchHasql.insertN url 100)
             , bench "postgresql-simple" $ whnfIO (BenchPgSimple.insertN bs 100)
             ]
-        , bgroup "insert 100 pipelined vs sequential"
-            [ bench "hsqlx sequential"  $ whnfIO (BenchHsqlx.insertN bs 100)
-            , bench "hsqlx pipelined"   $ whnfIO (BenchHsqlx.insertNPipelined bs 100)
+        , bgroup "insert 1000 rows (hsqlx pipelined)"
+            [ bench "hsqlx (pipelined)" $ whnfIO (BenchHsqlx.insertNPipelined bs 1000)
+            ]
+        , bgroup "insert 5000 rows (hsqlx pipelined)"
+            [ bench "hsqlx (pipelined)" $ whnfIO (BenchHsqlx.insertNPipelined bs 5000)
             ]
 
-        -- ── Update ────────────────────────────────────────────────
+        -- ── Updates (hsqlx at 100/1K/5K, competitors at 100 only) ────
         , bgroup "update ~100 rows"
             [ bench "hsqlx"             $ whnfIO (BenchHsqlx.updateN bs 100)
             , bench "hasql"             $ whnfIO (BenchHasql.updateN url 100)
             , bench "postgresql-simple" $ whnfIO (BenchPgSimple.updateN bs 100)
+            ]
+        , bgroup "update ~1000 rows (hsqlx)"
+            [ bench "hsqlx"             $ whnfIO (BenchHsqlx.updateN bs 1000)
+            ]
+        , bgroup "update ~5000 rows (hsqlx)"
+            [ bench "hsqlx"             $ whnfIO (BenchHsqlx.updateN bs 5000)
             ]
         ]
