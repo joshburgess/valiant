@@ -1,8 +1,10 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
+-- | Decode result rows into Haskell types.
 module Hsqlx.FromRow
   ( FromRow (..)
+  , DecodeColumn (..)
   ) where
 
 import Data.ByteString (ByteString)
@@ -10,6 +12,31 @@ import Data.Vector (Vector)
 import Data.Vector qualified as V
 import Hsqlx.Binary.Decode ()
 import Hsqlx.Binary.Types (PgDecode (..))
+
+-- | Decode a single column value, handling NULL appropriately.
+--
+-- For non-Maybe types, NULL produces an error.
+-- For @Maybe a@, NULL produces @Nothing@.
+class DecodeColumn a where
+  decodeColumn :: Vector (Maybe ByteString) -> Int -> Either String a
+
+-- | Non-nullable column: NULL is an error.
+instance {-# OVERLAPPABLE #-} (PgDecode a) => DecodeColumn a where
+  decodeColumn row idx
+    | idx >= V.length row = Left $ "Column index " <> show idx <> " out of range (row has " <> show (V.length row) <> " columns)"
+    | otherwise = case row V.! idx of
+        Nothing -> Left $ "Column " <> show idx <> " is NULL but expected a non-nullable value"
+        Just bs -> pgDecode bs
+  {-# INLINE decodeColumn #-}
+
+-- | Nullable column: NULL becomes @Nothing@, non-NULL becomes @Just a@.
+instance (PgDecode a) => DecodeColumn (Maybe a) where
+  decodeColumn row idx
+    | idx >= V.length row = Left $ "Column index " <> show idx <> " out of range (row has " <> show (V.length row) <> " columns)"
+    | otherwise = case row V.! idx of
+        Nothing -> Right Nothing
+        Just bs -> Just <$> pgDecode bs
+  {-# INLINE decodeColumn #-}
 
 -- | Decode a result row into a Haskell value.
 class FromRow a where
@@ -20,13 +47,13 @@ instance FromRow () where
   fromRow _ = Right ()
 
 -- Single non-nullable column
-instance {-# OVERLAPPABLE #-} (PgDecode a) => FromRow a where
-  fromRow row = decodeCol row 0
+instance {-# OVERLAPPABLE #-} (DecodeColumn a) => FromRow a where
+  fromRow row = decodeColumn row 0
 
 -- Single-value instance for scalar queries
-instance (PgDecode a) => FromRow (Only a) where
+instance (DecodeColumn a) => FromRow (Only a) where
   fromRow row = do
-    a <- decodeCol row 0
+    a <- decodeColumn row 0
     pure (Only a)
 
 -- | Wrapper for single-column results.
@@ -35,57 +62,47 @@ newtype Only a = Only {fromOnly :: a}
 
 -- Tuple instances ---------------------------------------------------------
 
-instance (PgDecode a, PgDecode b) => FromRow (a, b) where
+instance (DecodeColumn a, DecodeColumn b) => FromRow (a, b) where
   fromRow row = do
-    a <- decodeCol row 0
-    b <- decodeCol row 1
+    a <- decodeColumn row 0
+    b <- decodeColumn row 1
     pure (a, b)
 
-instance (PgDecode a, PgDecode b, PgDecode c) => FromRow (a, b, c) where
+instance (DecodeColumn a, DecodeColumn b, DecodeColumn c) => FromRow (a, b, c) where
   fromRow row = do
-    a <- decodeCol row 0
-    b <- decodeCol row 1
-    c <- decodeCol row 2
+    a <- decodeColumn row 0
+    b <- decodeColumn row 1
+    c <- decodeColumn row 2
     pure (a, b, c)
 
-instance (PgDecode a, PgDecode b, PgDecode c, PgDecode d) => FromRow (a, b, c, d) where
+instance (DecodeColumn a, DecodeColumn b, DecodeColumn c, DecodeColumn d) => FromRow (a, b, c, d) where
   fromRow row = do
-    a <- decodeCol row 0
-    b <- decodeCol row 1
-    c <- decodeCol row 2
-    d <- decodeCol row 3
+    a <- decodeColumn row 0
+    b <- decodeColumn row 1
+    c <- decodeColumn row 2
+    d <- decodeColumn row 3
     pure (a, b, c, d)
 
-instance (PgDecode a, PgDecode b, PgDecode c, PgDecode d, PgDecode e) => FromRow (a, b, c, d, e) where
+instance (DecodeColumn a, DecodeColumn b, DecodeColumn c, DecodeColumn d, DecodeColumn e) => FromRow (a, b, c, d, e) where
   fromRow row = do
-    a <- decodeCol row 0
-    b <- decodeCol row 1
-    c <- decodeCol row 2
-    d <- decodeCol row 3
-    e <- decodeCol row 4
+    a <- decodeColumn row 0
+    b <- decodeColumn row 1
+    c <- decodeColumn row 2
+    d <- decodeColumn row 3
+    e <- decodeColumn row 4
     pure (a, b, c, d, e)
 
-instance (PgDecode a, PgDecode b, PgDecode c, PgDecode d, PgDecode e, PgDecode f) => FromRow (a, b, c, d, e, f) where
+instance (DecodeColumn a, DecodeColumn b, DecodeColumn c, DecodeColumn d, DecodeColumn e, DecodeColumn f) => FromRow (a, b, c, d, e, f) where
   fromRow row = do
-    a <- decodeCol row 0
-    b <- decodeCol row 1
-    c <- decodeCol row 2
-    d <- decodeCol row 3
-    e <- decodeCol row 4
-    f <- decodeCol row 5
+    a <- decodeColumn row 0
+    b <- decodeColumn row 1
+    c <- decodeColumn row 2
+    d <- decodeColumn row 3
+    e <- decodeColumn row 4
+    f <- decodeColumn row 5
     pure (a, b, c, d, e, f)
 
--- Maybe instance for nullable results
+-- Maybe instance for PgDecode (used by the single-column overlappable FromRow)
 instance (PgDecode a) => PgDecode (Maybe a) where
   pgDecode bs = Just <$> pgDecode bs
   {-# INLINE pgDecode #-}
-
--- Helpers -----------------------------------------------------------------
-
-decodeCol :: (PgDecode a) => Vector (Maybe ByteString) -> Int -> Either String a
-decodeCol row idx
-  | idx >= V.length row = Left $ "Column index " <> show idx <> " out of range (row has " <> show (V.length row) <> " columns)"
-  | otherwise = case row V.! idx of
-      Nothing -> Left $ "Column " <> show idx <> " is NULL but expected a non-nullable value"
-      Just bs -> pgDecode bs
-{-# INLINE decodeCol #-}

@@ -1,0 +1,32 @@
+cabal-version:   3.0
+name:            hsqlx-example
+version:         0.1.0.0
+synopsis:        Example REST API using hsqlx
+license:         BSD-3-Clause
+license-file:    ../LICENSE
+build-type:      Simple
+
+executable hsqlx-example
+  hs-source-dirs:   src
+  main-is:          Main.hs
+  default-language: GHC2021
+  default-extensions:
+    DeriveAnyClass
+    DerivingStrategies
+    LambdaCase
+    OverloadedStrings
+
+  other-modules:
+    Queries
+
+  build-depends:
+    , aeson          >=2.1  && <2.3
+    , base           >=4.17 && <5
+    , bytestring
+    , hsqlx
+    , http-types     >=0.12 && <0.13
+    , scotty         >=0.21 && <0.31
+    , text
+    , time
+
+  ghc-options: -threaded -rtsopts -Wall

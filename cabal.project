@@ -1,5 +1,5 @@
 with-compiler: ghc-9.4.4
-packages: . runtime plugin bench-compare wire
+packages: . runtime plugin bench-compare wire example
 tests: True
 
 package text
