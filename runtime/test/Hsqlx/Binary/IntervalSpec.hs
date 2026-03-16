@@ -2,7 +2,7 @@ module Hsqlx.Binary.IntervalSpec (spec) where
 
 import Data.ByteString qualified as BS
 import Hsqlx.Binary.Interval (PgInterval (..))
-import Hsqlx.Binary.Types (PgDecode (..), PgEncode (..))
+import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
 import Test.Hspec
 
 spec :: Spec

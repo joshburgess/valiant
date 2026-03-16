@@ -11,7 +11,7 @@ import Data.Time
   , secondsToDiffTime
   )
 import Hsqlx.Binary.Encode ()
-import Hsqlx.Binary.Types (PgEncode (..))
+import PgWire.Binary.Types (PgEncode (..))
 import Test.Hspec
 
 spec :: Spec

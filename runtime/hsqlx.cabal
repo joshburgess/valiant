@@ -26,24 +26,6 @@ library
 
   exposed-modules:
     Hsqlx
-    -- Re-exports from pg-wire (backwards compatibility)
-    Hsqlx.Auth.Cleartext
-    Hsqlx.Auth.MD5
-    Hsqlx.Auth.ScramSHA256
-    Hsqlx.Binary.Types
-    Hsqlx.Cancel
-    Hsqlx.Connection
-    Hsqlx.Connection.Config
-    Hsqlx.Error
-    Hsqlx.Pool
-    Hsqlx.Pool.Config
-    Hsqlx.Protocol.Backend
-    Hsqlx.Protocol.Builders
-    Hsqlx.Protocol.Frontend
-    Hsqlx.Protocol.Oid
-    Hsqlx.Protocol.Parsers
-    Hsqlx.Wire
-    -- hsqlx-specific modules
     Hsqlx.Binary.Array
     Hsqlx.Binary.Composite
     Hsqlx.Binary.Decode
@@ -115,6 +97,7 @@ test-suite hsqlx-test
     , bytestring
     , hspec          >=2.11 && <2.12
     , hsqlx
+    , pg-wire
     , QuickCheck     >=2.14 && <2.16
     , scientific
     , text

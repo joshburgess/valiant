@@ -2,7 +2,7 @@ module Hsqlx.Binary.UUIDSpec (spec) where
 
 import Data.ByteString qualified as BS
 import Data.UUID.Types qualified as UUID
-import Hsqlx.Binary.Types (PgDecode (..), PgEncode (..))
+import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
 import Hsqlx.Binary.UUID ()
 import Test.Hspec
 

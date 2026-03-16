@@ -3,7 +3,7 @@ module Hsqlx.Binary.JSONSpec (spec) where
 import Data.Aeson (Value (..), object, (.=))
 import Data.ByteString qualified as BS
 import Hsqlx.Binary.JSON ()
-import Hsqlx.Binary.Types (PgDecode (..), PgEncode (..))
+import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
 import Test.Hspec
 
 spec :: Spec

@@ -2,7 +2,7 @@ module Hsqlx.Binary.ScientificSpec (spec) where
 
 import Data.Scientific (Scientific, scientific)
 import Hsqlx.Binary.Scientific ()
-import Hsqlx.Binary.Types (PgDecode (..), PgEncode (..))
+import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
 import Test.Hspec
 
 spec :: Spec

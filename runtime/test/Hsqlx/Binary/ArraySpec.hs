@@ -8,7 +8,7 @@ import Data.Vector qualified as V
 import Hsqlx.Binary.Array (pgDecodeArray, pgEncodeArray)
 import Hsqlx.Binary.Decode ()
 import Hsqlx.Binary.Encode ()
-import Hsqlx.Protocol.Oid
+import PgWire.Protocol.Oid
 import Test.Hspec
 
 spec :: Spec

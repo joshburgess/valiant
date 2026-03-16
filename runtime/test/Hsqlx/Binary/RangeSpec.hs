@@ -5,7 +5,7 @@ import Data.Int (Int32)
 import Hsqlx.Binary.Decode ()
 import Hsqlx.Binary.Encode ()
 import Hsqlx.Binary.Range
-import Hsqlx.Binary.Types (PgDecode (..), PgEncode (..))
+import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
 import Test.Hspec
 
 spec :: Spec

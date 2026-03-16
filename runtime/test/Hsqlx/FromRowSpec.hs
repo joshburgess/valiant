@@ -6,7 +6,7 @@ import Data.Text (Text)
 import Data.Vector qualified as V
 import Hsqlx.Binary.Decode ()
 import Hsqlx.Binary.Encode ()
-import Hsqlx.Binary.Types (PgEncode (..))
+import PgWire.Binary.Types (PgEncode (..))
 import Hsqlx.FromRow
 import Test.Hspec
 

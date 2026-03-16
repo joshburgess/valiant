@@ -4,7 +4,7 @@ import Data.ByteString qualified as BS
 import Hsqlx.Binary.Composite
 import Hsqlx.Binary.Decode ()
 import Hsqlx.Binary.Encode ()
-import Hsqlx.Binary.Types (PgDecode (..), PgEncode (..))
+import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
 import Data.Int (Int32)
 import Test.Hspec
 
