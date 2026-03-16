@@ -20,8 +20,6 @@ import Data.IORef
 import Data.Int (Int64)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-import Data.Sequence (Seq, (|>))
-import Data.Sequence qualified as Seq
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 import PgWire.Connection (Connection (..))
@@ -133,11 +131,11 @@ executeBatch conn stmt paramsList = do
 collectBatchResult :: Connection -> Int -> IO Int64
 collectBatchResult conn remaining = go 0 remaining
   where
-    go total 0 = do
+    go !total 0 = do
       -- Wait for final ReadyForQuery
       waitReady conn
       pure total
-    go total n = do
+    go !total !n = do
       msg <- recvBackendMsg (connWire conn)
       case msg of
         BindComplete -> go total n
@@ -234,7 +232,7 @@ waitCloseComplete conn = do
 collectRows :: Connection -> IO [Vector (Maybe ByteString)]
 collectRows conn = go []
   where
-    go acc = do
+    go !acc = do
       msg <- recvBackendMsg (connWire conn)
       case msg of
         BindComplete -> go acc
@@ -272,7 +270,7 @@ collectAndDecodeRows conn decode = go []
 collectCommandResult :: Connection -> IO Int64
 collectCommandResult conn = go 0
   where
-    go n = do
+    go !n = do
       msg <- recvBackendMsg (connWire conn)
       case msg of
         BindComplete -> go n

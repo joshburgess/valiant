@@ -182,7 +182,7 @@ parseOids n bs = do
 parseErrorFields :: ByteString -> Either String PgError
 parseErrorFields = go emptyPgError
   where
-    go err bs
+    go !err bs
       | BS.null bs = Right err
       | BS.index bs 0 == 0 = Right err
       | otherwise =

@@ -65,7 +65,7 @@ decodeInt64BE :: ByteString -> Int -> Either String Int64
 decodeInt64BE bs off
   | off + 8 > BS.length bs = Left "interval: int64 out of bounds"
   | otherwise =
-      let go acc i
+      let go !acc !i
             | i >= 8 = acc
             | otherwise = go (acc `shiftL` 8 .|. fromIntegral (BS.index bs (off + i))) (i + 1)
        in Right (go 0 0)

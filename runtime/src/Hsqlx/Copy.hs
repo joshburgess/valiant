@@ -96,7 +96,7 @@ waitCopyOut conn = do
 collectCopyResult :: Connection -> IO CopyResult
 collectCopyResult conn = go 0
   where
-    go n = do
+    go !n = do
       msg <- recvBackendMsg (connWire conn)
       case msg of
         CommandComplete tag -> go (tagRows tag)

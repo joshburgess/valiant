@@ -139,7 +139,7 @@ waitDeclareComplete conn = go
 collectFetchResults :: Connection -> IO [Vector (Maybe ByteString)]
 collectFetchResults conn = go []
   where
-    go acc = do
+    go !acc = do
       msg <- recvBackendMsg (connWire conn)
       case msg of
         RowDescription _ -> go acc
