@@ -1,14 +1,16 @@
 module BenchHasql
   ( selectOne
   , fetchOneByPK
-  , fetchAll1000
-  , insertOne
+  , fetchN
+  , insertN
+  , updateN
   ) where
 
 import Data.ByteString.Char8 qualified as BS8
-import Data.Int (Int32)
+import Data.Int (Int32, Int64)
 import Data.IORef
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Vector (Vector)
 import Data.Functor.Contravariant ((>$<))
 import Hasql.Connection qualified as HC
@@ -36,13 +38,11 @@ getConn url = do
           writeIORef connRef (Just c)
           pure c
   where
-    -- Parse from URL: postgres://user:pass@host:port/db
-    -- Simple extraction for benchmark purposes
     (user, pass, host, port, db) = parseUrl url
 
 parseUrl :: String -> (String, String, String, Int, String)
 parseUrl url =
-  let afterScheme = drop 2 $ dropWhile (/= '/') url -- drop "scheme://"
+  let afterScheme = drop 2 $ dropWhile (/= '/') url
       (authHost, pathRest) = break (== '/') afterScheme
       dbName = drop 1 pathRest
       (auth, hostPort) = case break (== '@') authHost of
@@ -65,28 +65,31 @@ stmtSelect1 = HSt.Statement
   (HD.singleRow (HD.column (HD.nonNullable HD.int4)))
   True
 
-stmtFetchOne :: HSt.Statement Int32 (Maybe (Int32, Text, Maybe Text))
+stmtFetchOne :: HSt.Statement Int32 (Maybe (Int32, Text, Maybe Text, Int32))
 stmtFetchOne = HSt.Statement
-  "SELECT id, name, email FROM bench_users WHERE id = $1"
+  "SELECT id, name, email, score FROM bench_users WHERE id = $1"
   (HE.param (HE.nonNullable HE.int4))
   (HD.rowMaybe row)
   True
   where
-    row = (,,)
+    row = (,,,)
       <$> HD.column (HD.nonNullable HD.int4)
       <*> HD.column (HD.nonNullable HD.text)
       <*> HD.column (HD.nullable HD.text)
+      <*> HD.column (HD.nonNullable HD.int4)
 
-stmtFetchAll :: HSt.Statement () (Vector (Int32, Text))
-stmtFetchAll = HSt.Statement
-  "SELECT id, name FROM bench_users ORDER BY id"
-  HE.noParams
+stmtFetchN :: HSt.Statement Int32 (Vector (Int32, Text, Maybe Text, Int32))
+stmtFetchN = HSt.Statement
+  "SELECT id, name, email, score FROM bench_users ORDER BY id LIMIT $1"
+  (HE.param (HE.nonNullable HE.int4))
   (HD.rowVector row)
   True
   where
-    row = (,)
+    row = (,,,)
       <$> HD.column (HD.nonNullable HD.int4)
       <*> HD.column (HD.nonNullable HD.text)
+      <*> HD.column (HD.nullable HD.text)
+      <*> HD.column (HD.nonNullable HD.int4)
 
 stmtInsert :: HSt.Statement (Text, Maybe Text) ()
 stmtInsert = HSt.Statement
@@ -99,13 +102,24 @@ stmtInsert = HSt.Statement
       (fst >$< HE.param (HE.nonNullable HE.text))
         <> (snd >$< HE.param (HE.nullable HE.text))
 
+stmtUpdate :: HSt.Statement (Int32, Int32) Int64
+stmtUpdate = HSt.Statement
+  "UPDATE bench_users SET score = score + $1 WHERE score < $2"
+  encoder
+  HD.rowsAffected
+  True
+  where
+    encoder =
+      (fst >$< HE.param (HE.nonNullable HE.int4))
+        <> (snd >$< HE.param (HE.nonNullable HE.int4))
+
 -- Benchmarks
 selectOne :: String -> IO ()
 selectOne url = do
   conn <- getConn url
   result <- HS.run (HS.statement () stmtSelect1) conn
   case result of
-    Left err -> error $ "hasql selectOne: " <> show err
+    Left err -> error $ "hasql: " <> show err
     Right _ -> pure ()
 
 fetchOneByPK :: String -> IO ()
@@ -113,21 +127,36 @@ fetchOneByPK url = do
   conn <- getConn url
   result <- HS.run (HS.statement 1 stmtFetchOne) conn
   case result of
-    Left err -> error $ "hasql fetchOneByPK: " <> show err
+    Left err -> error $ "hasql: " <> show err
     Right _ -> pure ()
 
-fetchAll1000 :: String -> IO ()
-fetchAll1000 url = do
+fetchN :: String -> Int -> IO ()
+fetchN url n = do
   conn <- getConn url
-  result <- HS.run (HS.statement () stmtFetchAll) conn
+  result <- HS.run (HS.statement (fromIntegral n) stmtFetchN) conn
   case result of
-    Left err -> error $ "hasql fetchAll1000: " <> show err
+    Left err -> error $ "hasql: " <> show err
     Right _ -> pure ()
 
-insertOne :: String -> IO ()
-insertOne url = do
+insertN :: String -> Int -> IO ()
+insertN url n = do
   conn <- getConn url
-  result <- HS.run (HS.statement ("bench_hasql", Just "bench@test.com") stmtInsert) conn
+  mapM_ (\i -> do
+    let name = "ins_" <> T.pack (show i)
+        email = Just (name <> "@test.com")
+    result <- HS.run (HS.statement (name, email) stmtInsert) conn
+    case result of
+      Left err -> error $ "hasql: " <> show err
+      Right _ -> pure ()
+    ) [1 :: Int .. n]
+
+updateN :: String -> Int -> IO ()
+updateN url n = do
+  conn <- getConn url
+  -- Reset scores so update always has work
+  _ <- HS.run (HS.sql "UPDATE bench_users SET score = id % 100") conn
+  let threshold = max 1 (min 100 (fromIntegral n * 100 `div` 10000)) :: Int32
+  result <- HS.run (HS.statement (1, threshold) stmtUpdate) conn
   case result of
-    Left err -> error $ "hasql insertOne: " <> show err
+    Left err -> error $ "hasql: " <> show err
     Right _ -> pure ()

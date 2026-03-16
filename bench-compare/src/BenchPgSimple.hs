@@ -1,14 +1,16 @@
 module BenchPgSimple
   ( selectOne
   , fetchOneByPK
-  , fetchAll1000
-  , insertOne
+  , fetchN
+  , insertN
+  , updateN
   ) where
 
 import Data.ByteString (ByteString)
 import Data.IORef
 import Data.Int (Int32)
 import Data.Text (Text)
+import Data.Text qualified as T
 import Database.PostgreSQL.Simple qualified as PG
 import Database.PostgreSQL.Simple (Only (..))
 import System.IO.Unsafe (unsafePerformIO)
@@ -39,21 +41,36 @@ fetchOneByPK :: ByteString -> IO ()
 fetchOneByPK url = do
   conn <- getConn url
   _ <- PG.query conn
-    "SELECT id, name, email FROM bench_users WHERE id = ?"
-    (Only (1 :: Int32)) :: IO [(Int32, Text, Maybe Text)]
+    "SELECT id, name, email, score FROM bench_users WHERE id = ?"
+    (Only (1 :: Int32)) :: IO [(Int32, Text, Maybe Text, Int32)]
   pure ()
 
-fetchAll1000 :: ByteString -> IO ()
-fetchAll1000 url = do
+fetchN :: ByteString -> Int -> IO ()
+fetchN url n = do
   conn <- getConn url
-  _ <- PG.query_ conn
-    "SELECT id, name FROM bench_users ORDER BY id" :: IO [(Int32, Text)]
+  _ <- PG.query conn
+    "SELECT id, name, email, score FROM bench_users ORDER BY id LIMIT ?"
+    (Only (fromIntegral n :: Int32)) :: IO [(Int32, Text, Maybe Text, Int32)]
   pure ()
 
-insertOne :: ByteString -> IO ()
-insertOne url = do
+insertN :: ByteString -> Int -> IO ()
+insertN url n = do
   conn <- getConn url
+  mapM_ (\i -> do
+    let name = "ins_" <> T.pack (show i) :: Text
+        email = Just (name <> "@test.com") :: Maybe Text
+    PG.execute conn
+      "INSERT INTO bench_users (name, email) VALUES (?, ?)"
+      (name, email)
+    ) [1 :: Int .. n]
+
+updateN :: ByteString -> Int -> IO ()
+updateN url n = do
+  conn <- getConn url
+  -- Reset scores so update always has work
+  _ <- PG.execute_ conn "UPDATE bench_users SET score = id % 100"
+  let threshold = max 1 (min 100 (fromIntegral n * 100 `div` 10000)) :: Int32
   _ <- PG.execute conn
-    "INSERT INTO bench_users (name, email) VALUES (?, ?)"
-    ("bench_pgsimple" :: Text, Just ("bench@test.com" :: Text))
+    "UPDATE bench_users SET score = score + ? WHERE score < ?"
+    (1 :: Int32, threshold)
   pure ()
