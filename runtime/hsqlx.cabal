@@ -136,6 +136,7 @@ test-suite hsqlx-integration
     , hsqlx
     , pg-wire
     , text
+    , vector
 
   -- Requires DATABASE_URL. Run with:
   --   eval $(scripts/pg-setup.sh)

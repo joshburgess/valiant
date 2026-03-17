@@ -1,9 +1,16 @@
 module ConnectionFeaturesSpec (spec) where
 
+import Data.ByteString qualified as BS
 import Data.Int (Int32)
+import Data.IORef
+import Data.Text (Text)
 import Data.Maybe (isJust)
+import Data.Vector qualified as V
 import Hsqlx
+import Hsqlx.Fold (RowFold (..), executeWithFold)
+import PgWire.Binary.Types (PgEncode (..))
 import PgWire.Connection
+import PgWire.Connection.Config (parseConnString)
 import PgWire.Protocol.Backend (TxStatus (..))
 import TestSupport
 import Test.Hspec
@@ -96,3 +103,65 @@ spec = do
         let escaped = escapeIdentifier conn "my col"
         (rows, _) <- simpleQuery conn ("SELECT 1 AS " <> escaped)
         length rows `shouldBe` 1
+
+  describe "ping" $ do
+    it "returns True for a reachable server" $ do
+      url <- requireDatabaseUrl
+      case parseConnString url of
+        Right cfg -> do
+          result <- ping cfg
+          result `shouldBe` True
+        Left _ -> expectationFailure "Failed to parse URL"
+
+  describe "encryptPassword" $ do
+    it "produces md5-prefixed hash" $ do
+      let hash = encryptPassword "testuser" "testpass"
+      BS.isPrefixOf "md5" hash `shouldBe` True
+      BS.length hash `shouldBe` 35  -- "md5" + 32 hex chars
+
+    it "produces different hashes for different passwords" $ do
+      let h1 = encryptPassword "user" "pass1"
+          h2 = encryptPassword "user" "pass2"
+      h1 `shouldNotBe` h2
+
+  describe "setTraceHandler" $ do
+    it "captures send and recv traffic" $ do
+      withTestConnection $ \conn -> do
+        sendRef <- newIORef (0 :: Int)
+        recvRef <- newIORef (0 :: Int)
+        setTraceHandler conn $ \isSend _bytes ->
+          if isSend
+            then modifyIORef' sendRef (+ 1)
+            else modifyIORef' recvRef (+ 1)
+        _ <- simpleQuery conn "SELECT 1"
+        sends <- readIORef sendRef
+        recvs <- readIORef recvRef
+        sends `shouldSatisfy` (> 0)
+        recvs `shouldSatisfy` (> 0)
+
+  describe "executeWithFold" $ do
+    it "folds rows in constant memory" $ do
+      withTestConnection $ \conn -> withSchema conn $ do
+        insertTestUsers conn
+        let countStmt :: Statement () (Int32, Text, Maybe Text)
+            countStmt = mkStatement
+              "SELECT id, name, email FROM users"
+              [] ["id", "name", "email"] "<test>"
+        count <- executeWithFold conn countStmt () $
+          RowFold (0 :: Int) (\acc _ -> acc + 1)
+        count `shouldBe` 5
+
+  describe "copyInBinary" $ do
+    it "bulk inserts via binary COPY" $ do
+      withTestConnection $ \conn -> withSchema conn $ do
+        result <- copyInBinary conn
+          "COPY users (name, email) FROM STDIN WITH (FORMAT binary)"
+          2
+          $ \sendRow -> do
+            sendRow (V.fromList [Just (pgEncode ("BinAlice" :: BS.ByteString)), Just (pgEncode ("alice@bin.com" :: BS.ByteString))])
+            sendRow (V.fromList [Just (pgEncode ("BinBob" :: BS.ByteString)), Nothing])
+        copyRows result `shouldBe` 2
+        (rows, _) <- simpleQuery conn "SELECT count(*) FROM users"
+        case rows of
+          [[Just n]] -> n `shouldBe` "2"
+          _ -> expectationFailure $ "Expected 2, got: " <> show rows
