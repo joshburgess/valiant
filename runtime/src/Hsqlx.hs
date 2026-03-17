@@ -54,6 +54,14 @@ module Hsqlx
   , fetchScalar
   , execute
   , executeBatch
+  , fetchBatchOne
+  , fetchBatchAll
+
+    -- * UNNEST batch fetch
+    -- | Fetch multiple entities by ID in a single query using
+    -- @WHERE id = ANY($1::type[])@. Faster than pipelining for
+    -- the common \"load N entities by ID\" pattern.
+  , fetchByIds
 
     -- * Connection
     -- | Manage connections to PostgreSQL. Use 'connectString' for simple
@@ -157,11 +165,12 @@ module Hsqlx
   , CompositeField (..)
   ) where
 
+import Hsqlx.Batch (fetchByIds)
 import Hsqlx.Binary.Composite (CompositeField (..))
 import Hsqlx.Binary.Interval (PgInterval (..))
 import Hsqlx.Binary.Range (PgRange (..), RangeBound (..))
 import Hsqlx.Copy (CopyResult (..), copyIn, copyOut)
-import Hsqlx.Execute (execute, executeBatch, fetchAll, fetchOne, fetchScalar)
+import Hsqlx.Execute (execute, executeBatch, fetchAll, fetchBatchAll, fetchBatchOne, fetchOne, fetchScalar)
 import Hsqlx.FromRow (FromRow (..))
 import Hsqlx.Logging (LogEvent (..), LogLevel (..), Logger, nullLogger, stderrLogger)
 import Hsqlx.Notify (Notification (..), listen, unlisten, waitForNotification, waitForNotificationTimeout)

@@ -3,6 +3,8 @@ module PipelineSpec (spec) where
 import Data.Int (Int32, Int64)
 import Data.Text (Text)
 import Hsqlx
+import Hsqlx.Batch (fetchByIds)
+import PgWire.Protocol.Oid (oidInt4)
 import TestSupport
 import Test.Hspec
 
@@ -56,3 +58,58 @@ spec = do
         insertTestUsers conn
         count <- runPipeline conn $ pipeFetchScalar stmtCount ()
         count `shouldBe` 5
+
+  describe "fetchBatchOne" $ do
+    it "fetches multiple rows by different params" $ do
+      withTestConnection $ \conn -> withSchema conn $ do
+        insertTestUsers conn
+        results <- fetchBatchOne conn stmtFetchOne [1, 2, 3, 999]
+        length results `shouldBe` 4
+        -- First 3 should be Just, last should be Nothing
+        case results of
+          [Just (_, n1, _), Just (_, n2, _), Just (_, n3, _), Nothing] -> do
+            n1 `shouldBe` "Alice"
+            n2 `shouldBe` "Bob"
+            n3 `shouldBe` "Carol"
+          _ -> expectationFailure $ "Unexpected: " <> show (length results)
+
+    it "handles empty list" $ do
+      withTestConnection $ \conn -> do
+        results <- fetchBatchOne conn stmtFetchOne ([] :: [Int32])
+        results `shouldBe` []
+
+  describe "fetchBatchAll" $ do
+    it "fetches multiple result sets" $ do
+      withTestConnection $ \conn -> withSchema conn $ do
+        insertTestUsers conn
+        results <- fetchBatchAll conn stmtListAll [(), ()]
+        length results `shouldBe` 2
+        length (head results) `shouldBe` 5
+        length (results !! 1) `shouldBe` 5
+
+  describe "fetchByIds" $ do
+    it "fetches multiple rows by array parameter" $ do
+      withTestConnection $ \conn -> withSchema conn $ do
+        insertTestUsers conn
+        users <- fetchByIds conn
+          "SELECT id, name, email FROM users WHERE id = ANY($1::int4[])"
+          oidInt4
+          [1 :: Int32, 2, 3]
+        length (users :: [(Int32, Text, Maybe Text)]) `shouldBe` 3
+
+    it "returns empty for no matches" $ do
+      withTestConnection $ \conn -> withSchema conn $ do
+        insertTestUsers conn
+        users <- fetchByIds conn
+          "SELECT id, name, email FROM users WHERE id = ANY($1::int4[])"
+          oidInt4
+          [999 :: Int32, 998]
+        length (users :: [(Int32, Text, Maybe Text)]) `shouldBe` 0
+
+    it "handles empty ID list" $ do
+      withTestConnection $ \conn -> withSchema conn $ do
+        users <- fetchByIds conn
+          "SELECT id, name, email FROM users WHERE id = ANY($1::int4[])"
+          oidInt4
+          ([] :: [Int32])
+        length (users :: [(Int32, Text, Maybe Text)]) `shouldBe` 0

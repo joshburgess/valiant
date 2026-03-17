@@ -12,6 +12,9 @@ module Hsqlx.Execute
   , execute
     -- * Pipelined batch execution
   , executeBatch
+    -- * Pipelined batch reads
+  , fetchBatchOne
+  , fetchBatchAll
   ) where
 
 import Data.ByteString (ByteString)
@@ -127,6 +130,90 @@ executeBatch conn stmt paramsList = do
 
   -- Collect all responses: N * (BindComplete + CommandComplete) + ReadyForQuery
   collectBatchResult conn (length paramsList)
+
+-- | Fetch zero or one row for each parameter set, pipelined.
+--
+-- Sends N Bind+Execute pairs with a single Sync, then collects
+-- results for each. Returns one @Maybe r@ per parameter set.
+--
+-- @
+-- users <- fetchBatchOne conn findUserById [1, 2, 3, 42, 99]
+-- -- 5 lookups in 1 round-trip; users :: [Maybe (Int32, Text, ...)]
+-- @
+fetchBatchOne :: Connection -> Statement p r -> [p] -> IO [Maybe r]
+fetchBatchOne _ _ [] = pure []
+fetchBatchOne conn stmt paramsList = do
+  stmtName <- ensurePrepared conn stmt
+  let msgs = concatMap (\params ->
+        let encodedParams = stmtEncode stmt params
+         in [ Bind "" stmtName (V.singleton BinaryFormat) encodedParams (V.singleton BinaryFormat)
+            , Execute "" 0
+            ]) paramsList
+        ++ [Sync]
+  sendFrontendMsgs (connWire conn) msgs
+  results <- collectBatchReadResults conn (stmtDecode stmt) (length paramsList)
+  waitReadyBatch conn
+  pure (map (\rows -> case rows of
+    [] -> Nothing
+    (r : _) -> Just r) results)
+
+-- | Fetch all rows for each parameter set, pipelined.
+--
+-- Sends N Bind+Execute pairs with a single Sync, then collects
+-- all result rows for each. Returns one @[r]@ per parameter set.
+--
+-- @
+-- postsByUser <- fetchBatchAll conn listPostsByUser [1, 2, 3]
+-- -- 3 queries in 1 round-trip; postsByUser :: [[Post]]
+-- @
+fetchBatchAll :: Connection -> Statement p r -> [p] -> IO [[r]]
+fetchBatchAll _ _ [] = pure []
+fetchBatchAll conn stmt paramsList = do
+  stmtName <- ensurePrepared conn stmt
+  let msgs = concatMap (\params ->
+        let encodedParams = stmtEncode stmt params
+         in [ Bind "" stmtName (V.singleton BinaryFormat) encodedParams (V.singleton BinaryFormat)
+            , Execute "" 0
+            ]) paramsList
+        ++ [Sync]
+  sendFrontendMsgs (connWire conn) msgs
+  results <- collectBatchReadResults conn (stmtDecode stmt) (length paramsList)
+  waitReadyBatch conn
+  pure results
+
+-- | Collect N result sets from pipelined reads. Each result set is
+-- delimited by CommandComplete (or EmptyQueryResponse).
+collectBatchReadResults :: Connection -> (Vector (Maybe ByteString) -> Either String r) -> Int -> IO [[r]]
+collectBatchReadResults _ _ 0 = pure []
+collectBatchReadResults conn decode n = do
+  -- Collect one result set
+  rows <- collectOneReadResult conn decode
+  -- Collect remaining
+  rest <- collectBatchReadResults conn decode (n - 1)
+  pure (rows : rest)
+
+collectOneReadResult :: Connection -> (Vector (Maybe ByteString) -> Either String r) -> IO [r]
+collectOneReadResult conn decode = go id
+  where
+    go !acc = do
+      msg <- recvBackendMsg (connWire conn)
+      case msg of
+        BindComplete -> go acc
+        DataRow vals -> case decode vals of
+          Left err -> throwHsqlx (DecodeError (BS8.pack err))
+          Right !val -> go (acc . (val :))
+        CommandComplete _ -> pure (acc [])
+        EmptyQueryResponse -> pure (acc [])
+        ErrorResponse err -> throwHsqlx (QueryError err)
+        NoticeResponse _ -> go acc
+        other -> throwHsqlx (ProtocolError ("Unexpected in batch read: " <> BS8.pack (show other)))
+
+waitReadyBatch :: Connection -> IO ()
+waitReadyBatch conn = do
+  msg <- recvBackendMsg (connWire conn)
+  case msg of
+    ReadyForQuery status -> writeIORef (connTxStatus conn) status
+    _ -> waitReadyBatch conn
 
 collectBatchResult :: Connection -> Int -> IO Int64
 collectBatchResult conn remaining = go 0 remaining

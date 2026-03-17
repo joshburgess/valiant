@@ -26,6 +26,7 @@ library
 
   exposed-modules:
     Hsqlx
+    Hsqlx.Batch
     Hsqlx.Binary.Array
     Hsqlx.Binary.Composite
     Hsqlx.Binary.Decode
@@ -131,6 +132,7 @@ test-suite hsqlx-integration
     , bytestring
     , hspec        >=2.11 && <2.12
     , hsqlx
+    , pg-wire
     , text
 
   -- Requires DATABASE_URL. Run with:
