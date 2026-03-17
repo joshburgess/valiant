@@ -2,7 +2,7 @@
 
 **Compile-time checked SQL for Haskell.**
 
-A faithful recreation of Rust's [sqlx](https://github.com/launchbadge/sqlx), built from scratch for Haskell. No Template Haskell. No `hasql`. Raw `.sql` files validated against a live Postgres database at prepare time, with a GHC source plugin that enforces type safety at compile time.
+A faithful recreation of Rust's [sqlx](https://github.com/launchbadge/sqlx), built from scratch for Haskell. No Template Haskell. No `libpq`. No C dependencies. Raw `.sql` files validated against a live Postgres database at prepare time, with a GHC source plugin that enforces type safety at compile time.
 
 ## How it works
 
