@@ -1,7 +1,6 @@
 cabal-version:   3.0
 name:            bench-compare
 version:         0.1.0.0
-synopsis:        Comparative benchmarks: hsqlx vs hasql vs postgresql-simple
 license:         BSD-3-Clause
 license-file:    ../LICENSE
 build-type:      Simple
@@ -42,5 +41,6 @@ executable bench-compare
     , monad-logger           >=0.3  && <0.4
     , resource-pool          >=0.2  && <0.5
     , resourcet              >=1.2  && <1.4
+
 
   ghc-options: -threaded -rtsopts -O2
