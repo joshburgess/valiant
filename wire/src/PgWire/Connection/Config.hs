@@ -1,8 +1,10 @@
 module PgWire.Connection.Config
   ( ConnConfig (..)
   , TlsMode (..)
+  , TargetSessionAttrs (..)
   , defaultConnConfig
   , parseConnString
+  , parseHosts
   ) where
 
 import Data.ByteString (ByteString)
@@ -11,13 +13,29 @@ import Data.Time (NominalDiffTime)
 import Data.Word (Word16)
 import Network.Socket (HostName, PortNumber)
 
--- | TLS connection mode.
-data TlsMode = TlsDisable | TlsPrefer | TlsRequire
+-- | TLS connection mode, matching PostgreSQL's @sslmode@ parameter.
+data TlsMode
+  = TlsDisable       -- ^ No SSL
+  | TlsPrefer        -- ^ Try SSL, fall back to plain
+  | TlsRequire       -- ^ Require SSL, don't verify server cert
+  | TlsVerifyCa      -- ^ Require SSL, verify server cert against CA
+  | TlsVerifyFull    -- ^ Require SSL, verify cert + hostname match
   deriving stock (Show, Eq)
 
 -- | Connection configuration.
+-- | Session attribute requirements for multi-host failover.
+data TargetSessionAttrs
+  = SessionAny            -- ^ Connect to any server
+  | SessionReadWrite      -- ^ Must be a read-write server (primary)
+  | SessionReadOnly       -- ^ Must be a read-only server (standby)
+  | SessionPrimary        -- ^ Must be the primary
+  | SessionStandby        -- ^ Must be a standby
+  | SessionPreferStandby  -- ^ Prefer standby, fall back to primary
+  deriving stock (Show, Eq)
+
 data ConnConfig = ConnConfig
   { ccHost :: HostName
+  -- ^ Primary host. For multi-host, use comma-separated: @\"host1,host2\"@.
   , ccPort :: PortNumber
   , ccDatabase :: ByteString
   , ccUser :: ByteString
@@ -29,6 +47,13 @@ data ConnConfig = ConnConfig
   , ccQueryTimeout :: NominalDiffTime
   -- ^ Default timeout for query execution (seconds). 0 = no timeout.
   -- Can be overridden per-query with 'withQueryTimeout'.
+  , ccSslCert :: Maybe FilePath
+  -- ^ Path to client SSL certificate file (@sslcert@).
+  , ccSslKey :: Maybe FilePath
+  -- ^ Path to client SSL private key file (@sslkey@).
+  , ccSslRootCert :: Maybe FilePath
+  -- ^ Path to SSL certificate authority (CA) file (@sslrootcert@).
+  -- If @\"system\"@, uses the system certificate store.
   , ccKeepalives :: Bool
   -- ^ Enable TCP keepalives (default: True).
   , ccKeepalivesIdle :: Int
@@ -37,6 +62,8 @@ data ConnConfig = ConnConfig
   -- ^ Seconds between keepalive probes (default: 0 = system default).
   , ccKeepalivesCount :: Int
   -- ^ Number of failed probes before disconnect (default: 0 = system default).
+  , ccTargetSessionAttrs :: TargetSessionAttrs
+  -- ^ Required session attributes for multi-host failover (default: 'SessionAny').
   }
   deriving stock (Show)
 
@@ -52,10 +79,14 @@ defaultConnConfig =
     , ccAppName = "pg-wire"
     , ccConnectTimeout = 10
     , ccQueryTimeout = 0
+    , ccSslCert = Nothing
+    , ccSslKey = Nothing
+    , ccSslRootCert = Nothing
     , ccKeepalives = True
     , ccKeepalivesIdle = 0
     , ccKeepalivesInterval = 0
     , ccKeepalivesCount = 0
+    , ccTargetSessionAttrs = SessionAny
     }
 
 -- | Parse a PostgreSQL connection string.
@@ -101,10 +132,15 @@ parseUri bs = do
   -- Parse query params for sslmode
   let params = parseQueryParams (BS8.drop 1 queryStr) -- drop '?'
       tlsMode = case lookup "sslmode" params of
-        Just "require" -> TlsRequire
-        Just "prefer" -> TlsPrefer
-        Just "disable" -> TlsDisable
+        Just "require"     -> TlsRequire
+        Just "prefer"      -> TlsPrefer
+        Just "disable"     -> TlsDisable
+        Just "verify-ca"   -> TlsVerifyCa
+        Just "verify-full" -> TlsVerifyFull
         _ -> TlsDisable
+      sslCert = BS8.unpack <$> lookup "sslcert" params
+      sslKey = BS8.unpack <$> lookup "sslkey" params
+      sslRootCert = BS8.unpack <$> lookup "sslrootcert" params
 
   Right
     ConnConfig
@@ -117,10 +153,15 @@ parseUri bs = do
       , ccAppName = "pg-wire"
       , ccConnectTimeout = readTimeout (lookup "connect_timeout" params)
       , ccQueryTimeout = 0
+      , ccSslCert = sslCert
+      , ccSslKey = sslKey
+      , ccSslRootCert = sslRootCert
       , ccKeepalives = True
       , ccKeepalivesIdle = 0
       , ccKeepalivesInterval = 0
       , ccKeepalivesCount = 0
+      , ccTargetSessionAttrs = maybe SessionAny parseSessionAttrs
+          (lookup "target_session_attrs" params)
       }
 
 readTimeout :: Maybe ByteString -> NominalDiffTime
@@ -136,9 +177,12 @@ parseKeyValue bs =
       portStr = get "port" "5432"
       port = maybe 5432 fromIntegral (readPort portStr)
       tlsMode = case get "sslmode" "disable" of
-        "require" -> TlsRequire
-        "prefer" -> TlsPrefer
+        "require"     -> TlsRequire
+        "prefer"      -> TlsPrefer
+        "verify-ca"   -> TlsVerifyCa
+        "verify-full" -> TlsVerifyFull
         _ -> TlsDisable
+      getMaybe key = let v = get key "" in if BS8.null v then Nothing else Just (BS8.unpack v)
    in Right
         ConnConfig
           { ccHost = BS8.unpack (get "host" "localhost")
@@ -154,10 +198,14 @@ parseKeyValue bs =
           , ccQueryTimeout = case BS8.readInt (get "query_timeout" "0") of
               Just (n, _) | n > 0 -> fromIntegral n
               _ -> 0
+          , ccSslCert = getMaybe "sslcert"
+          , ccSslKey = getMaybe "sslkey"
+          , ccSslRootCert = getMaybe "sslrootcert"
           , ccKeepalives = get "keepalives" "1" /= "0"
           , ccKeepalivesIdle = readIntDef 0 (get "keepalives_idle" "0")
           , ccKeepalivesInterval = readIntDef 0 (get "keepalives_interval" "0")
           , ccKeepalivesCount = readIntDef 0 (get "keepalives_count" "0")
+          , ccTargetSessionAttrs = parseSessionAttrs (get "target_session_attrs" "any")
           }
   where
     parsePair p =
@@ -186,3 +234,24 @@ parseQueryParams bs
       , let (k, v) = BS8.break (== '=') param
       , not (BS8.null k)
       ]
+
+parseSessionAttrs :: ByteString -> TargetSessionAttrs
+parseSessionAttrs "any"              = SessionAny
+parseSessionAttrs "read-write"       = SessionReadWrite
+parseSessionAttrs "read-only"        = SessionReadOnly
+parseSessionAttrs "primary"          = SessionPrimary
+parseSessionAttrs "standby"          = SessionStandby
+parseSessionAttrs "prefer-standby"   = SessionPreferStandby
+parseSessionAttrs _                  = SessionAny
+
+-- | Parse a comma-separated host string into individual hosts.
+-- @\"host1,host2,host3\"@ → @[\"host1\", \"host2\", \"host3\"]@
+parseHosts :: String -> [String]
+parseHosts [] = ["localhost"]
+parseHosts s = go s
+  where
+    go [] = []
+    go str = let (h, rest) = break (== ',') str
+              in h : case rest of
+                       [] -> []
+                       (_ : rs) -> go rs

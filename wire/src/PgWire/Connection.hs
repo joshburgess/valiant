@@ -56,12 +56,12 @@ import Data.Word (Word32, Word64)
 import PgWire.Auth.Cleartext (cleartextAuth)
 import PgWire.Auth.MD5 (md5Auth)
 import PgWire.Auth.ScramSHA256 (scramAuth)
-import PgWire.Connection.Config (ConnConfig (..), TlsMode (..), parseConnString)
+import PgWire.Connection.Config (ConnConfig (..), TargetSessionAttrs (..), TlsMode (..), parseConnString, parseHosts)
 import PgWire.Error (HsqlxError (..), throwHsqlx)
 import PgWire.Protocol.Backend
 import PgWire.Protocol.Builders (buildStartup)
 import PgWire.Protocol.Frontend (DescribeTarget (..), FrontendMsg (..), StartupParams (..))
-import PgWire.Wire (WireConn (..), connectTcpTimeout, recvBackendMsg, sendFrontendMsg, sendRawBytes, upgradeTls)
+import PgWire.Wire (TlsConfig (..), WireConn (..), connectTcpTimeout, recvBackendMsg, sendFrontendMsg, sendRawBytes, upgradeTls)
 
 -- | A connection to a PostgreSQL database.
 data Connection = Connection
@@ -88,22 +88,69 @@ data ColumnDescription = ColumnDescription
   }
   deriving stock (Show, Eq)
 
--- | Connect using a 'ConnConfig'.
+-- | Connect using a 'ConnConfig'. Supports multi-host failover:
+-- if @ccHost@ contains comma-separated hosts (@\"host1,host2\"@),
+-- tries each in order until one succeeds. If @ccTargetSessionAttrs@
+-- is set, verifies the server matches (e.g., primary vs standby).
 connect :: ConnConfig -> IO Connection
 connect cfg = do
+  let hosts = parseHosts (ccHost cfg)
+  tryHosts hosts
+  where
+    tryHosts [] = throwHsqlx (ConnectionError "All hosts failed")
+    tryHosts [h] = connectSingleHost cfg { ccHost = h }
+    tryHosts (h : hs) = do
+      result <- try @SomeException (connectSingleHost cfg { ccHost = h })
+      case result of
+        Right conn -> do
+          -- Check target_session_attrs if set
+          ok <- checkSessionAttrs conn (ccTargetSessionAttrs cfg)
+          if ok
+            then pure conn
+            else do
+              close conn
+              tryHosts hs
+        Left _ -> tryHosts hs
+
+    checkSessionAttrs _ SessionAny = pure True
+    checkSessionAttrs conn attr = do
+      (rows, _) <- simpleQuery conn "SHOW transaction_read_only"
+      case rows of
+        [[Just val]] ->
+          let readOnly = val == "on"
+           in pure $ case attr of
+                SessionReadWrite -> not readOnly
+                SessionReadOnly -> readOnly
+                SessionPrimary -> not readOnly
+                SessionStandby -> readOnly
+                SessionPreferStandby -> True -- accept either
+                SessionAny -> True
+        _ -> pure True -- can't determine, accept
+
+connectSingleHost :: ConnConfig -> IO Connection
+connectSingleHost cfg = do
   wc0 <- connectTcpTimeout (ccConnectTimeout cfg) (ccHost cfg) (ccPort cfg)
+
+  let tlsCfg = TlsConfig
+        { tlsHostname = ccHost cfg
+        , tlsVerify = ccTls cfg `elem` [TlsVerifyCa, TlsVerifyFull]
+        , tlsVerifyHostname = ccTls cfg == TlsVerifyFull
+        , tlsClientCert = ccSslCert cfg
+        , tlsClientKey = ccSslKey cfg
+        , tlsCaCert = ccSslRootCert cfg
+        }
 
   -- Optionally upgrade to TLS
   wc <- case ccTls cfg of
     TlsDisable -> pure wc0
-    TlsRequire -> upgradeTls wc0 (ccHost cfg)
+    TlsRequire -> upgradeTls wc0 tlsCfg
+    TlsVerifyCa -> upgradeTls wc0 tlsCfg
+    TlsVerifyFull -> upgradeTls wc0 tlsCfg
     TlsPrefer -> do
-      -- Try TLS, fall back to plaintext
-      result <- try @SomeException (upgradeTls wc0 (ccHost cfg))
+      result <- try @SomeException (upgradeTls wc0 tlsCfg)
       case result of
         Right tlsWc -> pure tlsWc
         Left _ -> do
-          -- The SSLRequest already consumed the connection; reconnect
           wcClose wc0
           connectTcpTimeout (ccConnectTimeout cfg) (ccHost cfg) (ccPort cfg)
 

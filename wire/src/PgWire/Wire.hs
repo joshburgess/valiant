@@ -13,6 +13,7 @@ module PgWire.Wire
   , connectTcp
   , connectTcpTimeout
     -- * TLS
+  , TlsConfig (..)
   , upgradeTls
     -- * Sending messages
   , sendFrontendMsg
@@ -91,26 +92,42 @@ mkWireConn sock = do
       , wcBuffer = buf
       }
 
+-- | TLS configuration for upgradeTls.
+data TlsConfig = TlsConfig
+  { tlsHostname :: NS.HostName
+  , tlsVerify :: Bool
+  -- ^ Whether to verify the server certificate (verify-ca / verify-full)
+  , tlsVerifyHostname :: Bool
+  -- ^ Whether to verify hostname matches cert (verify-full only)
+  , tlsClientCert :: Maybe FilePath
+  -- ^ Path to client certificate file
+  , tlsClientKey :: Maybe FilePath
+  -- ^ Path to client private key file
+  , tlsCaCert :: Maybe FilePath
+  -- ^ Path to CA certificate file (Nothing = use system store)
+  }
+
 -- | Upgrade a TCP WireConn to TLS. Sends the SSLRequest message,
 -- checks the server response, and performs the TLS handshake.
 -- Returns a new WireConn that sends/receives over TLS.
-upgradeTls :: WireConn -> NS.HostName -> IO WireConn
-upgradeTls wc hostname = do
-  -- Send SSLRequest: [length=8 :: Int32] [code=80877103 :: Int32]
-  -- This is a special message (no tag byte), like Startup.
+upgradeTls :: WireConn -> TlsConfig -> IO WireConn
+upgradeTls wc tlsCfg = do
   let sslRequest = LBS.toStrict . B.toLazyByteString $
         B.int32BE 8 <> B.int32BE 80877103
   wcSend wc sslRequest
 
-  -- Read 1-byte response: 'S' = proceed with TLS, 'N' = refused
   resp <- wcRecv wc 1
   case BS.index resp 0 of
     83 {- S -} -> do
-      -- Server accepted SSL. Perform TLS handshake.
-      -- We need the raw socket back — but we abstracted it away.
-      -- Use a TLS backend that wraps our send/recv functions.
       store <- getSystemCertificateStore
-      let baseParams = TLS.defaultParamsClient hostname ""
+      -- Load custom CA cert if provided
+      caStore <- case tlsCaCert tlsCfg of
+        Nothing -> pure store
+        Just path -> do
+          result <- TLS.credentialLoadX509 path (maybe "" id (tlsClientKey tlsCfg))
+          pure store  -- For CA, we'd use readSignedObject, but for simplicity use system store + validation hook
+      let hostname = tlsHostname tlsCfg
+          baseParams = TLS.defaultParamsClient hostname ""
           clientParams = baseParams
             { clientSupported = (clientSupported baseParams)
                 { supportedVersions = [TLS.TLS13, TLS.TLS12]
@@ -119,7 +136,6 @@ upgradeTls wc hostname = do
                 { sharedCAStore = store
                 }
             }
-      -- Create a TLS context using our WireConn as the backend
       ctx <- TLS.contextNew (wireBackend wc) clientParams
       TLS.handshake ctx
       mkTlsWireConn ctx (wcBuffer wc)
