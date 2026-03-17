@@ -52,7 +52,9 @@ module Hsqlx
   , fetchOne
   , fetchAll
   , fetchScalar
+  , fetchOneOrThrow
   , execute
+  , executeReturning
   , executeBatch
   , fetchBatchOne
   , fetchBatchAll
@@ -192,6 +194,7 @@ module Hsqlx
     -- for tuples up to 6 elements, 'Maybe' for nullable columns, and
     -- @()@ for commands that return no rows.
   , FromRow (..)
+  , DecodeColumn (..)
 
     -- * Parameter encoding
     -- | Encode query parameters. Instances are provided for single
@@ -199,6 +202,18 @@ module Hsqlx
     -- and tuples up to 6 elements.
   , ToParams (..)
   , EncodeField (..)
+
+    -- * Binary codec type classes
+    -- | Low-level encode\/decode classes for individual PostgreSQL types.
+    -- Derive these for newtypes using @GeneralizedNewtypeDeriving@ or
+    -- @DerivingVia@:
+    --
+    -- @
+    -- newtype UserId = UserId Int32
+    --   deriving newtype (PgEncode, PgDecode)
+    -- @
+  , PgEncode (..)
+  , PgDecode (..)
 
     -- * Binary types
     -- | PostgreSQL types that don't have a standard Haskell equivalent.
@@ -219,9 +234,9 @@ import Hsqlx.Binary.Composite (CompositeField (..))
 import Hsqlx.Binary.Interval (PgInterval (..))
 import Hsqlx.Binary.Range (PgRange (..), RangeBound (..))
 import Hsqlx.Copy (CopyResult (..), copyIn, copyInBinary, copyOut)
-import Hsqlx.Execute (execute, executeBatch, fetchAll, fetchBatchAll, fetchBatchOne, fetchOne, fetchScalar, rawExecute, rawFetchAll, rawFetchOne)
+import Hsqlx.Execute (execute, executeBatch, executeReturning, fetchAll, fetchBatchAll, fetchBatchOne, fetchOne, fetchOneOrThrow, fetchScalar, rawExecute, rawFetchAll, rawFetchOne)
 import Hsqlx.Fold (RowFold (..), executeWithFold)
-import Hsqlx.FromRow (FromRow (..))
+import Hsqlx.FromRow (DecodeColumn (..), FromRow (..))
 import Hsqlx.Logging (LogEvent (..), LogLevel (..), Logger, nullLogger, poolLoggerFromLogger, stderrLogger)
 import Hsqlx.Monad (Hsqlx, poolStatsM, resizeM, runHsqlx)
 import Hsqlx.NamedParams (NamedStatement, ToNamedParams (..), mkStatementNamed)
@@ -230,6 +245,7 @@ import Hsqlx.Pipeline (Pipeline, pipeFetchOne, pipeFetchAll, pipeFetchScalar, pi
 import Hsqlx.Statement (Statement (..), mkStatement, queryFile, queryFileAs)
 import Hsqlx.Streaming (CursorState (..), fetchBatch, withCursor)
 import Hsqlx.ToParams (EncodeField (..), ToParams (..))
+import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
 import Hsqlx.Transaction (IsolationLevel (..), Transaction (..), withSavepoint, withTransaction, withTransactionLevel)
 import PgWire.Cancel (cancelQuery, withQueryTimeout)
 import PgWire.Connection (Connection, close, connect, connectString, simpleQuery, withConnection)

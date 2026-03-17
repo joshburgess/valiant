@@ -78,6 +78,8 @@ data Response
     RespBatchRows ![[Vector (Maybe ByteString)]]
   | -- | Batch command result: total rows affected.
     RespBatchCommand !Int64
+  | -- | Rows collected from DataRow messages AND the command tag.
+    RespRowsAndCommand ![Vector (Maybe ByteString)] !CommandTag
 
 -- | Tells the reader thread how to interpret backend messages for a request.
 data ResponseCollector
@@ -93,6 +95,8 @@ data ResponseCollector
     CollectBatch !Int
   | -- | Collect N command sub-results, one ReadyForQuery at end.
     CollectBatchCommand !Int
+  | -- | Collect DataRow until CommandComplete, returning both rows and the command tag.
+    CollectRowsAndCommand
   | -- | Simple query protocol: text rows + optional tag + ReadyForQuery.
     CollectSimple
 
@@ -359,6 +363,10 @@ readerThread ac = go `catch` onDeath
       waitCloseCompleteLoop
       waitReadyForQuery
       pure RespClosed
+    collectResponse CollectRowsAndCommand = do
+      (rows, tag) <- collectRowsAndCommandLoop
+      waitReadyForQuery
+      pure (RespRowsAndCommand rows tag)
     collectResponse (CollectBatch n) = do
       results <- collectBatchLoop n
       waitReadyForQuery
@@ -386,6 +394,20 @@ readerThread ac = go `catch` onDeath
             EmptyQueryResponse -> pure (acc [])
             ErrorResponse err -> throwIO (QueryError err)
             other -> throwIO (ProtocolError ("Unexpected in rows: " <> BS8.pack (show other)))
+
+    collectRowsAndCommandLoop :: IO ([Vector (Maybe ByteString)], CommandTag)
+    collectRowsAndCommandLoop = loop id
+      where
+        loop !acc = do
+          msg <- recvAndDispatch
+          case msg of
+            ParseComplete -> loop acc
+            BindComplete -> loop acc
+            DataRow vals -> loop (acc . (vals :))
+            CommandComplete tag -> pure (acc [], tag)
+            EmptyQueryResponse -> pure (acc [], OtherTag "EMPTY")
+            ErrorResponse err -> throwIO (QueryError err)
+            other -> throwIO (ProtocolError ("Unexpected in rows+command: " <> BS8.pack (show other)))
 
     collectCommandLoop :: IO CommandTag
     collectCommandLoop = do

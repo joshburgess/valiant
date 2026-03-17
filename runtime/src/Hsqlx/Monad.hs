@@ -38,9 +38,11 @@ module Hsqlx.Monad
   , fetchOneM
   , fetchAllM
   , fetchScalarM
+  , fetchOneOrThrowM
 
     -- * Commands
   , executeM
+  , executeReturningM
   , executeBatchM
 
     -- * Pipelined batch reads
@@ -59,7 +61,7 @@ module Hsqlx.Monad
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Reader (ReaderT (..), ask)
 import Data.Int (Int64)
-import Hsqlx.Execute (execute, executeBatch, fetchAll, fetchBatchAll, fetchBatchOne, fetchOne, fetchScalar)
+import Hsqlx.Execute (execute, executeBatch, executeReturning, fetchAll, fetchBatchAll, fetchBatchOne, fetchOne, fetchOneOrThrow, fetchScalar)
 import Hsqlx.Statement (Statement)
 import Hsqlx.Transaction (IsolationLevel, Transaction, withTransaction, withTransactionLevel)
 import PgWire.Connection (Connection)
@@ -107,6 +109,11 @@ fetchScalarM :: Statement p r -> p -> Hsqlx r
 fetchScalarM stmt params = withConnectionM $ \conn -> fetchScalar conn stmt params
 {-# INLINE fetchScalarM #-}
 
+-- | Like 'fetchOneM' but throws 'DecodeError' if no rows are returned.
+fetchOneOrThrowM :: Statement p r -> p -> Hsqlx r
+fetchOneOrThrowM stmt params = withConnectionM $ \conn -> fetchOneOrThrow conn stmt params
+{-# INLINE fetchOneOrThrowM #-}
+
 ------------------------------------------------------------------------
 -- Commands
 ------------------------------------------------------------------------
@@ -115,6 +122,11 @@ fetchScalarM stmt params = withConnectionM $ \conn -> fetchScalar conn stmt para
 executeM :: Statement p () -> p -> Hsqlx Int64
 executeM stmt params = withConnectionM $ \conn -> execute conn stmt params
 {-# INLINE executeM #-}
+
+-- | Execute a command with a RETURNING clause. Returns rows affected and decoded rows.
+executeReturningM :: Statement p r -> p -> Hsqlx (Int64, [r])
+executeReturningM stmt params = withConnectionM $ \conn -> executeReturning conn stmt params
+{-# INLINE executeReturningM #-}
 
 -- | Execute a batch of commands (pipelined). Returns total rows affected.
 executeBatchM :: Statement p () -> [p] -> Hsqlx Int64

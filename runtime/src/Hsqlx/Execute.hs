@@ -15,8 +15,10 @@ module Hsqlx.Execute
     fetchOne
   , fetchAll
   , fetchScalar
+  , fetchOneOrThrow
     -- * Commands
   , execute
+  , executeReturning
     -- * Raw (unchecked) queries
   , rawFetchAll
   , rawFetchOne
@@ -105,6 +107,20 @@ fetchScalar conn stmt params = do
     [] -> throwHsqlx (DecodeError "fetchScalar: query returned no rows")
     _ -> throwHsqlx (DecodeError "fetchScalar: query returned more than one row")
 
+-- | Like 'fetchOne' but throws 'DecodeError' if no rows are returned.
+-- Useful when you know the row must exist (e.g., fetching by primary key
+-- after a successful INSERT...RETURNING).
+--
+-- @
+-- user <- fetchOneOrThrow conn findById userId
+-- @
+fetchOneOrThrow :: Connection -> Statement p r -> p -> IO r
+fetchOneOrThrow conn stmt params = do
+  mResult <- fetchOne conn stmt params
+  case mResult of
+    Nothing -> throwHsqlx (DecodeError "fetchOneOrThrow: query returned no rows")
+    Just val -> pure val
+
 ------------------------------------------------------------------------
 -- Commands
 ------------------------------------------------------------------------
@@ -134,6 +150,35 @@ execute conn stmt params = do
       when needsParse $ cacheStmt conn (stmtSQL stmt) name
       pure (tagRows tag)
     _ -> throwHsqlx (ProtocolError "execute: unexpected response type")
+
+-- | Execute a command with a RETURNING clause. Returns the number of rows
+-- affected and the decoded result rows.
+--
+-- Unlike 'execute' (which discards result rows) or 'fetchAll' (which
+-- discards the command tag), this function captures both.
+--
+-- @
+-- (n, ids) <- executeReturning conn insertUsers ("Alice", Just "alice\@example.com")
+-- @
+executeReturning :: Connection -> Statement p r -> p -> IO (Int64, [r])
+executeReturning conn stmt params = do
+  (name, needsParse) <- lookupOrAllocStmt conn stmt
+  let encodedParams = stmtEncode stmt params
+      bindExec =
+        [ Bind "" name binaryFmtVec encodedParams binaryFmtVec
+        , Execute "" 0
+        , Sync
+        ]
+      msgs = if needsParse
+        then Parse name (stmtSQL stmt) (V.map Oid.unOid (stmtParamOids stmt)) : bindExec
+        else bindExec
+  resp <- submitRequest (connAsync conn) $ ReqExtendedQuery msgs CollectRowsAndCommand
+  case resp of
+    RespRowsAndCommand rawRows tag -> do
+      when needsParse $ cacheStmt conn (stmtSQL stmt) name
+      decoded <- decodeRows (stmtDecode stmt) rawRows
+      pure (tagRows tag, decoded)
+    _ -> throwHsqlx (ProtocolError "executeReturning: unexpected response type")
 
 ------------------------------------------------------------------------
 -- Raw (unchecked) queries

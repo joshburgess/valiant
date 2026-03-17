@@ -173,6 +173,18 @@ instance {-# OVERLAPPING #-} (DecodeColumn a, DecodeColumn b, DecodeColumn c, De
 instance {-# OVERLAPPING #-} (DecodeColumn a, DecodeColumn b, DecodeColumn c, DecodeColumn d, DecodeColumn e, DecodeColumn f) => FromRow (a, b, c, d, e, f) where
   fromRow row = (,,,,,) <$> decodeColumn row 0 <*> decodeColumn row 1 <*> decodeColumn row 2 <*> decodeColumn row 3 <*> decodeColumn row 4 <*> decodeColumn row 5
 
+instance {-# OVERLAPPING #-} (DecodeColumn a, DecodeColumn b, DecodeColumn c, DecodeColumn d, DecodeColumn e, DecodeColumn f, DecodeColumn g) => FromRow (a, b, c, d, e, f, g) where
+  fromRow row = (,,,,,,) <$> decodeColumn row 0 <*> decodeColumn row 1 <*> decodeColumn row 2 <*> decodeColumn row 3 <*> decodeColumn row 4 <*> decodeColumn row 5 <*> decodeColumn row 6
+
+instance {-# OVERLAPPING #-} (DecodeColumn a, DecodeColumn b, DecodeColumn c, DecodeColumn d, DecodeColumn e, DecodeColumn f, DecodeColumn g, DecodeColumn h) => FromRow (a, b, c, d, e, f, g, h) where
+  fromRow row = (,,,,,,,) <$> decodeColumn row 0 <*> decodeColumn row 1 <*> decodeColumn row 2 <*> decodeColumn row 3 <*> decodeColumn row 4 <*> decodeColumn row 5 <*> decodeColumn row 6 <*> decodeColumn row 7
+
+instance {-# OVERLAPPING #-} (DecodeColumn a, DecodeColumn b, DecodeColumn c, DecodeColumn d, DecodeColumn e, DecodeColumn f, DecodeColumn g, DecodeColumn h, DecodeColumn i) => FromRow (a, b, c, d, e, f, g, h, i) where
+  fromRow row = (,,,,,,,,) <$> decodeColumn row 0 <*> decodeColumn row 1 <*> decodeColumn row 2 <*> decodeColumn row 3 <*> decodeColumn row 4 <*> decodeColumn row 5 <*> decodeColumn row 6 <*> decodeColumn row 7 <*> decodeColumn row 8
+
+instance {-# OVERLAPPING #-} (DecodeColumn a, DecodeColumn b, DecodeColumn c, DecodeColumn d, DecodeColumn e, DecodeColumn f, DecodeColumn g, DecodeColumn h, DecodeColumn i, DecodeColumn j) => FromRow (a, b, c, d, e, f, g, h, i, j) where
+  fromRow row = (,,,,,,,,,) <$> decodeColumn row 0 <*> decodeColumn row 1 <*> decodeColumn row 2 <*> decodeColumn row 3 <*> decodeColumn row 4 <*> decodeColumn row 5 <*> decodeColumn row 6 <*> decodeColumn row 7 <*> decodeColumn row 8 <*> decodeColumn row 9
+
 -- PgDecode (Maybe a) for the single-column FromRow a path
 instance (PgDecode a) => PgDecode (Maybe a) where
   pgDecode bs = Just <$> pgDecode bs

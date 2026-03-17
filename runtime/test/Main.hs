@@ -6,6 +6,7 @@ import Hsqlx.Binary.DecodeSpec qualified as DecodeSpec
 import Hsqlx.Binary.EncodeSpec qualified as EncodeSpec
 import Hsqlx.Binary.IntervalSpec qualified as IntervalSpec
 import Hsqlx.Binary.JSONSpec qualified as JSONSpec
+import Hsqlx.Binary.NewtypeSpec qualified as NewtypeSpec
 import Hsqlx.Binary.PropertySpec qualified as PropertySpec
 import Hsqlx.Binary.RangeSpec qualified as RangeSpec
 import Hsqlx.Binary.ScientificSpec qualified as ScientificSpec
@@ -25,6 +26,7 @@ main = hspec $ do
   describe "Hsqlx.Binary.Interval" IntervalSpec.spec
   describe "Hsqlx.Binary.UUID" UUIDSpec.spec
   describe "Hsqlx.Binary.JSON" JSONSpec.spec
+  describe "Hsqlx.Binary.Newtype" NewtypeSpec.spec
   describe "Hsqlx.Binary.Property" PropertySpec.spec
   describe "Hsqlx.FromRow" FromRowSpec.spec
   describe "Hsqlx.NamedParams" NamedParamsSpec.spec
