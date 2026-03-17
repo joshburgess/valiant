@@ -93,6 +93,10 @@ main = do
   withTransaction pool $ \tx -> do
     execute (txConn tx) Q.insert ("Dave", Just "dave@example.com")
     execute (txConn tx) Q.insert ("Eve", Nothing)
+
+  -- Constant-memory streaming (no cursor/transaction needed)
+  total <- withResource pool $ \conn ->
+    executeWithFold conn Q.listAll () (RowFold 0 (\n _ -> n + 1) pure)
 ```
 
 ## CLI tool
@@ -127,7 +131,7 @@ $ hsqlx watch
 
 hsqlx is the fastest Haskell PostgreSQL library. It implements its own wire
 protocol in pure Haskell with binary format encoding, direct byte writes,
-pipelined execution, and zero unnecessary copies.
+pipelined execution, async sender/receiver split, and zero unnecessary copies.
 
 Benchmarks against [hasql](https://hackage.haskell.org/package/hasql)
 (libpq FFI, binary) and [postgresql-simple](https://hackage.haskell.org/package/postgresql-simple)
@@ -137,39 +141,55 @@ Benchmarks against [hasql](https://hackage.haskell.org/package/hasql)
 
 | Rows | hsqlx | hasql | pg-simple | vs hasql | vs pg-simple |
 |------|-------|-------|-----------|----------|--------------|
-| 1 (by PK) | 0.97 ms | 0.99 ms | 1.06 ms | **faster** | **9% faster** |
-| 1,000 | 4.5 ms | 7.4 ms | 8.3 ms | **39% faster** | **46% faster** |
-| 5,000 | 19.6 ms | 37.5 ms | 41.5 ms | **48% faster** | **53% faster** |
-| 10,000 | 37.2 ms | 74.5 ms | 81.7 ms | **50% faster** | **54% faster** |
+| 1 (by PK) | 0.94 ms | 1.0 ms | 1.0 ms | **6% faster** | **6% faster** |
+| 1,000 | 4.7 ms | 7.7 ms | 8.7 ms | **39% faster** | **46% faster** |
+| 5,000 | 20.8 ms | 38.0 ms | 42.5 ms | **45% faster** | **51% faster** |
+| 10,000 | 37.2 ms | 72.3 ms | 83.0 ms | **48% faster** | **55% faster** |
 
 **Writes (pipelined):**
 
 | Rows | hsqlx (pipelined) | hasql | pg-simple |
 |------|--------------------|-------|-----------|
-| 100 | **2.5 ms** | 104 ms | 115 ms |
-| 1,000 | **11.7 ms** | 926 ms | 1.20 s |
-| 5,000 | **48.8 ms** | 4.92 s | 4.84 s |
+| 100 | **2.5 ms** | 111 ms | 118 ms |
+| 1,000 | **13.0 ms** | 1.15 s | 1.12 s |
+| 5,000 | **53.5 ms** | 5.16 s | 5.91 s |
+
+**Concurrent throughput (single connection, sender/receiver split):**
+
+| Threads | Queries/sec | Scaling |
+|---------|-------------|---------|
+| 1 | 806/s | 1.0x |
+| 4 | 1,887/s | 2.3x |
+| 16 | 3,810/s | 4.7x |
+| 32 | 5,787/s | **7.2x** |
+
+32 green threads on a single connection achieve 7.2x the throughput of a
+single thread via automatic pipelining.
 
 **Why it's fast:**
 
-- **Binary format decoding** — direct from network buffer, no FFI boundary
-- **Direct byte writes** — `unsafeCreate` + `pokeByteOff`, 5-6x faster than Builder for fixed-size types (30ns per Int32)
-- **Pipelined execution** — `executeBatch` sends N Bind+Execute pairs with 1 Sync, 40-100x faster than sequential
-- **Pre-computed message sizes** — single-pass encoding, no double-copy
-- **Message coalescing + TCP_NODELAY** — single syscall per message sequence
-- **Fused row decoding** — decode as rows arrive, no intermediate list
-- **Pure Haskell** — no `libpq`, no C toolchain, no system dependencies
+- **Binary format decoding** -- direct from network buffer, no FFI boundary
+- **Direct byte writes** -- `unsafeCreate` + `pokeByteOff`, 5-6x faster than Builder for fixed-size types (30ns per Int32)
+- **Pipelined execution** -- `executeBatch` sends N Bind+Execute pairs with 1 Sync, 40-100x faster than sequential
+- **Sender/receiver split** -- dedicated writer+reader threads per connection, automatic pipelining for concurrent workloads
+- **Fused Builder encoding** -- all protocol messages in a batch fused into one Builder, one allocation, one `send()`
+- **Direct-to-Vector parsing** -- DataRow parsed directly into mutable Vector, no intermediate list
+- **Pre-computed message sizes** -- single-pass protocol encoding, no double-copy
+- **Message coalescing + TCP_NODELAY** -- single syscall per message sequence
+- **Fused row decoding** -- decode as rows arrive, no intermediate list
+- **Pure Haskell** -- no `libpq`, no C toolchain, no system dependencies
 
 | | libpq (FFI) | hsqlx (pure Haskell) |
 |---|---|---|
-| Single-row latency | Baseline | **Matching** (0.97ms vs 0.99ms) |
+| Single-row latency | Baseline | **Matching** (0.94ms vs 1.0ms) |
 | Multi-row throughput | Baseline | **2x faster** at 10K rows |
 | Batch writes | No pipelining | **40-100x faster** |
+| Concurrent (32 threads) | Serialized | **7.2x scaling** |
 | Build requirements | Needs `libpq-dev` | No system dependencies |
 
 See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the full deep-dive:
 codec benchmarks, architecture comparison, optimization techniques, and
-the complete optimization journey from 177ns to 30ns Int32 encoding.
+the complete optimization journey.
 
 ## Project structure
 
@@ -177,26 +197,32 @@ hsqlx is a multi-package Cabal project:
 
 | Package | Description |
 |---------|-------------|
+| `pg-wire` | Pure Haskell PostgreSQL v3 wire protocol driver, connection pool, auth, TLS |
+| `hsqlx` | Runtime library: binary codecs, query execution, transactions, streaming, COPY |
 | `hsqlx-cli` | CLI tool (`hsqlx prepare`, `check`, `types`, `generate`, `watch`) |
-| `hsqlx` | Runtime library: custom PG wire protocol driver, connection pool, binary codecs |
 | `hsqlx-plugin` | GHC source plugin for compile-time query validation |
+| `hsqlx-example` | Example REST API using hsqlx + scotty |
 | `bench-compare` | Comparative benchmarks against hasql and postgresql-simple |
 
 ```
 hsqlx/
+├── wire/                 # pg-wire: wire protocol, connection, pool, auth, TLS
+│   ├── src/PgWire/       # Protocol messages, builders, parsers, async I/O
+│   └── test/             # Wire protocol unit tests
+├── runtime/              # hsqlx: runtime library
+│   ├── src/Hsqlx/        # Binary codecs, execute, batch, pipeline, fold, copy, streaming
+│   ├── bench/            # Codec + concurrent benchmarks (criterion)
+│   ├── integration/      # Integration tests (require Postgres)
+│   └── test/             # Codec unit tests
 ├── src/                  # hsqlx-cli source
-├── app/                  # CLI executable entry point
-├── runtime/              # hsqlx runtime library
-│   ├── src/Hsqlx/        # Wire protocol, codecs, pool, etc.
-│   ├── bench/            # Codec benchmarks (criterion)
-│   └── integration/      # Integration tests (require Postgres)
+│   └── Hsqlx/CLI/        # Commands, cache, type map, discovery, nullability
 ├── plugin/               # GHC source plugin
-│   └── src/Hsqlx/Plugin/ # AST traversal, verification, errors
+│   └── src/Hsqlx/Plugin/ # AST traversal, verification, error messages
+├── example/              # Example REST API (scotty)
 ├── bench-compare/        # Comparative benchmarks vs hasql, pg-simple
 ├── scripts/              # pg-setup.sh, pg-teardown.sh
-├── sql/                  # Example .sql files
-├── .hsqlx/               # Cached query metadata (committed to VCS)
-└── test/                 # Test suites for all packages
+├── docs/                 # PERFORMANCE.md, GAPS.md, ASYNC_ARCHITECTURE.md
+└── .hsqlx/               # Cached query metadata (committed to VCS)
 ```
 
 ## Features
@@ -227,22 +253,35 @@ hsqlx/
 | `timestamp` | `LocalTime` | `timestamptz` | `UTCTime` |
 | `interval` | `PgInterval` | `int4[]`, etc. | `Vector Int32`, etc. |
 
-Nullable columns are wrapped in `Maybe`. Unknown OIDs can be registered via `hsqlx-types.json`.
+Nullable columns are wrapped in `Maybe`. Custom types are auto-discovered
+from `pg_type` at prepare time: enums map to `Text`, domains unwrap to
+their base type, ranges map to `PgRange BaseType`. Manual overrides via
+`hsqlx-types.json`.
 
 ### Runtime
 - Custom PostgreSQL v3 wire protocol implementation (no FFI, no `libpq`)
+- Async sender/receiver split: dedicated writer+reader threads per connection
+  with automatic pipelining for concurrent workloads (7.2x scaling at 32 threads)
 - Binary format encoding/decoding for all supported types
 - Extended query protocol (Parse/Bind/Execute/Sync) with prepared statement caching
+- Cross-connection shared statement cache at the pool level
 - Pipelined batch execution (`executeBatch`) for high-throughput writes
-- Message coalescing and `TCP_NODELAY` for minimal per-message overhead
-- Connection pooling with idle reaping, max lifetime, and health checking
-- SCRAM-SHA-256, MD5, and cleartext authentication
-- TLS support via the `tls` library
-- Transactions with configurable isolation levels
-- Streaming results via server-side cursors
-- LISTEN/NOTIFY for async notifications
-- COPY IN/OUT for bulk data transfer
-- Composite and range type binary codecs
+- Pipeline Applicative for combining independent queries into one round-trip
+- Fused Builder encoding and direct-to-Vector DataRow parsing
+- Constant-memory streaming via `RowFold` (no cursor/transaction needed)
+- Server-side cursors for large result sets within transactions
+- Connection pooling with idle reaping, max lifetime, health checking, and
+  pool-level type cache
+- SCRAM-SHA-256 (with channel binding), MD5, and cleartext authentication
+- TLS 1.2/1.3 via the `tls` library, client certificates, CA validation
+- Multi-host failover with `target_session_attrs` and `load_balance_hosts`
+- Transactions with configurable isolation levels and savepoints
+- LISTEN/NOTIFY for async notifications (callback-based, no polling)
+- COPY IN/OUT for bulk data transfer (text, CSV, and binary formats)
+- Query cancellation with `cancelQuery` and `withQueryTimeout`
+- Composite, range, array, interval, and Scientific binary codecs
+- `PgEnum` type class for Haskell sum types mapping to PG enums
+- Protocol tracing via `setTraceHandler` callback
 - Logging hooks for query timing and connection events
 
 ## Workflow
@@ -278,29 +317,38 @@ steps:
 ### Running benchmarks
 
 ```bash
-# Start a test Postgres instance (Docker) or set DATABASE_URL
-eval $(scripts/pg-setup.sh)
+# Start Postgres via docker-compose (tuned for benchmarks)
+docker compose up -d --wait
+export DATABASE_URL="postgres://hsqlx_test:hsqlx_test@localhost:5433/hsqlx_test"
 
 # Codec benchmarks (pure, no database needed)
-cabal bench hsqlx-bench
+cabal bench hsqlx-bench --benchmark-options='--match prefix codec'
+
+# Query benchmarks
+cabal bench hsqlx-bench --benchmark-options='--match prefix query'
+
+# Concurrent benchmarks (the async split showcase)
+cabal bench hsqlx-bench --benchmark-options='+RTS -N -RTS --match prefix concurrent'
 
 # Comparative benchmarks vs hasql and postgresql-simple
 cabal run bench-compare
 
 # Teardown
-scripts/pg-teardown.sh
+docker compose down
 ```
 
 ## Building from source
 
-Requires GHC 9.4 and Cabal 3.0+.
+Requires GHC 9.10 and Cabal 3.0+.
 
 ```bash
 git clone https://github.com/joshburgess/hsqlx.git
 cd hsqlx
 cabal build all
-cabal test all    # 461 tests
+cabal test pg-wire-test hsqlx-test hsqlx-cli-test
 ```
+
+All packages compile with `-Werror`.
 
 ## Design decisions
 
@@ -308,7 +356,9 @@ cabal test all    # 461 tests
 
 **Why a separate prepare step?** Connecting to Postgres from inside the compiler (as Rust's sqlx does) causes well-known compilation speed issues and complicates CI. A separate CLI step + JSON cache keeps compilation fast and enables fully offline builds.
 
-**Why a custom wire protocol driver?** Full control over binary format encoding, connection management, and protocol features (pipelining, COPY, LISTEN/NOTIFY, cursors) without depending on `libpq` or any existing Haskell database library. No system C dependencies means simpler builds and cross-compilation. And as the benchmarks show, pure Haskell binary decoding is faster than FFI-based alternatives on multi-row reads.
+**Why a custom wire protocol driver?** Full control over binary format encoding, connection management, and protocol features (pipelining, async I/O, COPY, LISTEN/NOTIFY, cursors) without depending on `libpq` or any existing Haskell database library. No system C dependencies means simpler builds and cross-compilation. And as the benchmarks show, pure Haskell binary decoding is faster than FFI-based alternatives on multi-row reads.
+
+**Why sender/receiver split?** The same architecture behind asyncpg's 3x advantage over psycopg2. Dedicated writer+reader threads per connection allow multiple green threads to pipeline queries automatically on a single connection, achieving 7.2x throughput scaling at 32 threads.
 
 ## Comparison with Rust's sqlx
 
@@ -319,9 +369,11 @@ cabal test all    # 461 tests
 | DB at compile time | From proc macro | Separate `hsqlx prepare` step |
 | Offline mode | `.sqlx/` JSON cache | `.hsqlx/` JSON cache |
 | Code generation | No | `hsqlx generate` (optional) |
-| Runtime driver | Custom async Rust driver | Custom Haskell driver |
+| Runtime driver | Custom async Rust driver | Custom async Haskell driver |
+| Concurrent I/O | Tokio async/await | Sender/receiver green threads |
 | Error messages | Generic Rust type errors | Column-by-column diagnostics with fixes |
-| Pipelining | Via driver internals | Explicit `executeBatch` API |
+| Pipelining | Via driver internals | Explicit `executeBatch` + automatic via async split |
+| Custom types | Trait impls | Auto-discovery from `pg_type` + `PgEnum` type class |
 
 ## License
 
