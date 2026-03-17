@@ -96,6 +96,16 @@ module Hsqlx
   , cancelQuery
   , withQueryTimeout
 
+    -- * Pipelined reads
+    -- | Execute multiple independent queries in a single round-trip
+    -- using the 'Applicative' interface. Eliminates N+1 query overhead.
+  , Pipeline
+  , pipeFetchOne
+  , pipeFetchAll
+  , pipeFetchScalar
+  , pipeExecute
+  , runPipeline
+
     -- * Streaming (cursors)
     -- | Stream large result sets using server-side cursors, fetching
     -- rows in batches without loading everything into memory.
@@ -155,6 +165,7 @@ import Hsqlx.Execute (execute, executeBatch, fetchAll, fetchOne, fetchScalar)
 import Hsqlx.FromRow (FromRow (..))
 import Hsqlx.Logging (LogEvent (..), LogLevel (..), Logger, nullLogger, stderrLogger)
 import Hsqlx.Notify (Notification (..), listen, unlisten, waitForNotification, waitForNotificationTimeout)
+import Hsqlx.Pipeline (Pipeline, pipeFetchOne, pipeFetchAll, pipeFetchScalar, pipeExecute, runPipeline)
 import Hsqlx.Statement (Statement (..), mkStatement, queryFile, queryFileAs)
 import Hsqlx.Streaming (CursorState (..), fetchBatch, withCursor)
 import Hsqlx.ToParams (EncodeField (..), ToParams (..))

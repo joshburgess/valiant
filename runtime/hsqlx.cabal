@@ -40,6 +40,7 @@ library
     Hsqlx.FromRow
     Hsqlx.Logging
     Hsqlx.Notify
+    Hsqlx.Pipeline
     Hsqlx.Statement
     Hsqlx.Streaming
     Hsqlx.ToParams
@@ -119,6 +120,7 @@ test-suite hsqlx-integration
     ConnectionSpec
     CopySpec
     ExecuteSpec
+    PipelineSpec
     PoolSpec
     TestSupport
     TransactionSpec
