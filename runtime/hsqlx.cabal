@@ -38,6 +38,7 @@ library
     Hsqlx.Binary.UUID
     Hsqlx.Copy
     Hsqlx.Execute
+    Hsqlx.Fold
     Hsqlx.FromRow
     Hsqlx.Logging
     Hsqlx.Notify

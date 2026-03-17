@@ -64,6 +64,12 @@ data ConnConfig = ConnConfig
   -- ^ Number of failed probes before disconnect (default: 0 = system default).
   , ccTargetSessionAttrs :: TargetSessionAttrs
   -- ^ Required session attributes for multi-host failover (default: 'SessionAny').
+  , ccClientEncoding :: ByteString
+  -- ^ Client encoding (default: @\"UTF8\"@). Set to @\"auto\"@ for auto-detection.
+  , ccOptions :: ByteString
+  -- ^ Extra command-line options to send to the server at startup.
+  , ccLoadBalanceHosts :: Bool
+  -- ^ Randomize host order for multi-host connections (default: False).
   }
   deriving stock (Show)
 
@@ -87,6 +93,9 @@ defaultConnConfig =
     , ccKeepalivesInterval = 0
     , ccKeepalivesCount = 0
     , ccTargetSessionAttrs = SessionAny
+    , ccClientEncoding = "UTF8"
+    , ccOptions = ""
+    , ccLoadBalanceHosts = False
     }
 
 -- | Parse a PostgreSQL connection string.
@@ -162,6 +171,9 @@ parseUri bs = do
       , ccKeepalivesCount = 0
       , ccTargetSessionAttrs = maybe SessionAny parseSessionAttrs
           (lookup "target_session_attrs" params)
+      , ccClientEncoding = maybe "UTF8" id (lookup "client_encoding" params)
+      , ccOptions = maybe "" id (lookup "options" params)
+      , ccLoadBalanceHosts = lookup "load_balance_hosts" params == Just "random"
       }
 
 readTimeout :: Maybe ByteString -> NominalDiffTime
@@ -206,6 +218,9 @@ parseKeyValue bs =
           , ccKeepalivesInterval = readIntDef 0 (get "keepalives_interval" "0")
           , ccKeepalivesCount = readIntDef 0 (get "keepalives_count" "0")
           , ccTargetSessionAttrs = parseSessionAttrs (get "target_session_attrs" "any")
+          , ccClientEncoding = get "client_encoding" "UTF8"
+          , ccOptions = get "options" ""
+          , ccLoadBalanceHosts = get "load_balance_hosts" "disable" == "random"
           }
   where
     parsePair p =

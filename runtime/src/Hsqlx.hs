@@ -104,6 +104,11 @@ module Hsqlx
   , cancelQuery
   , withQueryTimeout
 
+    -- * Streaming fold (constant memory)
+    -- | Process large result sets without buffering, no cursor needed.
+  , RowFold (..)
+  , executeWithFold
+
     -- * Pipelined reads
     -- | Execute multiple independent queries in a single round-trip
     -- using the 'Applicative' interface. Eliminates N+1 query overhead.
@@ -171,6 +176,7 @@ import Hsqlx.Binary.Interval (PgInterval (..))
 import Hsqlx.Binary.Range (PgRange (..), RangeBound (..))
 import Hsqlx.Copy (CopyResult (..), copyIn, copyOut)
 import Hsqlx.Execute (execute, executeBatch, fetchAll, fetchBatchAll, fetchBatchOne, fetchOne, fetchScalar)
+import Hsqlx.Fold (RowFold (..), executeWithFold)
 import Hsqlx.FromRow (FromRow (..))
 import Hsqlx.Logging (LogEvent (..), LogLevel (..), Logger, nullLogger, stderrLogger)
 import Hsqlx.Notify (Notification (..), listen, unlisten, waitForNotification, waitForNotificationTimeout)

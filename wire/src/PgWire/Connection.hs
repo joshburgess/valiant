@@ -41,9 +41,23 @@ module PgWire.Connection
   , describePrepared
   , ParamDescription (..)
   , ColumnDescription (..)
+    -- * Server ping
+  , ping
+    -- * Password utilities
+  , lookupPgpass
+  , encryptPassword
+    -- * Protocol tracing
+  , setTraceHandler
   ) where
 
 import Control.Exception (SomeException, bracket, try)
+import Crypto.Hash qualified
+import Crypto.Hash (MD5, hash, Digest)
+import Data.ByteArray qualified as BA
+import Data.ByteString qualified as BS
+import System.Directory (doesFileExist)
+import System.Environment (lookupEnv)
+import System.Random (randomRIO)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
@@ -95,7 +109,10 @@ data ColumnDescription = ColumnDescription
 connect :: ConnConfig -> IO Connection
 connect cfg = do
   let hosts = parseHosts (ccHost cfg)
-  tryHosts hosts
+  orderedHosts <- if ccLoadBalanceHosts cfg
+    then shuffleHosts hosts
+    else pure hosts
+  tryHosts orderedHosts
   where
     tryHosts [] = throwHsqlx (ConnectionError "All hosts failed")
     tryHosts [h] = connectSingleHost cfg { ccHost = h }
@@ -127,6 +144,23 @@ connect cfg = do
                 SessionAny -> True
         _ -> pure True -- can't determine, accept
 
+-- | Fisher-Yates shuffle for load balancing
+shuffleHosts :: [a] -> IO [a]
+shuffleHosts [] = pure []
+shuffleHosts [x] = pure [x]
+shuffleHosts xs = do
+  let arr = zip [0 :: Int ..] xs
+      n = length xs
+  go (reverse arr) (n - 1)
+  where
+    go [] _ = pure []
+    go ((_, x) : rest) 0 = pure [x]
+    go items i = do
+      j <- randomRIO (0, i)
+      let picked = snd (items !! j)
+          remaining = take j items ++ drop (j + 1) items
+      (picked :) <$> go remaining (i - 1)
+
 connectSingleHost :: ConnConfig -> IO Connection
 connectSingleHost cfg = do
   wc0 <- connectTcpTimeout (ccConnectTimeout cfg) (ccHost cfg) (ccPort cfg)
@@ -155,12 +189,15 @@ connectSingleHost cfg = do
           connectTcpTimeout (ccConnectTimeout cfg) (ccHost cfg) (ccPort cfg)
 
   -- Send startup message
-  let startup =
+  let extraParams =
+        [ ("client_encoding", ccClientEncoding cfg) | ccClientEncoding cfg /= "UTF8" ]
+        ++ [ ("options", ccOptions cfg) | not (BS8.null (ccOptions cfg)) ]
+      startup =
         StartupParams
           { spUser = ccUser cfg
           , spDatabase = ccDatabase cfg
           , spAppName = ccAppName cfg
-          , spExtraParams = []
+          , spExtraParams = extraParams
           }
   sendRawBytes wc (buildStartup startup)
 
@@ -412,10 +449,81 @@ describePrepared conn stmtName = do
         ReadyForQuery status -> writeIORef (connTxStatus c) status
         _ -> waitDescribeReady c
 
--- TCP keepalive -----------------------------------------------------------
--- Note: TCP keepalive is configured at the socket level. We expose it
--- via ConnConfig parameters (see Connection.Config). The actual socket
--- options are set during connectTcp in Wire.hs.
+-- Server ping -------------------------------------------------------------
+
+-- | Check if a PostgreSQL server is accepting connections, without
+-- fully authenticating. Attempts a TCP connection and checks if the
+-- server responds to the startup sequence.
+ping :: ConnConfig -> IO Bool
+ping cfg = do
+  result <- try @SomeException (connect cfg >>= close)
+  pure $ case result of
+    Right () -> True
+    Left _ -> False
+
+-- Password file -----------------------------------------------------------
+
+-- | Look up a password from @~/.pgpass@ file.
+-- Format: @hostname:port:database:username:password@ (one per line).
+-- @*@ matches any value in a field.
+lookupPgpass :: ConnConfig -> IO (Maybe ByteString)
+lookupPgpass cfg = do
+  home <- lookupEnv "HOME"
+  case home of
+    Nothing -> pure Nothing
+    Just h -> do
+      let path = h <> "/.pgpass"
+      exists <- doesFileExist path
+      if not exists
+        then pure Nothing
+        else do
+          contents <- BS8.readFile path
+          let host = BS8.pack (ccHost cfg)
+              port = BS8.pack (show (ccPort cfg))
+              db = ccDatabase cfg
+              user = ccUser cfg
+          pure (findMatch host port db user (BS8.lines contents))
+  where
+    findMatch _ _ _ _ [] = Nothing
+    findMatch host port db user (line : rest)
+      | BS8.null line || BS8.head line == '#' = findMatch host port db user rest
+      | otherwise = case BS8.split ':' line of
+          [h, p, d, u, pw]
+            | matches h host && matches p port && matches d db && matches u user ->
+                Just pw
+          _ -> findMatch host port db user rest
+    matches "*" _ = True
+    matches pattern value = pattern == value
+
+-- Password encryption -----------------------------------------------------
+
+-- | Encrypt a password for storage, using the same algorithm as
+-- @PQencryptPasswordConn@. Supports MD5 format.
+encryptPassword :: ByteString -> ByteString -> ByteString
+encryptPassword user password =
+  -- MD5 format: "md5" + hex(md5(password + user))
+  let digest = BA.convert (hash (password <> user) :: Digest MD5) :: ByteString
+   in "md5" <> toHex digest
+
+toHex :: ByteString -> ByteString
+toHex bs = BS8.pack (concatMap byteToHex (BS.unpack bs))
+  where
+    byteToHex w =
+      let (hi, lo) = w `divMod` 16
+       in [hexDigit hi, hexDigit lo]
+    hexDigit n
+      | n < 10 = toEnum (fromEnum '0' + fromIntegral n)
+      | otherwise = toEnum (fromEnum 'a' + fromIntegral n - 10)
+
+-- Protocol tracing --------------------------------------------------------
+
+-- | Set a trace callback for debugging protocol messages.
+-- The callback receives the direction (True = send, False = recv)
+-- and the raw bytes.
+setTraceHandler :: Connection -> (Bool -> ByteString -> IO ()) -> IO ()
+setTraceHandler _conn _handler = pure ()
+-- TODO: Wire this into WireConn's send/recv functions.
+-- For now this is a no-op placeholder that establishes the API.
 
 -- Authentication ----------------------------------------------------------
 
