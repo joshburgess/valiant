@@ -139,6 +139,7 @@ module Hsqlx
     -- | Bulk data import\/export using the PostgreSQL COPY protocol.
   , CopyResult (..)
   , copyIn
+  , copyInBinary
   , copyOut
 
     -- * Logging
@@ -174,7 +175,7 @@ import Hsqlx.Batch (fetchByIds)
 import Hsqlx.Binary.Composite (CompositeField (..))
 import Hsqlx.Binary.Interval (PgInterval (..))
 import Hsqlx.Binary.Range (PgRange (..), RangeBound (..))
-import Hsqlx.Copy (CopyResult (..), copyIn, copyOut)
+import Hsqlx.Copy (CopyResult (..), copyIn, copyInBinary, copyOut)
 import Hsqlx.Execute (execute, executeBatch, fetchAll, fetchBatchAll, fetchBatchOne, fetchOne, fetchScalar)
 import Hsqlx.Fold (RowFold (..), executeWithFold)
 import Hsqlx.FromRow (FromRow (..))

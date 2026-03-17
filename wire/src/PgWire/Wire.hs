@@ -15,6 +15,8 @@ module PgWire.Wire
     -- * TLS
   , TlsConfig (..)
   , upgradeTls
+    -- * Tracing
+  , TraceDirection (..)
     -- * Sending messages
   , sendFrontendMsg
   , sendFrontendMsgs
@@ -46,11 +48,16 @@ import Network.TLS (ClientParams (..), Supported (..), Shared (..))
 import System.X509 (getSystemCertificateStore)
 
 -- | Abstraction over a Postgres wire connection (plain TCP or TLS).
+-- | Direction for protocol trace callback.
+data TraceDirection = TraceSend | TraceRecv
+  deriving stock (Show, Eq)
+
 data WireConn = WireConn
   { wcSend :: ByteString -> IO ()
   , wcRecv :: Int -> IO ByteString
   , wcClose :: IO ()
   , wcBuffer :: IORef ByteString
+  , wcTrace :: IORef (Maybe (TraceDirection -> ByteString -> IO ()))
   }
 
 -- | Connect via TCP to the given host and port (no timeout).
@@ -84,12 +91,14 @@ connectTcpTimeout timeoutSecs host port = do
 mkWireConn :: Socket -> IO WireConn
 mkWireConn sock = do
   buf <- newIORef BS.empty
+  traceRef <- newIORef Nothing
   pure
     WireConn
       { wcSend = sendAll sock
       , wcRecv = recvExact sock buf
       , wcClose = NS.close sock
       , wcBuffer = buf
+      , wcTrace = traceRef
       }
 
 -- | TLS configuration for upgradeTls.
@@ -163,12 +172,14 @@ mkTlsWireConn ctx bufRef = do
   -- Reset the buffer since TLS has its own framing
   writeIORef bufRef BS.empty
   tlsBuf <- newIORef BS.empty
+  traceRef <- newIORef Nothing
   pure
     WireConn
       { wcSend = TLS.sendData ctx . LBS.fromStrict
       , wcRecv = tlsRecvExact ctx tlsBuf
       , wcClose = TLS.bye ctx >> TLS.contextClose ctx
       , wcBuffer = tlsBuf
+      , wcTrace = traceRef
       }
 
 -- | Receive exactly n bytes from a TLS context, buffering leftovers.
@@ -196,19 +207,34 @@ tlsRecvExact ctx bufRef n = do
 
 -- | Send a frontend message over the wire.
 sendFrontendMsg :: WireConn -> FrontendMsg -> IO ()
-sendFrontendMsg wc msg = wcSend wc (buildFrontendMsg msg)
+sendFrontendMsg wc msg = do
+  let bytes = buildFrontendMsg msg
+  traceIfEnabled wc TraceSend bytes
+  wcSend wc bytes
 {-# INLINE sendFrontendMsg #-}
 
 -- | Send multiple frontend messages in a single syscall (message coalescing).
--- This is critical for pipelining: Bind+Execute+Bind+Execute+...+Sync
--- should be sent as one TCP segment, not N separate sends.
 sendFrontendMsgs :: WireConn -> [FrontendMsg] -> IO ()
-sendFrontendMsgs wc msgs = wcSend wc (BS.concat (map buildFrontendMsg msgs))
+sendFrontendMsgs wc msgs = do
+  let bytes = BS.concat (map buildFrontendMsg msgs)
+  traceIfEnabled wc TraceSend bytes
+  wcSend wc bytes
 {-# INLINE sendFrontendMsgs #-}
 
 -- | Send raw bytes (for startup message which has a different format).
 sendRawBytes :: WireConn -> ByteString -> IO ()
-sendRawBytes wc = wcSend wc
+sendRawBytes wc bs = do
+  traceIfEnabled wc TraceSend bs
+  wcSend wc bs
+
+-- | Call the trace handler if one is set.
+traceIfEnabled :: WireConn -> TraceDirection -> ByteString -> IO ()
+traceIfEnabled wc dir bytes = do
+  mHandler <- readIORef (wcTrace wc)
+  case mHandler of
+    Nothing -> pure ()
+    Just handler -> handler dir bytes
+{-# INLINE traceIfEnabled #-}
 
 -- | Receive and parse a single backend message.
 recvBackendMsg :: WireConn -> IO BackendMsg
@@ -223,6 +249,8 @@ recvBackendMsg wc = do
     if payloadLen > 0
       then wcRecv wc (fromIntegral payloadLen)
       else pure BS.empty
+  -- Trace the raw bytes (header + payload)
+  traceIfEnabled wc TraceRecv (header <> payload)
   case parseBackendMsg tag payload of
     Left err -> throwHsqlx (ProtocolError (BS8.pack err))
     Right msg -> pure msg

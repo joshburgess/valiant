@@ -75,7 +75,7 @@ import PgWire.Error (HsqlxError (..), throwHsqlx)
 import PgWire.Protocol.Backend
 import PgWire.Protocol.Builders (buildStartup)
 import PgWire.Protocol.Frontend (DescribeTarget (..), FrontendMsg (..), StartupParams (..))
-import PgWire.Wire (TlsConfig (..), WireConn (..), connectTcpTimeout, recvBackendMsg, sendFrontendMsg, sendRawBytes, upgradeTls)
+import PgWire.Wire (TlsConfig (..), TraceDirection (..), WireConn (..), connectTcpTimeout, recvBackendMsg, sendFrontendMsg, sendRawBytes, upgradeTls)
 
 -- | A connection to a PostgreSQL database.
 data Connection = Connection
@@ -520,10 +520,20 @@ toHex bs = BS8.pack (concatMap byteToHex (BS.unpack bs))
 -- | Set a trace callback for debugging protocol messages.
 -- The callback receives the direction (True = send, False = recv)
 -- and the raw bytes.
+-- | Enable protocol tracing on this connection.
+-- The callback receives 'True' for send, 'False' for recv, plus the raw bytes.
+-- Set to @Nothing@ to disable tracing.
+--
+-- @
+-- setTraceHandler conn $ \\isSend bytes ->
+--   BS8.putStrLn $ (if isSend then \">>> \" else \"<<< \") <> BS8.take 40 bytes
+-- @
 setTraceHandler :: Connection -> (Bool -> ByteString -> IO ()) -> IO ()
-setTraceHandler _conn _handler = pure ()
--- TODO: Wire this into WireConn's send/recv functions.
--- For now this is a no-op placeholder that establishes the API.
+setTraceHandler conn handler =
+  writeIORef (wcTrace (connWire conn)) (Just wrapper)
+  where
+    wrapper TraceSend bs = handler True bs
+    wrapper TraceRecv bs = handler False bs
 
 -- Authentication ----------------------------------------------------------
 
