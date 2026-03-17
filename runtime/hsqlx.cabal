@@ -119,6 +119,7 @@ test-suite hsqlx-integration
 
   other-modules:
     ConnectionSpec
+    ConnectionFeaturesSpec
     CopySpec
     ExecuteSpec
     PipelineSpec

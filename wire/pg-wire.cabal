@@ -86,6 +86,8 @@ test-suite pg-wire-test
     PgWire.Auth.ScramFieldsSpec
     PgWire.CancelSpec
     PgWire.Connection.ConfigSpec
+    PgWire.Connection.EscapingSpec
+    PgWire.Connection.FeaturesSpec
     PgWire.ErrorSpec
     PgWire.Pool.ConfigSpec
     PgWire.Protocol.BuildersSpec

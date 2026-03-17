@@ -8,6 +8,8 @@ import PgWire.ErrorSpec qualified as ErrorSpec
 import PgWire.Pool.ConfigSpec qualified as PoolConfigSpec
 import PgWire.Protocol.BuildersSpec qualified as BuildersSpec
 import PgWire.Protocol.OidSpec qualified as OidSpec
+import PgWire.Connection.EscapingSpec qualified as EscapingSpec
+import PgWire.Connection.FeaturesSpec qualified as FeaturesSpec
 import PgWire.Protocol.ParsersSpec qualified as ParsersSpec
 import Test.Hspec
 
@@ -22,3 +24,5 @@ main = hspec $ do
   describe "PgWire.Auth.MD5" MD5Spec.spec
   describe "PgWire.Auth.ScramFields" ScramFieldsSpec.spec
   describe "PgWire.Cancel" CancelSpec.spec
+  describe "PgWire.Connection.Features" FeaturesSpec.spec
+  describe "PgWire.Connection.Escaping" EscapingSpec.spec
