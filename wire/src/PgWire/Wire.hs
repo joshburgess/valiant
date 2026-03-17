@@ -28,6 +28,7 @@ module PgWire.Wire
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as BS8
+import Data.ByteString.Unsafe qualified as BU
 import Data.ByteString.Builder qualified as B
 import Data.ByteString.Lazy qualified as LBS
 import Data.IORef
@@ -55,6 +56,8 @@ data TraceDirection = TraceSend | TraceRecv
 
 data WireConn = WireConn
   { wcSend :: ByteString -> IO ()
+  , wcSendMany :: [ByteString] -> IO ()
+  -- ^ Vectored I/O: send multiple chunks in one syscall (writev).
   , wcRecv :: Int -> IO ByteString
   , wcClose :: IO ()
   , wcBuffer :: IORef ByteString
@@ -96,6 +99,7 @@ mkWireConn sock = do
   pure
     WireConn
       { wcSend = sendAll sock
+      , wcSendMany = NSB.sendMany sock
       , wcRecv = recvExact sock buf
       , wcClose = NS.close sock
       , wcBuffer = buf
@@ -192,13 +196,14 @@ wireBackend wc = TLS.Backend
 
 mkTlsWireConn :: TLS.Context -> IORef ByteString -> IO WireConn
 mkTlsWireConn ctx bufRef = do
-  -- Reset the buffer since TLS has its own framing
   writeIORef bufRef BS.empty
   tlsBuf <- newIORef BS.empty
   traceRef <- newIORef Nothing
+  let tlsSend = TLS.sendData ctx . LBS.fromStrict
   pure
     WireConn
-      { wcSend = TLS.sendData ctx . LBS.fromStrict
+      { wcSend = tlsSend
+      , wcSendMany = \chunks -> tlsSend (BS.concat chunks)
       , wcRecv = tlsRecvExact ctx tlsBuf
       , wcClose = TLS.bye ctx >> TLS.contextClose ctx
       , wcBuffer = tlsBuf
@@ -236,12 +241,18 @@ sendFrontendMsg wc msg = do
   wcSend wc bytes
 {-# INLINE sendFrontendMsg #-}
 
--- | Send multiple frontend messages in a single syscall (message coalescing).
+-- | Send multiple frontend messages via vectored I/O.
+-- Each message is built separately; all chunks are sent in a single
+-- writev() syscall without copying into a contiguous buffer.
 sendFrontendMsgs :: WireConn -> [FrontendMsg] -> IO ()
 sendFrontendMsgs wc msgs = do
-  let bytes = BS.concat (map buildFrontendMsg msgs)
-  traceIfEnabled wc TraceSend bytes
-  wcSend wc bytes
+  let !chunks = map buildFrontendMsg msgs
+  -- Trace if enabled (need to concat for the trace callback)
+  mHandler <- readIORef (wcTrace wc)
+  case mHandler of
+    Just handler -> handler TraceSend (BS.concat chunks)
+    Nothing -> pure ()
+  wcSendMany wc chunks
 {-# INLINE sendFrontendMsgs #-}
 
 -- | Send raw bytes (for startup message which has a different format).
@@ -264,7 +275,7 @@ recvBackendMsg :: WireConn -> IO BackendMsg
 recvBackendMsg wc = do
   -- Read tag (1 byte) + length (4 bytes) together in a single recv
   header <- wcRecv wc 5
-  let !tag = BS.index header 0
+  let !tag = BU.unsafeIndex header 0
       !len = decodeInt32At header 1
       !payloadLen = len - 4
   -- Read payload
@@ -280,10 +291,10 @@ recvBackendMsg wc = do
   where
     decodeInt32At :: ByteString -> Int -> Int
     decodeInt32At bs off =
-      let !b0 = fromIntegral (BS.index bs off)
-          !b1 = fromIntegral (BS.index bs (off + 1))
-          !b2 = fromIntegral (BS.index bs (off + 2))
-          !b3 = fromIntegral (BS.index bs (off + 3))
+      let !b0 = fromIntegral (BU.unsafeIndex bs off)
+          !b1 = fromIntegral (BU.unsafeIndex bs (off + 1))
+          !b2 = fromIntegral (BU.unsafeIndex bs (off + 2))
+          !b3 = fromIntegral (BU.unsafeIndex bs (off + 3))
        in b0 * 16777216 + b1 * 65536 + b2 * 256 + b3
 
 -- Socket helpers ----------------------------------------------------------

@@ -6,6 +6,7 @@ module PgWire.Protocol.Parsers
 import Data.Bits (shiftL, (.|.))
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
+import Data.ByteString.Unsafe qualified as BU
 import Data.Int (Int16, Int32, Int64)
 import Data.Vector qualified as V
 import Data.Word (Word8, Word32)
@@ -277,8 +278,9 @@ getInt16 :: ByteString -> Int -> Either String Int16
 getInt16 bs off
   | BS.length bs < off + 2 = Left "getInt16: buffer too short"
   | otherwise =
-      let hi = fromIntegral (BS.index bs off) :: Int16
-          lo = fromIntegral (BS.index bs (off + 1)) :: Int16
+      -- After bounds check, use unsafeIndex for the hot path
+      let hi = fromIntegral (BU.unsafeIndex bs off) :: Int16
+          lo = fromIntegral (BU.unsafeIndex bs (off + 1)) :: Int16
        in Right (hi `shiftL` 8 .|. lo)
 {-# INLINE getInt16 #-}
 
@@ -286,10 +288,10 @@ getInt32 :: ByteString -> Int -> Either String Int32
 getInt32 bs off
   | BS.length bs < off + 4 = Left "getInt32: buffer too short"
   | otherwise =
-      let b0 = fromIntegral (BS.index bs off) :: Int32
-          b1 = fromIntegral (BS.index bs (off + 1)) :: Int32
-          b2 = fromIntegral (BS.index bs (off + 2)) :: Int32
-          b3 = fromIntegral (BS.index bs (off + 3)) :: Int32
+      let b0 = fromIntegral (BU.unsafeIndex bs off) :: Int32
+          b1 = fromIntegral (BU.unsafeIndex bs (off + 1)) :: Int32
+          b2 = fromIntegral (BU.unsafeIndex bs (off + 2)) :: Int32
+          b3 = fromIntegral (BU.unsafeIndex bs (off + 3)) :: Int32
        in Right (b0 `shiftL` 24 .|. b1 `shiftL` 16 .|. b2 `shiftL` 8 .|. b3)
 {-# INLINE getInt32 #-}
 
@@ -297,10 +299,10 @@ getWord32 :: ByteString -> Int -> Either String Word32
 getWord32 bs off
   | BS.length bs < off + 4 = Left "getWord32: buffer too short"
   | otherwise =
-      let b0 = fromIntegral (BS.index bs off) :: Word32
-          b1 = fromIntegral (BS.index bs (off + 1)) :: Word32
-          b2 = fromIntegral (BS.index bs (off + 2)) :: Word32
-          b3 = fromIntegral (BS.index bs (off + 3)) :: Word32
+      let b0 = fromIntegral (BU.unsafeIndex bs off) :: Word32
+          b1 = fromIntegral (BU.unsafeIndex bs (off + 1)) :: Word32
+          b2 = fromIntegral (BU.unsafeIndex bs (off + 2)) :: Word32
+          b3 = fromIntegral (BU.unsafeIndex bs (off + 3)) :: Word32
        in Right (b0 `shiftL` 24 .|. b1 `shiftL` 16 .|. b2 `shiftL` 8 .|. b3)
 {-# INLINE getWord32 #-}
 

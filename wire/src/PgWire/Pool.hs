@@ -13,7 +13,7 @@
 -- 'closePool' pool
 -- @
 module PgWire.Pool
-  ( Pool
+  ( Pool (..)
   , newPool
   , closePool
   , withResource
@@ -23,11 +23,16 @@ import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (Async, async, cancel, race)
 import Control.Concurrent.STM
 import Control.Exception (SomeException, catch, mask, onException, try)
+import Data.ByteString (ByteString)
+import Data.Hashable (hash)
 import Data.IORef
+import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
 import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
 import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
-import PgWire.Connection (Connection, close, connectString, simpleQuery)
+import Data.Word (Word64)
+import PgWire.Connection (Connection (..), close, connectString, simpleQuery)
 import PgWire.Error (HsqlxError (..), throwHsqlx)
 import PgWire.Pool.Config (PoolConfig (..))
 
@@ -39,6 +44,10 @@ data Pool = Pool
   , pWaiters :: TVar (Seq (TMVar Connection))
   , pClosed :: TVar Bool
   , pReaper :: IORef (Async ())
+  , pSharedStmts :: TVar (Map Int ByteString)
+  -- ^ Shared statement cache: hash(SQL) → server-side statement name.
+  -- When connection A prepares a statement, it registers here.
+  -- Connection B can skip Parse if the name is already registered.
   }
 
 data PoolEntry = PoolEntry
@@ -55,6 +64,7 @@ newPool cfg = do
   waiters <- newTVarIO Seq.empty
   closed <- newTVarIO False
   reaperRef <- newIORef (error "reaper not started")
+  sharedStmts <- newTVarIO Map.empty
   let pool =
         Pool
           { pConfig = cfg
@@ -63,6 +73,7 @@ newPool cfg = do
           , pWaiters = waiters
           , pClosed = closed
           , pReaper = reaperRef
+          , pSharedStmts = sharedStmts
           }
   reaper <- async (reaperThread pool)
   writeIORef reaperRef reaper

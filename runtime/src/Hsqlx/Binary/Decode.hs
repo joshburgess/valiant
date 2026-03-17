@@ -6,6 +6,7 @@ module Hsqlx.Binary.Decode
 import Data.Bits (shiftL, (.|.))
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
+import Data.ByteString.Unsafe qualified as BU
 import Data.Int (Int16, Int32, Int64)
 import Data.Text (Text)
 import Data.Text.Encoding qualified as TE
@@ -38,8 +39,8 @@ decodeInt16BE :: ByteString -> Either String Int16
 decodeInt16BE bs
   | BS.length bs /= 2 = Left $ "int16: expected 2 bytes, got " <> show (BS.length bs)
   | otherwise =
-      let b0 = fromIntegral (BS.index bs 0) :: Int16
-          b1 = fromIntegral (BS.index bs 1) :: Int16
+      let b0 = fromIntegral (BU.unsafeIndex bs 0) :: Int16
+          b1 = fromIntegral (BU.unsafeIndex bs 1) :: Int16
        in Right (b0 `shiftL` 8 .|. b1)
 {-# INLINE decodeInt16BE #-}
 
@@ -47,10 +48,10 @@ decodeInt32BE :: ByteString -> Either String Int32
 decodeInt32BE bs
   | BS.length bs /= 4 = Left $ "int32: expected 4 bytes, got " <> show (BS.length bs)
   | otherwise =
-      let b0 = fromIntegral (BS.index bs 0) :: Int32
-          b1 = fromIntegral (BS.index bs 1) :: Int32
-          b2 = fromIntegral (BS.index bs 2) :: Int32
-          b3 = fromIntegral (BS.index bs 3) :: Int32
+      let b0 = fromIntegral (BU.unsafeIndex bs 0) :: Int32
+          b1 = fromIntegral (BU.unsafeIndex bs 1) :: Int32
+          b2 = fromIntegral (BU.unsafeIndex bs 2) :: Int32
+          b3 = fromIntegral (BU.unsafeIndex bs 3) :: Int32
        in Right (b0 `shiftL` 24 .|. b1 `shiftL` 16 .|. b2 `shiftL` 8 .|. b3)
 {-# INLINE decodeInt32BE #-}
 
@@ -58,14 +59,14 @@ decodeInt64BE :: ByteString -> Either String Int64
 decodeInt64BE bs
   | BS.length bs /= 8 = Left $ "int64: expected 8 bytes, got " <> show (BS.length bs)
   | otherwise =
-      let !b0 = fromIntegral (BS.index bs 0) :: Int64
-          !b1 = fromIntegral (BS.index bs 1) :: Int64
-          !b2 = fromIntegral (BS.index bs 2) :: Int64
-          !b3 = fromIntegral (BS.index bs 3) :: Int64
-          !b4 = fromIntegral (BS.index bs 4) :: Int64
-          !b5 = fromIntegral (BS.index bs 5) :: Int64
-          !b6 = fromIntegral (BS.index bs 6) :: Int64
-          !b7 = fromIntegral (BS.index bs 7) :: Int64
+      let !b0 = fromIntegral (BU.unsafeIndex bs 0) :: Int64
+          !b1 = fromIntegral (BU.unsafeIndex bs 1) :: Int64
+          !b2 = fromIntegral (BU.unsafeIndex bs 2) :: Int64
+          !b3 = fromIntegral (BU.unsafeIndex bs 3) :: Int64
+          !b4 = fromIntegral (BU.unsafeIndex bs 4) :: Int64
+          !b5 = fromIntegral (BU.unsafeIndex bs 5) :: Int64
+          !b6 = fromIntegral (BU.unsafeIndex bs 6) :: Int64
+          !b7 = fromIntegral (BU.unsafeIndex bs 7) :: Int64
        in Right (b0 `shiftL` 56 .|. b1 `shiftL` 48 .|. b2 `shiftL` 40 .|. b3 `shiftL` 32
             .|. b4 `shiftL` 24 .|. b5 `shiftL` 16 .|. b6 `shiftL` 8 .|. b7)
 {-# INLINE decodeInt64BE #-}
@@ -83,7 +84,7 @@ decodeWord64BE bs = fromIntegral <$> decodeInt64BE bs
 instance PgDecode Bool where
   pgDecode bs
     | BS.length bs /= 1 = Left "bool: expected 1 byte"
-    | otherwise = Right (BS.index bs 0 /= 0)
+    | otherwise = Right (BU.unsafeIndex bs 0 /= 0)
   {-# INLINE pgDecode #-}
 
 instance PgDecode Int16 where
