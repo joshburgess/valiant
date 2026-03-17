@@ -410,25 +410,6 @@ strictly more powerful than a C callback table.
 
 ---
 
-## High Priority: Performance
-
-### Pinned ByteStrings for socket writes
-
-**Status:** Not implemented.
-
-Our `ByteString`s may be unpinned. GHC's socket send functions need
-pinned memory, causing an implicit copy to pinned memory on every send.
-
-**Impact:** Extra allocation + copy on every socket write.
-
-**Implementation:** Use `Data.ByteString.Internal.create` (which
-allocates pinned) for the write path, or use `mallocBytes` +
-`unsafePackMallocCStringLen` for zero-copy pinned allocation.
-
-**Effort:** Small-medium.
-
----
-
 ## Medium Priority: Features
 
 ### Connection pool optimization
@@ -518,10 +499,9 @@ per-value heap allocation.
 
 ## Recommended iteration order
 
-1. **Pinned ByteStrings** — small, eliminates implicit copy on send
-2. **Connection pool optimization** — medium-large, production necessity
-3. **ReaderT convenience layer** — small, ergonomic win
-4. **GHC plugin 9.10 port** — medium, ecosystem compatibility
-5. **Mock server** — medium-large, enables property-based testing
-6. **Pre-allocated receive buffer** — small, reduces recv allocations
-7. **Conduit integration** — small, streaming ecosystem interop
+1. **Connection pool optimization** — medium-large, production necessity
+2. **ReaderT convenience layer** — small, ergonomic win
+3. **GHC plugin 9.10 port** — medium, ecosystem compatibility
+4. **Mock server** — medium-large, enables property-based testing
+5. **Pre-allocated receive buffer** — small, reduces recv allocations
+6. **Conduit integration** — small, streaming ecosystem interop
