@@ -33,17 +33,20 @@ module Hsqlx.Monad
     -- * Connection access
   , askPool
   , withConnectionM
+  , withResourceTimeoutM
 
     -- * Queries
   , fetchOneM
   , fetchAllM
   , fetchScalarM
   , fetchOneOrThrowM
+  , fetchExistsM
 
     -- * Commands
   , executeM
   , executeReturningM
   , executeBatchM
+  , executeManyM
 
     -- * Pipelined batch reads
   , fetchBatchOneM
@@ -51,7 +54,9 @@ module Hsqlx.Monad
 
     -- * Transactions
   , withTransactionM
+  , withTransaction_M
   , withTransactionLevelM
+  , withReadOnlyTransactionM
 
     -- * Pool management
   , poolStatsM
@@ -61,11 +66,12 @@ module Hsqlx.Monad
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Reader (ReaderT (..), ask)
 import Data.Int (Int64)
-import Hsqlx.Execute (execute, executeBatch, executeReturning, fetchAll, fetchBatchAll, fetchBatchOne, fetchOne, fetchOneOrThrow, fetchScalar)
+import Hsqlx.Execute (execute, executeBatch, executeMany, executeReturning, fetchAll, fetchBatchAll, fetchBatchOne, fetchExists, fetchOne, fetchOneOrThrow, fetchScalar)
 import Hsqlx.Statement (Statement)
-import Hsqlx.Transaction (IsolationLevel, Transaction, withTransaction, withTransactionLevel)
+import Hsqlx.Transaction (IsolationLevel, Transaction, withReadOnlyTransaction, withTransaction, withTransactionLevel, withTransaction_)
 import PgWire.Connection (Connection)
-import PgWire.Pool (Pool, PoolStats, poolStats, resize, withResource)
+import Data.Time (NominalDiffTime)
+import PgWire.Pool (Pool, PoolStats, poolStats, resize, withResource, withResourceTimeout)
 
 -- | A monad that carries a connection 'Pool' implicitly.
 -- @Hsqlx a = ReaderT Pool IO a@.
@@ -89,6 +95,17 @@ withConnectionM f = do
   pool <- ask
   liftIO $ withResource pool f
 {-# INLINE withConnectionM #-}
+
+-- | Like 'withConnectionM' but with a custom acquire timeout.
+--
+-- Overrides 'poolAcquireTimeout' for this single acquisition. Useful when
+-- certain operations can tolerate longer (or shorter) waits than the pool
+-- default.
+withResourceTimeoutM :: NominalDiffTime -> (Connection -> IO a) -> Hsqlx a
+withResourceTimeoutM timeout f = do
+  pool <- ask
+  liftIO $ withResourceTimeout pool timeout f
+{-# INLINE withResourceTimeoutM #-}
 
 ------------------------------------------------------------------------
 -- Queries
@@ -114,6 +131,11 @@ fetchOneOrThrowM :: Statement p r -> p -> Hsqlx r
 fetchOneOrThrowM stmt params = withConnectionM $ \conn -> fetchOneOrThrow conn stmt params
 {-# INLINE fetchOneOrThrowM #-}
 
+-- | Check whether a query returns any rows.
+fetchExistsM :: Statement p r -> p -> Hsqlx Bool
+fetchExistsM stmt params = withConnectionM $ \conn -> fetchExists conn stmt params
+{-# INLINE fetchExistsM #-}
+
 ------------------------------------------------------------------------
 -- Commands
 ------------------------------------------------------------------------
@@ -132,6 +154,12 @@ executeReturningM stmt params = withConnectionM $ \conn -> executeReturning conn
 executeBatchM :: Statement p () -> [p] -> Hsqlx Int64
 executeBatchM stmt paramsList = withConnectionM $ \conn -> executeBatch conn stmt paramsList
 {-# INLINE executeBatchM #-}
+
+-- | Execute a statement once for each parameter set. Returns total rows affected.
+-- Alias for 'executeBatchM' with a more common name.
+executeManyM :: Statement p () -> [p] -> Hsqlx Int64
+executeManyM stmt paramsList = withConnectionM $ \conn -> executeMany conn stmt paramsList
+{-# INLINE executeManyM #-}
 
 ------------------------------------------------------------------------
 -- Pipelined batch reads
@@ -158,12 +186,26 @@ withTransactionM f = do
   liftIO $ withTransaction pool f
 {-# INLINE withTransactionM #-}
 
+-- | Like 'withTransactionM' but discards the return value.
+withTransaction_M :: (Transaction -> IO ()) -> Hsqlx ()
+withTransaction_M f = do
+  pool <- ask
+  liftIO $ withTransaction_ pool f
+{-# INLINE withTransaction_M #-}
+
 -- | Run an action inside a transaction with the given isolation level.
 withTransactionLevelM :: IsolationLevel -> (Transaction -> IO a) -> Hsqlx a
 withTransactionLevelM level f = do
   pool <- ask
   liftIO $ withTransactionLevel level pool f
 {-# INLINE withTransactionLevelM #-}
+
+-- | Run an action inside a READ ONLY transaction.
+withReadOnlyTransactionM :: (Transaction -> IO a) -> Hsqlx a
+withReadOnlyTransactionM f = do
+  pool <- ask
+  liftIO $ withReadOnlyTransaction pool f
+{-# INLINE withReadOnlyTransactionM #-}
 
 ------------------------------------------------------------------------
 -- Pool management

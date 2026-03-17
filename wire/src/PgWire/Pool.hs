@@ -19,11 +19,13 @@ module PgWire.Pool
   , closePool
   , withResource
   , poolStats
+  , poolIsAlive
   , resize
   , retain
   , setPostCreateHook
   , setOnAcquireHook
   , setPreReleaseHook
+  , withResourceTimeout
   ) where
 
 import Control.Concurrent (threadDelay)
@@ -201,6 +203,24 @@ withResource pool action = mask $ \restore -> do
   release pool conn
   pure result
 
+-- | Like 'withResource' but with a custom acquire timeout.
+--
+-- Overrides 'poolAcquireTimeout' for this single acquisition. Useful when
+-- certain operations can tolerate longer (or shorter) waits than the pool
+-- default.
+--
+-- @
+-- -- Wait up to 30 seconds for this particular query
+-- withResourceTimeout pool 30 $ \\conn ->
+--   simpleQuery conn \"SELECT expensive_function()\"
+-- @
+withResourceTimeout :: Pool -> NominalDiffTime -> (Connection -> IO a) -> IO a
+withResourceTimeout pool timeout action = mask $ \restore -> do
+  conn <- acquireWithTimeout pool timeout
+  result <- restore (action conn) `onException` destroyConn pool conn "exception"
+  release pool conn
+  pure result
+
 -- | Get an atomic snapshot of the pool's current statistics.
 --
 -- The returned 'PoolStats' is consistent (all fields read in a single STM
@@ -224,6 +244,13 @@ poolStats pool = atomically $ do
     , psTotalDestroyed = destroyed
     , psTotalTimeouts = timeouts
     }
+
+-- | Check if the pool is still open (not closed).
+--
+-- Returns 'True' if the pool is alive and accepting connections,
+-- 'False' if 'closePool' has been called.
+poolIsAlive :: Pool -> IO Bool
+poolIsAlive pool = not <$> readTVarIO (pClosed pool)
 
 -- | Resize the pool at runtime to a new maximum connection count.
 --
@@ -337,13 +364,16 @@ takeIdle QueueFIFO s = case Seq.viewl s of
   e Seq.:< rest -> Just (e, rest)
 
 acquire :: Pool -> IO Connection
-acquire pool = do
+acquire pool = acquireWithTimeout pool (poolAcquireTimeout (pConfig pool))
+
+acquireWithTimeout :: Pool -> NominalDiffTime -> IO Connection
+acquireWithTimeout pool timeout = do
   act <- atomically (acquireAction pool)
   case act of
     PoolIsClosed -> throwHsqlx PoolClosed
     GotIdle entry -> tryRecycle pool entry
     CreateNew -> createConnection pool
-    MustWait waiter -> waitForConnection pool waiter
+    MustWait waiter -> waitForConnectionWith pool waiter timeout
 
 -- | Try to recycle an idle connection. If it's expired or unhealthy,
 -- destroy it and retry.
@@ -419,9 +449,9 @@ jitteredDeadline cfg now = do
     else pure 0
   pure (addUTCTime (poolMaxLife cfg + offset) now)
 
-waitForConnection :: Pool -> TMVar (Either HsqlxError Connection) -> IO Connection
-waitForConnection pool waiter = do
-  let timeoutMicros = round (poolAcquireTimeout (pConfig pool) * 1000000) :: Int
+waitForConnectionWith :: Pool -> TMVar (Either HsqlxError Connection) -> NominalDiffTime -> IO Connection
+waitForConnectionWith pool waiter timeout = do
+  let timeoutMicros = round (timeout * 1000000) :: Int
   result <- race
     (threadDelay timeoutMicros)
     (atomically $ takeTMVar waiter)
@@ -633,5 +663,5 @@ partitionM :: (a -> IO Bool) -> [a] -> IO ([a], [a])
 partitionM _ [] = pure ([], [])
 partitionM p (x : xs) = do
   b <- p x
-  (ys, zs) <- partitionM p xs
+  (!ys, !zs) <- partitionM p xs
   pure (if b then (x : ys, zs) else (ys, x : zs))

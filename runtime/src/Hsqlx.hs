@@ -51,10 +51,13 @@ module Hsqlx
     -- PostgreSQL extended query protocol with binary format encoding.
   , fetchOne
   , fetchAll
+  , fetchAllWith
   , fetchScalar
   , fetchOneOrThrow
+  , fetchExists
   , execute
   , executeReturning
+  , executeMany
   , executeBatch
   , fetchBatchOne
   , fetchBatchAll
@@ -108,8 +111,10 @@ module Hsqlx
   , newPool
   , closePool
   , withResource
+  , withResourceTimeout
   , PoolStats (..)
   , poolStats
+  , poolIsAlive
   , resize
   , retain
   , setPostCreateHook
@@ -124,7 +129,9 @@ module Hsqlx
   , Transaction (..)
   , IsolationLevel (..)
   , withTransaction
+  , withTransaction_
   , withTransactionLevel
+  , withReadOnlyTransaction
   , withSavepoint
 
     -- * Hsqlx monad (optional convenience)
@@ -134,6 +141,7 @@ module Hsqlx
   , runHsqlx
   , poolStatsM
   , resizeM
+  , withResourceTimeoutM
 
     -- * Cancellation
     -- | Cancel in-flight queries. 'cancelQuery' opens a separate TCP
@@ -217,6 +225,12 @@ module Hsqlx
 
     -- * Binary types
     -- | PostgreSQL types that don't have a standard Haskell equivalent.
+  , PgInet (..)
+  , ipv4
+  , ipv4Host
+  , ipv6
+  , ipv6Host
+  , inetToText
   , PgInterval (..)
   , PgRange (..)
   , RangeBound (..)
@@ -231,14 +245,15 @@ module Hsqlx
 import GHC.Generics (Generic)
 import Hsqlx.Batch (fetchByIds)
 import Hsqlx.Binary.Composite (CompositeField (..))
+import Hsqlx.Binary.Inet (PgInet (..), ipv4, ipv4Host, ipv6, ipv6Host, inetToText)
 import Hsqlx.Binary.Interval (PgInterval (..))
 import Hsqlx.Binary.Range (PgRange (..), RangeBound (..))
 import Hsqlx.Copy (CopyResult (..), copyIn, copyInBinary, copyOut)
-import Hsqlx.Execute (execute, executeBatch, executeReturning, fetchAll, fetchBatchAll, fetchBatchOne, fetchOne, fetchOneOrThrow, fetchScalar, rawExecute, rawFetchAll, rawFetchOne)
+import Hsqlx.Execute (execute, executeBatch, executeMany, executeReturning, fetchAll, fetchAllWith, fetchBatchAll, fetchBatchOne, fetchExists, fetchOne, fetchOneOrThrow, fetchScalar, rawExecute, rawFetchAll, rawFetchOne)
 import Hsqlx.Fold (RowFold (..), executeWithFold)
 import Hsqlx.FromRow (DecodeColumn (..), FromRow (..))
 import Hsqlx.Logging (LogEvent (..), LogLevel (..), Logger, nullLogger, poolLoggerFromLogger, stderrLogger)
-import Hsqlx.Monad (Hsqlx, poolStatsM, resizeM, runHsqlx)
+import Hsqlx.Monad (Hsqlx, poolStatsM, resizeM, runHsqlx, withResourceTimeoutM)
 import Hsqlx.NamedParams (NamedStatement, ToNamedParams (..), mkStatementNamed)
 import Hsqlx.Notify (Notification (..), listen, unlisten, waitForNotification, waitForNotificationTimeout)
 import Hsqlx.Pipeline (Pipeline, pipeFetchOne, pipeFetchAll, pipeFetchScalar, pipeExecute, runPipeline)
@@ -246,9 +261,9 @@ import Hsqlx.Statement (Statement (..), mkStatement, queryFile, queryFileAs)
 import Hsqlx.Streaming (CursorState (..), fetchBatch, withCursor)
 import Hsqlx.ToParams (EncodeField (..), ToParams (..))
 import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
-import Hsqlx.Transaction (IsolationLevel (..), Transaction (..), withSavepoint, withTransaction, withTransactionLevel)
+import Hsqlx.Transaction (IsolationLevel (..), Transaction (..), withReadOnlyTransaction, withSavepoint, withTransaction, withTransactionLevel, withTransaction_)
 import PgWire.Cancel (cancelQuery, withQueryTimeout)
 import PgWire.Connection (Connection, close, connect, connectString, simpleQuery, withConnection)
 import PgWire.Connection.Config (ConnConfig (..), TlsMode (..), defaultConnConfig)
-import PgWire.Pool (Pool, PoolStats (..), closePool, newPool, poolStats, resize, retain, setPostCreateHook, setOnAcquireHook, setPreReleaseHook, withResource)
+import PgWire.Pool (Pool, PoolStats (..), closePool, newPool, poolIsAlive, poolStats, resize, retain, setPostCreateHook, setOnAcquireHook, setPreReleaseHook, withResource, withResourceTimeout)
 import PgWire.Pool.Config (PoolConfig (..), PoolLogger, QueueMode (..), RecyclingMethod (..), defaultPoolConfig, nullPoolLogger)

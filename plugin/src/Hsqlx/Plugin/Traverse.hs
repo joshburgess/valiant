@@ -106,12 +106,15 @@ extractMkStatementCall expr = do
 
 -- | Collect the function and arguments from a left-nested application spine.
 -- (((f a1) a2) a3) → (f, [a1, a2, a3])
+-- Uses reverse-accumulate internally to avoid O(n²) from repeated (++).
 collectArgs :: HsExpr GhcTc -> (HsExpr GhcTc, [LHsExpr GhcTc])
-collectArgs (HsApp _ (L _ f) arg) =
-  let (head', args) = collectArgs f
-   in (head', args ++ [arg])
-collectArgs (XExpr (WrapExpr (HsWrap _ inner))) = collectArgs inner
-collectArgs other = (other, [])
+collectArgs = go []
+  where
+    go !acc (HsApp _ (L _ f) arg) = go (arg : acc) f
+    go !acc (XExpr (WrapExpr (HsWrap _ inner))) = go acc inner
+    go !acc other = (other, acc) -- acc is already in correct order
+    -- because we prepend as we peel from the outside in:
+    -- (((f a1) a2) a3) → go [] expr → go [a3] (f a1 a2) → go [a2,a3] (f a1) → go [a1,a2,a3] f
 
 unLHsExpr :: LHsExpr GhcTc -> HsExpr GhcTc
 unLHsExpr (L _ e) = e

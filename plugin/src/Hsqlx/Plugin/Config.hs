@@ -5,6 +5,7 @@ module Hsqlx.Plugin.Config
   , resolveConfig
   ) where
 
+import Data.List (foldl')
 import System.Environment (lookupEnv)
 
 -- | Plugin configuration parsed from @-fplugin-opt@ flags.
@@ -26,7 +27,7 @@ defaultConfig =
 -- | Parse plugin command-line options.
 -- Options are @key=value@ strings passed via @-fplugin-opt=Hsqlx.Plugin:key=value@.
 parseOptions :: [String] -> PluginConfig
-parseOptions = foldl applyOpt defaultConfig
+parseOptions = foldl' applyOpt defaultConfig
   where
     applyOpt cfg opt = case break (== '=') opt of
       ("sql-dir", '=' : val) -> cfg {pcSqlDir = val}

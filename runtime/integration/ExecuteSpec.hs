@@ -1,8 +1,10 @@
 module ExecuteSpec (spec) where
 
+import Control.Exception (try)
 import Data.Int (Int32, Int64)
 import Data.Text (Text)
 import Hsqlx
+import PgWire.Error (HsqlxError (..))
 import TestSupport
 import Test.Hspec
 
@@ -25,6 +27,16 @@ stmtCount :: Statement () Int64
 stmtCount = mkStatement
   "SELECT count(*) FROM users"
   [] ["count"] "<test>"
+
+stmtInsertReturningId :: Statement (Text, Maybe Text) Int32
+stmtInsertReturningId = mkStatement
+  "INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id"
+  [25, 25] ["id"] "<test>"
+
+stmtInsertMultiReturningId :: Statement () Int32
+stmtInsertMultiReturningId = mkStatement
+  "INSERT INTO users (name, email) VALUES ('X', 'x@test.com'), ('Y', 'y@test.com'), ('Z', 'z@test.com') RETURNING id"
+  [] ["id"] "<test>"
 
 spec :: Spec
 spec = do
@@ -68,3 +80,33 @@ spec = do
         insertTestUsers conn
         count <- fetchScalar conn stmtCount ()
         count `shouldBe` 5
+
+  describe "executeReturning" $ do
+    it "returns row count and decoded rows for single insert" $ do
+      withTestConnection $ \conn -> withSchema conn $ do
+        (n, ids) <- executeReturning conn stmtInsertReturningId ("NewUser", Just "new@example.com")
+        n `shouldBe` 1
+        length ids `shouldBe` 1
+
+    it "returns row count and decoded rows for multi-value insert" $ do
+      withTestConnection $ \conn -> withSchema conn $ do
+        (n, ids) <- executeReturning conn stmtInsertMultiReturningId ()
+        n `shouldBe` 3
+        length ids `shouldBe` 3
+
+  describe "fetchOneOrThrow" $ do
+    it "returns the value for an existing row" $ do
+      withTestConnection $ \conn -> withSchema conn $ do
+        insertTestUsers conn
+        (uid, name, email) <- fetchOneOrThrow conn stmtSelectOne 1
+        name `shouldBe` "Alice"
+        email `shouldBe` Just "alice@example.com"
+        uid `shouldSatisfy` (> 0)
+
+    it "throws on a missing row" $ do
+      withTestConnection $ \conn -> withSchema conn $ do
+        result <- try (fetchOneOrThrow conn stmtSelectOne (-1))
+        case result of
+          Left (DecodeError _) -> pure ()
+          Left err -> expectationFailure $ "Expected DecodeError, got: " <> show err
+          Right _ -> expectationFailure "Expected an exception, but got a result"

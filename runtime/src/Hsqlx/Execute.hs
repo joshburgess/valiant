@@ -14,11 +14,14 @@ module Hsqlx.Execute
   ( -- * Queries
     fetchOne
   , fetchAll
+  , fetchAllWith
   , fetchScalar
   , fetchOneOrThrow
+  , fetchExists
     -- * Commands
   , execute
   , executeReturning
+  , executeMany
     -- * Raw (unchecked) queries
   , rawFetchAll
   , rawFetchOne
@@ -121,6 +124,28 @@ fetchOneOrThrow conn stmt params = do
     Nothing -> throwHsqlx (DecodeError "fetchOneOrThrow: query returned no rows")
     Just val -> pure val
 
+-- | Check whether a query returns any rows. Useful for @EXISTS@-style queries.
+-- More efficient than 'fetchAll' since it does not decode any row data.
+--
+-- @
+-- exists <- fetchExists conn userExistsById 42
+-- @
+fetchExists :: Connection -> Statement p r -> p -> IO Bool
+fetchExists conn stmt params = do
+  rows <- fetchRowsRaw conn stmt params
+  pure (not (null rows))
+
+-- | Like 'fetchAll' but applies a transformation to each decoded row.
+-- Useful for mapping database rows to domain types without an intermediate list.
+--
+-- @
+-- names <- fetchAllWith conn listUsers () userName
+-- @
+fetchAllWith :: Connection -> Statement p r -> p -> (r -> a) -> IO [a]
+fetchAllWith conn stmt params f = do
+  rows <- fetchAll conn stmt params
+  pure (map f rows)
+
 ------------------------------------------------------------------------
 -- Commands
 ------------------------------------------------------------------------
@@ -179,6 +204,16 @@ executeReturning conn stmt params = do
       decoded <- decodeRows (stmtDecode stmt) rawRows
       pure (tagRows tag, decoded)
     _ -> throwHsqlx (ProtocolError "executeReturning: unexpected response type")
+
+-- | Execute a statement once for each parameter set. Returns the total
+-- number of rows affected across all executions. This is an alias for
+-- 'executeBatch' with a more common name (matching postgresql-simple's API).
+--
+-- @
+-- total <- executeMany conn insertUser [(\"Alice\", Nothing), (\"Bob\", Just \"b\@x.com\")]
+-- @
+executeMany :: Connection -> Statement p () -> [p] -> IO Int64
+executeMany = executeBatch
 
 ------------------------------------------------------------------------
 -- Raw (unchecked) queries

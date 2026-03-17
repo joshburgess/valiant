@@ -12,7 +12,9 @@ module Hsqlx.Transaction
   ( Transaction (..)
   , IsolationLevel (..)
   , withTransaction
+  , withTransaction_
   , withTransactionLevel
+  , withReadOnlyTransaction
   , withSavepoint
   ) where
 
@@ -63,6 +65,16 @@ data IsolationLevel
 withTransaction :: Pool -> (Transaction -> IO a) -> IO a
 withTransaction = withTransactionLevel ReadCommitted
 
+-- | Like 'withTransaction' but discards the return value.
+--
+-- @
+-- withTransaction_ pool $ \\tx ->
+--   execute (txConn tx) insertStmt params
+-- @
+withTransaction_ :: Pool -> (Transaction -> IO ()) -> IO ()
+withTransaction_ pool action = withTransaction pool action
+{-# INLINE withTransaction_ #-}
+
 -- | Run an action inside a transaction with the given isolation level.
 --
 -- Behaves like 'withTransaction' but issues @BEGIN ISOLATION LEVEL ...@ with
@@ -72,6 +84,24 @@ withTransactionLevel :: IsolationLevel -> Pool -> (Transaction -> IO a) -> IO a
 withTransactionLevel level pool action =
   withResource pool $ \conn -> mask $ \restore -> do
     _ <- simpleQuery conn (beginStatement level)
+    result <- restore (action (Transaction conn)) `onException` rollback conn
+    _ <- simpleQuery conn "COMMIT"
+    pure result
+
+-- | Run an action inside a @READ ONLY@ transaction. Postgres guarantees
+-- no writes can occur, which enables use of standby replicas.
+--
+-- Uses the default 'ReadCommitted' isolation level. Combine with
+-- 'withTransactionLevel' manually if you need a different level.
+--
+-- @
+-- users <- withReadOnlyTransaction pool $ \\tx ->
+--   fetchAll (txConn tx) listAllUsers ()
+-- @
+withReadOnlyTransaction :: Pool -> (Transaction -> IO a) -> IO a
+withReadOnlyTransaction pool action =
+  withResource pool $ \conn -> mask $ \restore -> do
+    _ <- simpleQuery conn "BEGIN READ ONLY"
     result <- restore (action (Transaction conn)) `onException` rollback conn
     _ <- simpleQuery conn "COMMIT"
     pure result

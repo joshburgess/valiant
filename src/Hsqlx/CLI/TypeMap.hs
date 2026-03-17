@@ -197,6 +197,8 @@ oidMap =
     , (Oid 1184, HaskellType "UTCTime" "Data.Time")
     , (Oid 1186, HaskellType "PgInterval" "Hsqlx")
     , (Oid 1700, HaskellType "Scientific" "Data.Scientific")
+    , (Oid 869, HaskellType "PgInet" "Hsqlx")
+    , (Oid 650, HaskellType "PgInet" "Hsqlx")
     , (Oid 2950, HaskellType "UUID" "Data.UUID")
     , (Oid 3802, HaskellType "Value" "Data.Aeson")
     ]
@@ -220,6 +222,8 @@ oidNameMap =
     , (Oid 1184, "timestamptz")
     , (Oid 1186, "interval")
     , (Oid 1700, "numeric")
+    , (Oid 869, "inet")
+    , (Oid 650, "cidr")
     , (Oid 2950, "uuid")
     , (Oid 3802, "jsonb")
     -- Array types

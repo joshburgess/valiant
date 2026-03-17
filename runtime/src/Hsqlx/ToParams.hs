@@ -75,7 +75,9 @@ instance (EncodeField a) => GToParams (K1 R a) where
   gToParams (K1 a) = V.singleton (encodeField a)
   {-# INLINE gToParams #-}
 
--- Product — concatenate left and right
+-- Product — concatenate left and right.
+-- V.++ is O(n) per call, but with INLINE GHC fuses the chain for small records.
+-- For records with > ~20 fields, a DList-based approach would be better.
 instance (GToParams f, GToParams g) => GToParams (f :*: g) where
   gToParams (l :*: r) = gToParams l V.++ gToParams r
   {-# INLINE gToParams #-}
