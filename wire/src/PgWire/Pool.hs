@@ -45,7 +45,11 @@ import PgWire.Pool.Config (PoolConfig (..), QueueMode (..), RecyclingMethod (..)
 import PgWire.TypeCache (TypeCache, newTypeCache)
 import System.Random (randomRIO)
 
--- | A connection pool.
+-- | A thread-safe connection pool for PostgreSQL.
+--
+-- Manages a bounded set of reusable 'Connection's with idle timeout, max lifetime
+-- (with jitter to avoid thundering-herd reconnects), health checking, and lifecycle hooks.
+-- The pool is safe to share across threads. Use 'newPool' to create and 'closePool' to shut down.
 data Pool = Pool
   { pConfig :: PoolConfig
   , pIdle :: TVar (Seq PoolEntry)
@@ -83,19 +87,33 @@ data PoolEntry = PoolEntry
   , peLastUsed :: IORef UTCTime
   }
 
--- | Snapshot of pool statistics.
+-- | Snapshot of pool statistics at a point in time, obtained via 'poolStats'.
 data PoolStats = PoolStats
   { psIdle :: !Int
+  -- ^ Number of connections currently idle in the pool.
   , psInUse :: !Int
+  -- ^ Number of connections currently checked out by callers.
   , psWaiters :: !Int
+  -- ^ Number of threads blocked waiting to acquire a connection.
   , psMaxSize :: !Int
+  -- ^ Current maximum pool size (may differ from initial config after 'resize').
   , psTotalCreated :: !Int
+  -- ^ Cumulative count of connections created since pool creation.
   , psTotalDestroyed :: !Int
+  -- ^ Cumulative count of connections destroyed since pool creation.
   , psTotalTimeouts :: !Int
+  -- ^ Cumulative count of acquire attempts that timed out.
   }
   deriving stock (Show, Eq)
 
--- | Create a new connection pool.
+-- | Create a new connection pool from the given configuration.
+--
+-- Starts background threads for reaping idle\/expired connections and (if
+-- @poolMinIdle > 0@) warming the pool to maintain a minimum number of idle
+-- connections. No connections are created eagerly; the first 'withResource'
+-- call triggers the initial connection.
+--
+-- Call 'closePool' when the pool is no longer needed to release all resources.
 newPool :: PoolConfig -> IO Pool
 newPool cfg = do
   idle <- newTVarIO Seq.empty
@@ -140,8 +158,12 @@ newPool cfg = do
     writeIORef warmerRef (Just w)
   pure pool
 
--- | Close the pool and all connections.
--- Wakes all blocked waiters with 'PoolClosed'.
+-- | Close the pool, releasing all resources.
+--
+-- Closes every idle connection, cancels background threads (reaper and warmer),
+-- and wakes all blocked waiters with a 'PoolClosed' error. After this call,
+-- any subsequent 'withResource' will throw 'PoolClosed'. Idempotent: calling
+-- 'closePool' on an already-closed pool is a no-op for the connection teardown.
 closePool :: Pool -> IO ()
 closePool pool = do
   -- Atomically: mark closed, drain idle, drain waiters
@@ -162,7 +184,16 @@ closePool pool = do
   -- Close all idle connections (properly tracked)
   mapM_ (destroyEntry pool "pool closed") entries
 
--- | Acquire a connection, run an action, and return the connection.
+-- | Acquire a connection from the pool, run an action, and return the connection.
+--
+-- The connection is guaranteed to be returned to the pool (or destroyed) even
+-- if the action throws an exception. Uses 'mask' internally so the acquire and
+-- release cannot be interrupted by async exceptions.
+--
+-- @
+-- withResource pool $ \\conn ->
+--   simpleQuery conn \"SELECT 1\"
+-- @
 withResource :: Pool -> (Connection -> IO a) -> IO a
 withResource pool action = mask $ \restore -> do
   conn <- acquire pool
@@ -170,7 +201,11 @@ withResource pool action = mask $ \restore -> do
   release pool conn
   pure result
 
--- | Get a snapshot of the pool's statistics.
+-- | Get an atomic snapshot of the pool's current statistics.
+--
+-- The returned 'PoolStats' is consistent (all fields read in a single STM
+-- transaction) but represents a point-in-time view that may be stale by
+-- the time you inspect it.
 poolStats :: Pool -> IO PoolStats
 poolStats pool = atomically $ do
   idle <- Seq.length <$> readTVar (pIdle pool)
@@ -190,8 +225,12 @@ poolStats pool = atomically $ do
     , psTotalTimeouts = timeouts
     }
 
--- | Resize the pool at runtime. If shrinking, excess idle connections are
--- closed immediately. In-use connections finish naturally.
+-- | Resize the pool at runtime to a new maximum connection count.
+--
+-- If shrinking, excess idle connections are closed immediately. In-use
+-- connections are not interrupted and will finish naturally; they are simply
+-- not returned to the pool once the count exceeds the new limit. If growing,
+-- new connections are created on demand by subsequent 'withResource' calls.
 resize :: Pool -> Int -> IO ()
 resize pool newSize = do
   (oldSize, excess) <- atomically $ do
@@ -209,9 +248,16 @@ resize pool newSize = do
   logPool pool "info" ("resized from " <> BS8.pack (show oldSize) <> " to " <> BS8.pack (show newSize))
   mapM_ (destroyEntry pool "resize") excess
 
--- | Filter idle connections. Pulls all idle connections, applies the
--- predicate, returns matching ones to the pool, destroys the rest.
--- Useful for connection string rotation or schema changes.
+-- | Filter idle connections, keeping only those that satisfy the predicate.
+--
+-- Atomically drains the idle queue, applies the predicate to each connection
+-- in IO, returns matching ones to the pool, and destroys the rest. Useful for
+-- invalidating connections after a credential rotation or schema migration.
+--
+-- @
+-- -- Drop all connections that were created before the migration
+-- retain pool (\\conn -> isPostMigration conn)
+-- @
 retain :: Pool -> (Connection -> IO Bool) -> IO ()
 retain pool predicate = do
   entries <- atomically $ do
@@ -222,15 +268,27 @@ retain pool predicate = do
   atomically $ modifyTVar' (pIdle pool) (Seq.fromList kept Seq.><)
   mapM_ (destroyEntry pool "retain") dropped
 
--- | Set a hook called after a new connection is created.
+-- | Set a hook called immediately after a new connection is created.
+--
+-- Useful for running session-level setup such as @SET search_path@ or
+-- @SET statement_timeout@. If the hook throws, the exception is silently
+-- caught and the connection is still placed in the pool.
 setPostCreateHook :: Pool -> (Connection -> IO ()) -> IO ()
 setPostCreateHook pool = writeIORef (pOnCreate pool)
 
--- | Set a hook called when a connection is handed to the caller.
+-- | Set a hook called each time a connection is handed out to a caller via 'withResource'.
+--
+-- Runs after any recycling\/health checks have passed. If the hook throws, the
+-- exception is silently caught and the connection is still provided.
 setOnAcquireHook :: Pool -> (Connection -> IO ()) -> IO ()
 setOnAcquireHook pool = writeIORef (pOnAcquire pool)
 
 -- | Set a hook called before a connection is returned to the idle pool.
+--
+-- Runs after the caller's action completes and before the connection is placed
+-- back in the idle queue or delivered to a waiting thread. Useful for cleanup
+-- such as @RESET ALL@ or @DISCARD TEMP@. If the hook throws, the exception is
+-- silently caught.
 setPreReleaseHook :: Pool -> (Connection -> IO ()) -> IO ()
 setPreReleaseHook pool = writeIORef (pOnRelease pool)
 

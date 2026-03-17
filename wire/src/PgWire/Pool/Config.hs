@@ -38,13 +38,27 @@ type PoolLogger = ByteString -> ByteString -> IO ()
 nullPoolLogger :: PoolLogger
 nullPoolLogger _ _ = pure ()
 
--- | Configuration for a connection pool.
+-- | Configuration for a connection pool. Use 'defaultPoolConfig' and
+-- override the fields you need:
+--
+-- @
+-- pool <- 'PgWire.Pool.newPool' defaultPoolConfig
+--   { poolConnString = \"postgres:\/\/user:pass\@localhost:5432\/mydb\"
+--   , poolSize = 20
+--   }
+-- @
 data PoolConfig = PoolConfig
   { poolConnString :: ByteString
+  -- ^ PostgreSQL connection string. Required.
   , poolSize :: !Int
+  -- ^ Maximum number of connections. Default: 10.
   , poolIdleTime :: !NominalDiffTime
+  -- ^ Close idle connections after this duration. Default: 600s (10 min).
   , poolMaxLife :: !NominalDiffTime
+  -- ^ Close connections after this total lifetime. Default: 3600s (1 hour).
   , poolAcquireTimeout :: !NominalDiffTime
+  -- ^ Maximum time to wait for a connection. Throws 'PgWire.Error.PoolTimeout'
+  -- if exceeded. Default: 10s.
   , poolMinIdle :: !Int
   -- ^ Minimum idle connections to maintain. A background warmer thread
   -- creates connections to fill the deficit. Default: 0 (no warming).
@@ -83,6 +97,8 @@ instance Show PoolConfig where
     , ",poolLogger=<function>}"
     ]
 
+-- | Sensible defaults: 10 connections, 10-minute idle timeout, 1-hour max life,
+-- 10-second acquire timeout, 'RecycleFast', 'QueueLIFO', no warming, no logging.
 defaultPoolConfig :: PoolConfig
 defaultPoolConfig =
   PoolConfig

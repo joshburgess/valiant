@@ -41,7 +41,8 @@ import Hsqlx.Statement (Statement (..))
 import PgWire.Wire (WireConn, recvBackendMsg, sendFrontendMsg, sendFrontendMsgs)
 import System.IO.Unsafe (unsafePerformIO)
 
--- | State of an open cursor.
+-- | State of an open cursor, valid only within the 'withCursor' callback.
+-- Do not retain references to this value outside the callback scope.
 data CursorState = CursorState
   { csName :: ByteString
   -- ^ The cursor name on the server.

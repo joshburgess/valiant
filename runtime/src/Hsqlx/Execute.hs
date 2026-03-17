@@ -62,7 +62,13 @@ binaryFmtVec = V.singleton BinaryFormat
 -- Queries
 ------------------------------------------------------------------------
 
--- | Fetch zero or one row. Returns 'Nothing' if the query produces no results.
+-- | Fetch zero or one row from a typed 'Statement'.
+-- Returns 'Nothing' if the query produces no results; if multiple rows are
+-- returned, only the first is used.
+--
+-- @
+-- mUser <- fetchOne conn findById 42
+-- @
 fetchOne :: Connection -> Statement p r -> p -> IO (Maybe r)
 fetchOne conn stmt params = do
   rows <- fetchRowsRaw conn stmt params
@@ -73,15 +79,22 @@ fetchOne conn stmt params = do
       Right val -> pure (Just val)
 
 -- | Fetch all result rows as a list.
+-- Decodes every row eagerly; for large result sets consider streaming instead.
 --
--- For large result sets, consider 'Hsqlx.Streaming.withCursor' instead.
+-- @
+-- users <- fetchAll conn listAllUsers ()
+-- @
 fetchAll :: Connection -> Statement p r -> p -> IO [r]
 fetchAll conn stmt params = do
   rows <- fetchRowsRaw conn stmt params
   decodeRows (stmtDecode stmt) rows
 
--- | Fetch a single scalar value. Throws 'DecodeError' if the query
--- returns zero or more than one row.
+-- | Fetch exactly one row and decode it as a scalar value.
+-- Throws 'DecodeError' if the query returns zero rows or more than one row.
+--
+-- @
+-- n <- fetchScalar conn countUsers ()
+-- @
 fetchScalar :: Connection -> Statement p r -> p -> IO r
 fetchScalar conn stmt params = do
   rows <- fetchRowsRaw conn stmt params
@@ -96,8 +109,13 @@ fetchScalar conn stmt params = do
 -- Commands
 ------------------------------------------------------------------------
 
--- | Execute a command (INSERT\/UPDATE\/DELETE). Returns the number of
--- rows affected.
+-- | Execute a command (INSERT\/UPDATE\/DELETE) and return the number of
+-- rows affected. The statement result type is fixed to @()@ since no
+-- rows are decoded.
+--
+-- @
+-- n <- execute conn insertUser ("Alice", Just "alice\@example.com")
+-- @
 execute :: Connection -> Statement p () -> p -> IO Int64
 execute conn stmt params = do
   (name, needsParse) <- lookupOrAllocStmt conn stmt
@@ -121,14 +139,13 @@ execute conn stmt params = do
 -- Raw (unchecked) queries
 ------------------------------------------------------------------------
 
--- | Execute a raw SQL query and return all rows as untyped vectors.
--- Uses the extended query protocol with binary-encoded parameters but
--- no compile-time type checking. This is the escape hatch for dynamic
--- SQL, admin commands, or queries that don't fit the 'Statement' model.
+-- | Execute a raw SQL query and return all rows as untyped column vectors.
+-- This is the escape hatch for dynamic SQL or queries that don't fit the
+-- 'Statement' model. No compile-time type checking is performed.
 --
 -- Parameters are passed as pre-encoded binary 'ByteString' values (or
--- 'Nothing' for NULL). Parameter OIDs tell Postgres how to interpret them.
--- Use OID 0 to let Postgres infer the type.
+-- 'Nothing' for NULL). Parameter OIDs tell Postgres how to interpret them;
+-- use OID 0 to let Postgres infer the type.
 --
 -- @
 -- rows <- rawFetchAll conn
@@ -163,7 +180,9 @@ rawFetchAll conn sql oids params = do
       pure rows
     _ -> throwHsqlx (ProtocolError "rawFetchAll: unexpected response type")
 
--- | Execute a raw SQL query and return zero or one row.
+-- | Execute a raw SQL query and return the first row, or 'Nothing' if the
+-- query produces no results. Like 'rawFetchAll' but discards all rows after
+-- the first.
 rawFetchOne
   :: Connection
   -> ByteString
@@ -179,8 +198,9 @@ rawFetchOne conn sql oids params = do
     [] -> pure Nothing
     (row : _) -> pure (Just row)
 
--- | Execute a raw SQL command (INSERT\/UPDATE\/DELETE) and return
--- the number of rows affected.
+-- | Execute a raw SQL command (INSERT\/UPDATE\/DELETE) and return the number
+-- of rows affected. The raw counterpart of 'execute', with no compile-time
+-- type checking.
 rawExecute
   :: Connection
   -> ByteString
@@ -224,13 +244,16 @@ lookupOrAllocRaw conn sql = do
 -- Pipelined batch execution
 ------------------------------------------------------------------------
 
--- | Execute a batch of commands using pipeline mode.
+-- | Execute a batch of commands using pipeline mode, returning the total
+-- number of rows affected. All Bind+Execute pairs share a single Sync,
+-- eliminating per-item round-trip overhead.
 --
--- Sends all Bind+Execute messages with a single Sync at the end,
--- eliminating per-row round-trip overhead. Returns total rows affected.
+-- For batches larger than 256 items, automatically switches to streaming
+-- mode (exclusive wire access, chunked sends) to bound memory usage.
 --
--- For batches larger than 256 items, switches to streaming mode
--- (exclusive wire access, chunked sends) to bound memory usage.
+-- @
+-- total <- executeBatch conn insertUser [("Alice", Nothing), ("Bob", Just "b\@x.com")]
+-- @
 executeBatch :: Connection -> Statement p () -> [p] -> IO Int64
 executeBatch _ _ [] = pure 0
 executeBatch conn stmt paramsList = do
@@ -264,7 +287,14 @@ executeBatch conn stmt paramsList = do
       when needsParse $ cacheStmt conn (stmtSQL stmt) name
       pure total
 
--- | Fetch zero or one row for each parameter set, pipelined.
+-- | Fetch zero or one row for each parameter set, pipelined into a single
+-- round trip. Returns a list of results parallel to the input list, where
+-- each element is 'Nothing' if that particular query returned no rows.
+--
+-- @
+-- results <- fetchBatchOne conn findById [1, 2, 3]
+-- -- results :: [Maybe User]
+-- @
 fetchBatchOne :: Connection -> Statement p r -> [p] -> IO [Maybe r]
 fetchBatchOne _ _ [] = pure []
 fetchBatchOne conn stmt paramsList = do
@@ -288,7 +318,13 @@ fetchBatchOne conn stmt paramsList = do
           Right val -> pure (Just val)) results
     _ -> throwHsqlx (ProtocolError "fetchBatchOne: unexpected response type")
 
--- | Fetch all rows for each parameter set, pipelined.
+-- | Fetch all rows for each parameter set, pipelined into a single round
+-- trip. Returns a list of result lists parallel to the input list.
+--
+-- @
+-- results <- fetchBatchAll conn listPostsByUser [1, 2, 3]
+-- -- results :: [[Post]]
+-- @
 fetchBatchAll :: Connection -> Statement p r -> [p] -> IO [[r]]
 fetchBatchAll _ _ [] = pure []
 fetchBatchAll conn stmt paramsList = do

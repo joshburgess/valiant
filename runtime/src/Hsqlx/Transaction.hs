@@ -25,21 +25,49 @@ import PgWire.Connection (Connection, simpleQuery)
 import PgWire.Pool (Pool, withResource)
 import System.IO.Unsafe (unsafePerformIO)
 
--- | A database transaction. Wraps a 'Connection'.
-newtype Transaction = Transaction {txConn :: Connection}
+-- | A database transaction handle. Wraps a 'Connection' that has an active
+-- @BEGIN@ block. Use 'txConn' to obtain the underlying connection for
+-- executing queries within the transaction.
+newtype Transaction = Transaction
+  { txConn :: Connection
+  -- ^ The underlying connection with an active transaction.
+  }
 
--- | Transaction isolation level.
+-- | PostgreSQL transaction isolation level.
+--
+-- See the <https://www.postgresql.org/docs/current/transaction-iso.html PostgreSQL documentation>
+-- for the semantics of each level.
 data IsolationLevel
   = ReadCommitted
+  -- ^ The default. Each statement sees a snapshot as of the start of that statement.
   | RepeatableRead
+  -- ^ All statements in the transaction see a snapshot as of the first non-transaction-control
+  -- statement. Throws a serialization error on write conflicts.
   | Serializable
+  -- ^ The strictest level. Transactions behave as if executed sequentially.
+  -- Throws a serialization error on detected conflicts.
   deriving stock (Show, Eq)
 
--- | Run an action inside a transaction with default isolation (READ COMMITTED).
+-- | Run an action inside a transaction with default isolation ('ReadCommitted').
+--
+-- Acquires a connection from the pool, issues @BEGIN@, runs the action, and
+-- commits. If the action throws an exception, the transaction is rolled back
+-- and the exception is re-raised. The connection is always returned to the pool.
+--
+-- @
+-- withTransaction pool $ \\tx -> do
+--   execute (txConn tx) insertStmt params
+--   execute (txConn tx) updateStmt params
+-- -- Auto-committed here, or rolled back on exception.
+-- @
 withTransaction :: Pool -> (Transaction -> IO a) -> IO a
 withTransaction = withTransactionLevel ReadCommitted
 
 -- | Run an action inside a transaction with the given isolation level.
+--
+-- Behaves like 'withTransaction' but issues @BEGIN ISOLATION LEVEL ...@ with
+-- the specified level. Uses 'mask' to ensure the @BEGIN@\/@COMMIT@\/@ROLLBACK@
+-- sequence cannot be interrupted by async exceptions.
 withTransactionLevel :: IsolationLevel -> Pool -> (Transaction -> IO a) -> IO a
 withTransactionLevel level pool action =
   withResource pool $ \conn -> mask $ \restore -> do

@@ -1,6 +1,11 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
+-- | Encode Haskell values into PostgreSQL binary parameter format.
+--
+-- 'ToParams' encodes query parameter tuples, while 'EncodeField' handles
+-- individual fields. @Maybe a@ encodes as SQL NULL when @Nothing@.
+-- Instances are provided for @()@, single values, and tuples up to 6.
 module Hsqlx.ToParams
   ( ToParams (..)
   , EncodeField (..)

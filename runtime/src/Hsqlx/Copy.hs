@@ -27,9 +27,10 @@ import PgWire.Protocol.Backend
 import PgWire.Protocol.Frontend
 import PgWire.Wire (WireConn, recvBackendMsg, sendFrontendMsg)
 
--- | Result of a COPY IN operation.
+-- | Result of a COPY operation, containing the number of rows transferred.
 data CopyResult = CopyResult
   { copyRows :: Int64
+  -- ^ Number of rows copied, as reported by the server's @CommandComplete@ tag.
   }
   deriving stock (Show, Eq)
 

@@ -21,21 +21,28 @@ import Data.Int (Int32)
 import PgWire.Async (AsyncWireConn (..))
 import PgWire.Connection (Connection (..), simpleQuery)
 
--- | A notification received from PostgreSQL.
+-- | A notification received from PostgreSQL via @NOTIFY@ or @pg_notify()@.
 data Notification = Notification
   { notifPid :: Int32
+  -- ^ Process ID of the notifying backend.
   , notifChannel :: ByteString
+  -- ^ Channel name the notification was sent on.
   , notifPayload :: ByteString
+  -- ^ Optional payload string (empty if none was sent).
   }
   deriving stock (Show, Eq)
 
--- | Subscribe to a channel.
+-- | Subscribe to a PostgreSQL notification channel by issuing @LISTEN@.
+-- The channel name is automatically quoted as an identifier.
+-- Use 'waitForNotification' or 'waitForNotificationTimeout' to receive
+-- notifications after subscribing.
 listen :: Connection -> ByteString -> IO ()
 listen conn channel = do
   _ <- simpleQuery conn ("LISTEN " <> quoteIdent channel)
   pure ()
 
--- | Unsubscribe from a channel.
+-- | Unsubscribe from a PostgreSQL notification channel by issuing @UNLISTEN@.
+-- The channel name is automatically quoted as an identifier.
 unlisten :: Connection -> ByteString -> IO ()
 unlisten conn channel = do
   _ <- simpleQuery conn ("UNLISTEN " <> quoteIdent channel)

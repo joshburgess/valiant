@@ -87,7 +87,10 @@ pipeFetchScalar stmt params = QueryP stmt params $ \rows ->
     _ -> throwHsqlx (DecodeError "pipeFetchScalar: more than one row")
 {-# INLINE pipeFetchScalar #-}
 
--- | Pipeline a command (INSERT/UPDATE/DELETE) that returns rows affected.
+-- | Pipeline a command (INSERT\/UPDATE\/DELETE).
+-- Always returns 0 because individual command tags are not tracked in the
+-- pipeline collector. Use 'Hsqlx.Execute.execute' outside a pipeline if you
+-- need the actual rows-affected count.
 pipeExecute :: Statement p () -> p -> Pipeline Int64
 pipeExecute stmt params = QueryP stmt params $ \_ ->
   -- The row count comes from CommandComplete, not DataRow.
