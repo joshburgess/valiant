@@ -33,7 +33,9 @@ module Hsqlx.NamedParams
 
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
+import Data.List (intercalate)
 import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Vector (Vector)
@@ -132,19 +134,41 @@ mkStatementNamed sqlStr oids colNames paramNames path =
     }
 
 -- | Build the encoder that reorders named params to positional order.
+-- Validates at first use that all SQL param names have matching record
+-- fields and vice versa, with clear error messages on mismatch.
 encodeNamed :: (ToNamedParams p) => [Text] -> p -> Vector (Maybe ByteString)
 encodeNamed paramNames p =
   let pairs = toNamedParamList p
       pairMap = Map.fromList pairs
+      expectedNames = Set.fromList paramNames
+      actualNames = Set.fromList (map fst pairs)
+      missing = Set.toList (Set.difference expectedNames actualNames)
+      extra = Set.toList (Set.difference actualNames expectedNames)
       n = length paramNames
-      lookupOrError name = case Map.lookup name pairMap of
-        Just val -> val
-        Nothing ->
-          error $
-            "hsqlx: named parameter :"
-              <> T.unpack name
-              <> " has no matching field in the record. "
-              <> "Available fields: "
-              <> show (map fst pairs)
-   in V.fromListN n (map lookupOrError paramNames)
+   in case (missing, extra) of
+        ([], []) ->
+          V.fromListN n (map (\name -> Map.findWithDefault Nothing name pairMap) paramNames)
+        _ ->
+          error $ unlines $ filter (not . null) $ concat
+            [ [ "hsqlx: named parameter mismatch"
+              , ""
+              , "  SQL parameters:   " <> showNames paramNames
+              , "  Record fields:    " <> showNames (map fst pairs)
+              ]
+            , if null missing then []
+              else [ ""
+                   , "  Missing fields (SQL expects these but the record doesn't have them):"
+                   , "    " <> intercalate ", " (map (\n' -> ":" <> T.unpack n') missing)
+                   ]
+            , if null extra then []
+              else [ ""
+                   , "  Extra fields (record has these but the SQL doesn't use them):"
+                   , "    " <> intercalate ", " (map T.unpack extra)
+                   , ""
+                   , "  Hint: remove unused fields from the record, or add"
+                   , "  corresponding :name parameters to the SQL query."
+                   ]
+            ]
+  where
+    showNames ns = intercalate ", " (map T.unpack ns)
 {-# INLINE encodeNamed #-}
