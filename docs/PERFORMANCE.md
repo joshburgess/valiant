@@ -69,6 +69,50 @@ updates due to its per-query monad stack cost.
 | UUID | — | — |
 | Int32 array (1000 elems) | 66 μs | 46 μs |
 
+### Libraries not benchmarked
+
+We considered benchmarking additional libraries but concluded the results
+would not provide new information:
+
+**rel8** ([hackage](https://hackage.haskell.org/package/rel8)) is a
+type-safe query builder that generates SQL from a Haskell DSL. It builds
+entirely on hasql — every rel8 query goes through `Hasql.Connection.use`
+→ `Hasql.Session` → libpq. The only thing rel8 adds is Haskell-side
+query construction (building the SQL string). Its execution performance
+is therefore hasql's numbers plus a few microseconds of DSL evaluation.
+Since we already benchmark hasql directly, rel8 can only be equal or
+slower at runtime.
+
+**postgresql-typed** ([hackage](https://hackage.haskell.org/package/postgresql-typed))
+is the closest conceptual competitor to hsqlx — it validates SQL at
+compile time using Template Haskell. However, at runtime it uses
+`postgresql-libpq` (the same C FFI as hasql and postgresql-simple),
+so its execution numbers would be roughly equal to those libraries.
+It also requires a live PostgreSQL connection at compile time (the TH
+splices connect to the database during compilation), which makes
+benchmark integration impractical. The interesting comparison with
+postgresql-typed is architectural, not performance:
+
+| | hsqlx | postgresql-typed |
+|---|---|---|
+| Compile-time mechanism | GHC source plugin | Template Haskell |
+| DB at compile time | No (separate `hsqlx prepare` step) | Yes (TH connects during compilation) |
+| Offline builds | Yes (`.hsqlx/` cache) | No |
+| Runtime driver | Pure Haskell (pg-wire) | libpq FFI |
+| CI friendly | Yes (`hsqlx check`, no DB needed) | Requires DB in CI build |
+
+**esqueleto** ([hackage](https://hackage.haskell.org/package/esqueleto))
+is a type-safe SQL DSL built on persistent. It uses the same
+`persistent` `SqlBackend` and `runSqlPool` execution path — esqueleto's
+overhead is in query construction, not execution. The persistent
+benchmarks already capture the runtime cost.
+
+The fundamental reason these libraries cannot match hsqlx on reads is
+that they all use libpq (C FFI) for the wire protocol, while hsqlx
+implements the protocol in pure Haskell with binary format decoding
+directly from the network buffer. No library built on libpq can avoid
+the FFI marshaling overhead that hsqlx eliminates.
+
 ---
 
 ## Why hsqlx is fast
