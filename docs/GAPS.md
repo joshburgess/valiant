@@ -439,7 +439,7 @@ allocates pinned) for the write path, or use `mallocBytes` +
 configurable min/max connections, connection warm-up, better metrics
 and observability, stricter resource lifecycle management.
 
-**Inspiration:** `deadpool-postgres` (Haskell) for API design and
+**Inspiration:** `deadpool-postgres` (Rust) for API design and
 lifecycle management patterns.
 
 **Effort:** Medium-large.
