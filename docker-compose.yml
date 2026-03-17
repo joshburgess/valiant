@@ -1,0 +1,44 @@
+# docker-compose.yml — Postgres for hsqlx tests and benchmarks.
+#
+# Usage:
+#   docker compose up -d
+#   export DATABASE_URL="postgres://hsqlx_test:hsqlx_test@localhost:5433/hsqlx_test"
+#   cabal test hsqlx-integration
+#   cabal bench hsqlx-bench -- +RTS -N -RTS
+#   docker compose down
+#
+# Or use the helper script:
+#   eval $(scripts/pg-setup.sh)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hsqlx-test-pg
+    ports:
+      - "${HSQLX_TEST_PORT:-5433}:5432"
+    environment:
+      POSTGRES_USER: hsqlx_test
+      POSTGRES_PASSWORD: hsqlx_test
+      POSTGRES_DB: hsqlx_test
+    # Tuned for benchmark throughput, not durability
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - work_mem=64MB
+      - -c
+      - synchronous_commit=off
+      - -c
+      - fsync=off
+      - -c
+      - full_page_writes=off
+      - -c
+      - max_connections=200
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hsqlx_test"]
+      interval: 1s
+      timeout: 5s
+      retries: 30

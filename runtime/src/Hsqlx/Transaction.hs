@@ -21,7 +21,7 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
 import Data.Word (Word64)
-import PgWire.Connection (Connection (..), simpleQuery)
+import PgWire.Connection (Connection, simpleQuery)
 import PgWire.Pool (Pool, withResource)
 import System.IO.Unsafe (unsafePerformIO)
 

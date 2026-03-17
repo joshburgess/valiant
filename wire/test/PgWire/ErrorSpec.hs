@@ -1,6 +1,6 @@
 module PgWire.ErrorSpec (spec) where
 
-import Control.Exception (catch, throwIO)
+import Control.Exception (catch)
 import PgWire.Error
 import PgWire.Protocol.Backend (PgError (..))
 import Test.Hspec
@@ -42,11 +42,11 @@ spec = do
       action `shouldThrow` (== ConnectionError "test")
 
     it "can be caught with specific pattern" $ do
-      result <- (throwHsqlx PoolTimeout >> pure "no") `catch` \e ->
+      result <- (throwHsqlx PoolTimeout >> pure "no") `catch` \(e :: HsqlxError) ->
         case e of
           PoolTimeout -> pure "caught"
           _ -> pure "wrong"
-      result `shouldBe` "caught"
+      result `shouldBe` ("caught" :: String)
 
   describe "Eq instance" $ do
     it "equal errors are equal" $

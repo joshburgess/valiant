@@ -1,4 +1,8 @@
 -- | LISTEN/NOTIFY support for PostgreSQL asynchronous notifications.
+--
+-- Notifications are dispatched by the reader thread as they arrive,
+-- calling the registered handler inline. 'waitForNotification' blocks
+-- the caller by registering a one-shot callback.
 module Hsqlx.Notify
   ( Notification (..)
   , listen
@@ -9,13 +13,13 @@ module Hsqlx.Notify
 
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (race)
+import Control.Concurrent.MVar
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
+import Data.IORef
 import Data.Int (Int32)
+import PgWire.Async (AsyncWireConn (..))
 import PgWire.Connection (Connection (..), simpleQuery)
-import PgWire.Error (HsqlxError (..), throwHsqlx)
-import PgWire.Protocol.Backend
-import PgWire.Wire (recvBackendMsg)
 
 -- | A notification received from PostgreSQL.
 data Notification = Notification
@@ -38,35 +42,43 @@ unlisten conn channel = do
   pure ()
 
 -- | Block until a notification arrives on any subscribed channel.
+--
+-- Registers a one-shot handler on the connection's notification callback.
+-- The reader thread will fill the MVar when a NotificationResponse arrives.
 waitForNotification :: Connection -> IO Notification
 waitForNotification conn = do
-  -- Send an empty query to flush any pending notifications
+  notifVar <- newEmptyMVar
+  installNotifyHandler conn notifVar
+  -- Send an empty query to flush any pending notifications from the server
   _ <- simpleQuery conn ""
-  pollNotification conn
+  takeMVar notifVar
 
 -- | Wait for a notification with a timeout (in seconds).
 -- Returns 'Nothing' if the timeout expires.
 waitForNotificationTimeout :: Connection -> Double -> IO (Maybe Notification)
 waitForNotificationTimeout conn seconds = do
+  notifVar <- newEmptyMVar
+  installNotifyHandler conn notifVar
   _ <- simpleQuery conn ""
   let micros = round (seconds * 1000000) :: Int
-  result <- race (threadDelay micros) (pollNotification conn)
+  result <- race (threadDelay micros) (takeMVar notifVar)
+  -- Restore default handler regardless of outcome
+  writeIORef (awcNotifyHandler (connAsync conn)) (\_ _ _ -> pure ())
   pure $ case result of
     Left () -> Nothing
     Right n -> Just n
 
--- | Poll the connection for notification messages, skipping other async
--- messages (ParameterStatus, NoticeResponse).
-pollNotification :: Connection -> IO Notification
-pollNotification conn = do
-  msg <- recvBackendMsg (connWire conn)
-  case msg of
-    NotificationResponse pid channel payload ->
-      pure (Notification pid channel payload)
-    ParameterStatus _ _ -> pollNotification conn
-    NoticeResponse _ -> pollNotification conn
-    other ->
-      throwHsqlx (ProtocolError ("Unexpected while waiting for notification: " <> BS8.pack (show other)))
+-- Internal ------------------------------------------------------------------
+
+-- | Install a one-shot notification handler that fills the given MVar.
+installNotifyHandler :: Connection -> MVar Notification -> IO ()
+installNotifyHandler conn notifVar = do
+  let handler pid channel payload = do
+        let notif = Notification pid channel payload
+        _ <- tryPutMVar notifVar notif
+        -- Restore the default no-op handler after delivery
+        writeIORef (awcNotifyHandler (connAsync conn)) (\_ _ _ -> pure ())
+  writeIORef (awcNotifyHandler (connAsync conn)) handler
 
 -- | Simple identifier quoting (double-quote).
 quoteIdent :: ByteString -> ByteString

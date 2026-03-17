@@ -45,6 +45,10 @@ data CacheParam = CacheParam
   , cpPgTypeName :: Text
   , cpHaskellType :: Text
   , cpHaskellModule :: Text
+  , cpPgTypeCategory :: Maybe Text
+  -- ^ @\"enum\"@, @\"domain\"@, @\"range\"@, etc. 'Nothing' for built-in types.
+  , cpPgEnumLabels :: Maybe [Text]
+  -- ^ Enum labels from @pg_enum@, if this is an enum type.
   }
   deriving stock (Show, Eq)
 
@@ -57,6 +61,10 @@ data CacheColumn = CacheColumn
   , ccHaskellModule :: Text
   , ccSourceTableOid :: Maybe Word32
   , ccSourceColumnNum :: Maybe Int
+  , ccPgTypeCategory :: Maybe Text
+  -- ^ @\"enum\"@, @\"domain\"@, @\"range\"@, etc. 'Nothing' for built-in types.
+  , ccPgEnumLabels :: Maybe [Text]
+  -- ^ Enum labels from @pg_enum@, if this is an enum type.
   }
   deriving stock (Show, Eq)
 
@@ -113,6 +121,8 @@ instance ToJSON CacheParam where
       , "pg_type_name" .= cpPgTypeName
       , "haskell_type" .= cpHaskellType
       , "haskell_module" .= cpHaskellModule
+      , "pg_type_category" .= cpPgTypeCategory
+      , "pg_enum_labels" .= cpPgEnumLabels
       ]
 
 instance FromJSON CacheParam where
@@ -123,6 +133,8 @@ instance FromJSON CacheParam where
       <*> o .: "pg_type_name"
       <*> o .: "haskell_type"
       <*> o .: "haskell_module"
+      <*> o .:? "pg_type_category"
+      <*> o .:? "pg_enum_labels"
 
 instance ToJSON CacheColumn where
   toJSON CacheColumn {..} =
@@ -135,6 +147,8 @@ instance ToJSON CacheColumn where
       , "haskell_module" .= ccHaskellModule
       , "source_table_oid" .= ccSourceTableOid
       , "source_column_number" .= ccSourceColumnNum
+      , "pg_type_category" .= ccPgTypeCategory
+      , "pg_enum_labels" .= ccPgEnumLabels
       ]
 
 instance FromJSON CacheColumn where
@@ -148,6 +162,8 @@ instance FromJSON CacheColumn where
       <*> o .: "haskell_module"
       <*> o .:? "source_table_oid"
       <*> o .:? "source_column_number"
+      <*> o .:? "pg_type_category"
+      <*> o .:? "pg_enum_labels"
 
 -- File operations ---------------------------------------------------------
 

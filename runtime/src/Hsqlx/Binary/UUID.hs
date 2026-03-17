@@ -7,7 +7,6 @@
 module Hsqlx.Binary.UUID
   () where
 
-import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as LBS
 import Data.UUID.Types (UUID)

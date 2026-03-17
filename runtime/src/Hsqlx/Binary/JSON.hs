@@ -14,7 +14,6 @@ module Hsqlx.Binary.JSON
   () where
 
 import Data.Aeson (Value, eitherDecodeStrict', encode)
-import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as LBS
 import PgWire.Binary.Types (PgDecode (..), PgEncode (..))

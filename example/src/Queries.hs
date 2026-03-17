@@ -6,7 +6,7 @@
 -- the plugin to compile.
 module Queries where
 
-import Data.Int (Int32, Int64)
+import Data.Int (Int32)
 import Data.Text (Text)
 import Data.Time (UTCTime)
 import Hsqlx

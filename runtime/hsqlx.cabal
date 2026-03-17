@@ -11,7 +11,7 @@ license-file:    ../LICENSE
 build-type:      Simple
 
 common warnings
-  ghc-options: -Wall -Wcompat -Wno-unticked-promoted-constructors -funbox-strict-fields -fspecialise-aggressively
+  ghc-options: -Wall -Wcompat -Werror -Wno-unticked-promoted-constructors -funbox-strict-fields -fspecialise-aggressively
 
 library
   import:           warnings
@@ -31,6 +31,7 @@ library
     Hsqlx.Binary.Composite
     Hsqlx.Binary.Decode
     Hsqlx.Binary.Encode
+    Hsqlx.Binary.Enum
     Hsqlx.Binary.Interval
     Hsqlx.Binary.JSON
     Hsqlx.Binary.Range
@@ -153,10 +154,12 @@ benchmark hsqlx-bench
 
   other-modules:
     BenchCodec
+    BenchConcurrent
     BenchQuery
     TestSupport
 
   build-depends:
+    , async        >=2.2  && <2.3
     , base         >=4.17 && <5
     , bytestring
     , criterion    >=1.6  && <1.7

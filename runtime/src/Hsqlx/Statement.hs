@@ -16,7 +16,6 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.Vector (Vector)
 import Data.Vector qualified as V
-import Data.Word (Word32)
 import Hsqlx.FromRow (FromRow (..))
 import PgWire.Protocol.Oid (Oid (..))
 import Hsqlx.ToParams (ToParams (..))

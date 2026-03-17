@@ -3,7 +3,6 @@ module PipelineSpec (spec) where
 import Data.Int (Int32, Int64)
 import Data.Text (Text)
 import Hsqlx
-import Hsqlx.Batch (fetchByIds)
 import PgWire.Protocol.Oid (oidInt4)
 import TestSupport
 import Test.Hspec
@@ -84,7 +83,9 @@ spec = do
         insertTestUsers conn
         results <- fetchBatchAll conn stmtListAll [(), ()]
         length results `shouldBe` 2
-        length (head results) `shouldBe` 5
+        case results of
+          (r : _) -> length r `shouldBe` 5
+          [] -> expectationFailure "Expected non-empty results"
         length (results !! 1) `shouldBe` 5
 
   describe "fetchByIds" $ do

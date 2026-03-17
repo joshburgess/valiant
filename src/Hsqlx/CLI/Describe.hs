@@ -3,7 +3,12 @@ module Hsqlx.CLI.Describe
   , ParamMeta (..)
   , ColumnMeta (..)
   , DescribeError (..)
+  , PgTypeInfo (..)
+  , PgTypeCategory (..)
   , describeQuery
+  , queryTypeInfo
+  , queryEnumLabels
+  , queryRangeSubtype
   , withPgConnection
   ) where
 
@@ -11,8 +16,10 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.Text (Text)
 import Data.Text.Encoding qualified as TE
-import Database.PostgreSQL.LibPQ (Oid)
+import Data.Word (Word32)
+import Database.PostgreSQL.LibPQ (Oid (..))
 import Database.PostgreSQL.LibPQ qualified as PQ
+import Foreign.C.Types (CUInt)
 import Hsqlx.CLI.Discover (SqlFile (..))
 
 -- | Raw metadata returned by Postgres for a described query.
@@ -125,3 +132,112 @@ extractPgError result = do
   detail <- fmap TE.decodeUtf8 <$> PQ.resultErrorField result PQ.DiagMessageDetail
   hint <- fmap TE.decodeUtf8 <$> PQ.resultErrorField result PQ.DiagMessageHint
   pure DescribeError {deMessage = msg, deDetail = detail, deHint = hint}
+
+-- Type discovery -------------------------------------------------------------
+
+-- | Category of a PG type discovered from @pg_type@.
+data PgTypeCategory
+  = PgEnum
+  | PgComposite
+  | PgDomain
+  | PgRange
+  | PgBase
+  | PgPseudo
+  deriving stock (Show, Eq)
+
+-- | Metadata about a PG type, queried from @pg_type@.
+data PgTypeInfo = PgTypeInfo
+  { ptiName :: Text
+  , ptiCategory :: PgTypeCategory
+  , ptiArrayOid :: Word32
+  -- ^ OID of the array form of this type (0 if none).
+  , ptiBaseOid :: Word32
+  -- ^ For domains: the underlying type OID. 0 otherwise.
+  , ptiElemOid :: Word32
+  -- ^ For array types: the element type OID. 0 otherwise.
+  }
+  deriving stock (Show)
+
+-- | Query @pg_type@ for information about an unknown OID.
+queryTypeInfo :: PQ.Connection -> Oid -> IO (Maybe PgTypeInfo)
+queryTypeInfo conn (Oid rawOid) = do
+  let query =
+        "SELECT typname, typtype, typarray, typbasetype, typelem "
+          <> "FROM pg_type WHERE oid = "
+          <> BS8.pack (show (fromIntegral rawOid :: Word32))
+  mResult <- PQ.exec conn query
+  case mResult of
+    Nothing -> pure Nothing
+    Just result -> do
+      nRows <- PQ.ntuples result
+      if nRows == 0
+        then pure Nothing
+        else do
+          mName <- PQ.getvalue result (PQ.toRow (0 :: Int)) (PQ.toColumn (0 :: Int))
+          mTyptype <- PQ.getvalue result (PQ.toRow (0 :: Int)) (PQ.toColumn (1 :: Int))
+          mTyparray <- PQ.getvalue result (PQ.toRow (0 :: Int)) (PQ.toColumn (2 :: Int))
+          mTypbase <- PQ.getvalue result (PQ.toRow (0 :: Int)) (PQ.toColumn (3 :: Int))
+          mTypelem <- PQ.getvalue result (PQ.toRow (0 :: Int)) (PQ.toColumn (4 :: Int))
+          pure $
+            Just
+              PgTypeInfo
+                { ptiName = maybe "" TE.decodeUtf8 mName
+                , ptiCategory = parseTyptype mTyptype
+                , ptiArrayOid = parseOidField mTyparray
+                , ptiBaseOid = parseOidField mTypbase
+                , ptiElemOid = parseOidField mTypelem
+                }
+
+parseTyptype :: Maybe ByteString -> PgTypeCategory
+parseTyptype (Just "e") = PgEnum
+parseTyptype (Just "c") = PgComposite
+parseTyptype (Just "d") = PgDomain
+parseTyptype (Just "r") = PgRange
+parseTyptype (Just "p") = PgPseudo
+parseTyptype _ = PgBase
+
+parseOidField :: Maybe ByteString -> Word32
+parseOidField Nothing = 0
+parseOidField (Just bs) =
+  case BS8.readInt bs of
+    Just (n, _) -> fromIntegral n
+    Nothing -> 0
+
+-- | Query @pg_enum@ for the labels of an enum type.
+queryEnumLabels :: PQ.Connection -> Oid -> IO [Text]
+queryEnumLabels conn (Oid rawOid) = do
+  let query =
+        "SELECT enumlabel FROM pg_enum WHERE enumtypid = "
+          <> BS8.pack (show (fromIntegral rawOid :: Word32))
+          <> " ORDER BY enumsortorder"
+  mResult <- PQ.exec conn query
+  case mResult of
+    Nothing -> pure []
+    Just result -> do
+      nRows <- PQ.ntuples result
+      let rows = [0 .. nRows - 1]
+      mapM
+        ( \r -> do
+            mVal <- PQ.getvalue result r (PQ.toColumn (0 :: Int))
+            pure (maybe "" TE.decodeUtf8 mVal)
+        )
+        rows
+
+-- | Query @pg_range@ for the subtype OID of a range type.
+queryRangeSubtype :: PQ.Connection -> Oid -> IO (Maybe Oid)
+queryRangeSubtype conn (Oid rawOid) = do
+  let query =
+        "SELECT rngsubtype FROM pg_range WHERE rngtypid = "
+          <> BS8.pack (show (fromIntegral rawOid :: Word32))
+  mResult <- PQ.exec conn query
+  case mResult of
+    Nothing -> pure Nothing
+    Just result -> do
+      nRows <- PQ.ntuples result
+      if nRows == 0
+        then pure Nothing
+        else do
+          mVal <- PQ.getvalue result (PQ.toRow (0 :: Int)) (PQ.toColumn (0 :: Int))
+          pure $ case mVal >>= fmap fst . BS8.readInt of
+            Just n -> Just (Oid (fromIntegral n :: CUInt))
+            Nothing -> Nothing

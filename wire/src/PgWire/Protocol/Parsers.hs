@@ -8,7 +8,9 @@ import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Unsafe qualified as BU
 import Data.Int (Int16, Int32, Int64)
+import Data.Vector (Vector)
 import Data.Vector qualified as V
+import Data.Vector.Mutable qualified as MV
 import Data.Word (Word8, Word32)
 import PgWire.Protocol.Backend
 
@@ -143,28 +145,63 @@ parseFields n bs = do
 
 -- DataRow -----------------------------------------------------------------
 
--- | Parse a DataRow message. Uses V.fromListN with the known column count
--- to pre-allocate the Vector at the correct size.
+-- | Parse a DataRow message directly into a 'Vector', skipping the
+-- intermediate list. Column value slices share the underlying buffer
+-- via 'BS.take'/'BS.drop' (zero-copy).
 parseDataRow :: ByteString -> Either String BackendMsg
 parseDataRow bs = do
   nCols <- getInt16 bs 0
   let !n = fromIntegral nCols
-  (vals, _) <- parseColValues n (BS.drop 2 bs)
-  Right (DataRow (V.fromListN n vals))
+  vals <- parseColsDirect n bs 2
+  Right (DataRow vals)
 
-parseColValues :: Int -> ByteString -> Either String ([Maybe ByteString], ByteString)
-parseColValues 0 rest = Right ([], rest)
-parseColValues !n bs = do
-  len <- getInt32 bs 0
-  if len == -1
-    then do
-      (vals, rest) <- parseColValues (n - 1) (BS.drop 4 bs)
-      Right (Nothing : vals, rest)
-    else do
-      let !dataLen = fromIntegral len
-      val <- getBytes bs 4 dataLen
-      (vals, rest) <- parseColValues (n - 1) (BS.drop (4 + dataLen) bs)
-      Right (Just val : vals, rest)
+parseColsDirect :: Int -> ByteString -> Int -> Either String (Vector (Maybe ByteString))
+parseColsDirect n bs startOff
+  | BS.length bs < startOff = Left "DataRow: buffer too short for column data"
+  | otherwise =
+      let !bsLen = BS.length bs
+          -- First pass: validate all lengths fit within the buffer.
+          validate !i !off
+            | i >= n = Right off
+            | off + 4 > bsLen = Left "DataRow: truncated column length"
+            | otherwise =
+                let !len = getInt32Unsafe bs off
+                 in if len == -1
+                      then validate (i + 1) (off + 4)
+                      else
+                        let !end = off + 4 + fromIntegral len
+                         in if end > bsLen
+                              then Left "DataRow: truncated column data"
+                              else validate (i + 1) end
+       in case validate 0 startOff of
+            Left err -> Left err
+            Right _ -> Right $ V.create $ do
+              mv <- MV.new n
+              let go !i !off
+                    | i >= n = pure ()
+                    | otherwise =
+                        let !len = getInt32Unsafe bs off
+                         in if len == -1
+                              then do
+                                MV.write mv i Nothing
+                                go (i + 1) (off + 4)
+                              else do
+                                let !dataLen = fromIntegral len
+                                    !val = BU.unsafeTake dataLen (BU.unsafeDrop (off + 4) bs)
+                                MV.write mv i (Just val)
+                                go (i + 1) (off + 4 + dataLen)
+              go 0 startOff
+              pure mv
+  where
+    -- Unchecked Int32 decode — bounds validated by the validation pass.
+    getInt32Unsafe :: ByteString -> Int -> Int32
+    getInt32Unsafe b off =
+      let !b0 = fromIntegral (BU.unsafeIndex b off) :: Int32
+          !b1 = fromIntegral (BU.unsafeIndex b (off + 1)) :: Int32
+          !b2 = fromIntegral (BU.unsafeIndex b (off + 2)) :: Int32
+          !b3 = fromIntegral (BU.unsafeIndex b (off + 3)) :: Int32
+       in (b0 `shiftL` 24) .|. (b1 `shiftL` 16) .|. (b2 `shiftL` 8) .|. b3
+    {-# INLINE getInt32Unsafe #-}
 
 -- ParameterDescription ----------------------------------------------------
 

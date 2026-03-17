@@ -33,11 +33,10 @@ import Data.ByteString.Builder qualified as B
 import Data.ByteString.Lazy qualified as LBS
 import Data.IORef
 import Data.Time (NominalDiffTime)
-import Data.Word (Word8)
 import PgWire.Error (HsqlxError (..), throwHsqlx)
 import System.Timeout (timeout)
 import PgWire.Protocol.Backend (BackendMsg)
-import PgWire.Protocol.Builders (buildFrontendMsg)
+import PgWire.Protocol.Builders (buildFrontendMsg, buildFrontendMsgsConcat)
 import PgWire.Protocol.Frontend (FrontendMsg)
 import PgWire.Protocol.Parsers (parseBackendMsg)
 import Network.Socket (Socket)
@@ -45,7 +44,7 @@ import Network.Socket qualified as NS
 import Network.Socket.ByteString qualified as NSB
 import Network.Socket (setSocketOption, SocketOption(..))
 import Network.TLS qualified as TLS
-import Network.TLS (ClientParams (..), ClientHooks (..), Supported (..), Shared (..), Credentials (..), Credential)
+import Network.TLS (ClientParams (..), ClientHooks (..), Supported (..), Shared (..), Credentials (..))
 import Data.X509.CertificateStore (readCertificateStore)
 import System.X509 (getSystemCertificateStore)
 
@@ -148,7 +147,7 @@ upgradeTls wc tlsCfg = do
           result <- TLS.credentialLoadX509 certPath keyPath
           case result of
             Right cred -> pure (Credentials [cred])
-            Left err -> do
+            Left _err -> do
               -- Non-fatal: warn but continue without client cert
               pure (Credentials [])
         _ -> pure (Credentials [])
@@ -241,18 +240,14 @@ sendFrontendMsg wc msg = do
   wcSend wc bytes
 {-# INLINE sendFrontendMsg #-}
 
--- | Send multiple frontend messages via vectored I/O.
--- Each message is built separately; all chunks are sent in a single
--- writev() syscall without copying into a contiguous buffer.
+-- | Send multiple frontend messages in a single allocation and syscall.
+-- All messages are fused into one 'Builder', materialized once with
+-- 'buildFrontendMsgsConcat', and sent with a single @send()@.
 sendFrontendMsgs :: WireConn -> [FrontendMsg] -> IO ()
 sendFrontendMsgs wc msgs = do
-  let !chunks = map buildFrontendMsg msgs
-  -- Trace if enabled (need to concat for the trace callback)
-  mHandler <- readIORef (wcTrace wc)
-  case mHandler of
-    Just handler -> handler TraceSend (BS.concat chunks)
-    Nothing -> pure ()
-  wcSendMany wc chunks
+  let !bytes = buildFrontendMsgsConcat msgs
+  traceIfEnabled wc TraceSend bytes
+  wcSend wc bytes
 {-# INLINE sendFrontendMsgs #-}
 
 -- | Send raw bytes (for startup message which has a different format).

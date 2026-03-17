@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 module Hsqlx.Binary.UUIDSpec (spec) where
 
 import Data.ByteString qualified as BS

@@ -4,7 +4,6 @@ module Hsqlx.CLI.Command.Watch
 
 import Control.Concurrent (threadDelay)
 import Control.Monad (forever, when)
-import Data.ByteString qualified as BS
 import Data.IORef
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -13,7 +12,6 @@ import Data.Text qualified as T
 import Hsqlx.CLI.Config (AppEnv (..))
 import Hsqlx.CLI.Discover (SqlFile (..), discoverSqlFiles)
 import Hsqlx.CLI.Error (HsqlxCliError (..), dieWithError)
-import Hsqlx.CLI.Hash (sha256Hex)
 import Hsqlx.CLI.Output
 import System.Directory (doesDirectoryExist)
 import System.Exit (ExitCode (..))
@@ -22,7 +20,7 @@ import System.Exit (ExitCode (..))
 -- Polls every 2 seconds (fsnotify can be added later for efficiency).
 runWatch :: AppEnv -> IO ExitCode
 runWatch env = do
-  dbUrl <- case appDatabaseUrl env of
+  _ <- case appDatabaseUrl env of
     Nothing -> dieWithError ErrNoDatabaseUrl
     Just _ -> pure ()
 
@@ -39,7 +37,7 @@ runWatch env = do
   scanAndReport env hashRef
 
   -- Poll loop
-  forever $ do
+  _ <- forever $ do
     threadDelay 2000000 -- 2 seconds
     scanAndReport env hashRef
 

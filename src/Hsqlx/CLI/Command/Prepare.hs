@@ -18,7 +18,7 @@ import Hsqlx.CLI.Hash (sha256Hex)
 import Hsqlx.CLI.Nullability (resolveNullability)
 import Hsqlx.CLI.Output
 import Hsqlx.CLI.CustomTypes (CustomTypeMap, customTypesFile, loadCustomTypes)
-import Hsqlx.CLI.TypeMap (HaskellType (..), oidToHaskellTypeWith, oidToTypeNameWith, resolveType)
+import Hsqlx.CLI.TypeMap (HaskellType (..), ResolvedType (..), oidToHaskellTypeWith, oidToTypeNameWith, resolveType, resolveUnknownOid)
 import System.Exit (ExitCode (..))
 
 runPrepare :: AppEnv -> IO ExitCode
@@ -69,7 +69,8 @@ processFile env customs conn total (idx, sqlFile) = do
         Right meta -> do
           nullabilities <- resolveNullability conn (qmColumns meta)
           now <- getCurrentTime
-          case buildCacheEntry env customs sqlFile meta nullabilities now of
+          buildResult <- buildCacheEntry env customs conn sqlFile meta nullabilities now
+          case buildResult of
             Left errMsg -> do
               printFailed errMsg
               pure False
@@ -81,64 +82,118 @@ processFile env customs conn total (idx, sqlFile) = do
 buildCacheEntry
   :: AppEnv
   -> CustomTypeMap
+  -> PQ.Connection
   -> SqlFile
   -> QueryMeta
   -> [Bool]
   -> UTCTime
-  -> Either Text CacheEntry
-buildCacheEntry env customs sqlFile meta nullabilities now = do
-  params <- mapM (resolveParam customs) (qmParams meta)
-  columns <- mapM (uncurry (resolveColumn customs)) (zip (qmColumns meta) nullabilities)
-  let sqlText = TE.decodeUtf8 (sqlContent sqlFile)
-  Right
-    CacheEntry
-      { ceVersion = "0.1.0"
-      , ceFile = sqlRelPath sqlFile
-      , ceSqlHash = sqlHash sqlFile
-      , ceSql = sqlText
-      , ceDbUrlHash = maybe "" sha256Hex (appDatabaseUrl env)
-      , cePreparedAt = now
-      , ceStatementType = statementTypeFromSql sqlText
-      , ceParams = params
-      , ceColumns = columns
-      }
+  -> IO (Either Text CacheEntry)
+buildCacheEntry env customs conn sqlFile meta nullabilities now = do
+  eParams <- resolveParams customs conn (qmParams meta)
+  case eParams of
+    Left err -> pure (Left err)
+    Right params -> do
+      eColumns <- resolveColumns customs conn (zip (qmColumns meta) nullabilities)
+      case eColumns of
+        Left err -> pure (Left err)
+        Right columns -> do
+          let sqlText = TE.decodeUtf8 (sqlContent sqlFile)
+          pure . Right $
+            CacheEntry
+              { ceVersion = "0.1.0"
+              , ceFile = sqlRelPath sqlFile
+              , ceSqlHash = sqlHash sqlFile
+              , ceSql = sqlText
+              , ceDbUrlHash = maybe "" sha256Hex (appDatabaseUrl env)
+              , cePreparedAt = now
+              , ceStatementType = statementTypeFromSql sqlText
+              , ceParams = params
+              , ceColumns = columns
+              }
 
-resolveParam :: CustomTypeMap -> ParamMeta -> Either Text CacheParam
-resolveParam customs ParamMeta {..} =
+resolveParams :: CustomTypeMap -> PQ.Connection -> [ParamMeta] -> IO (Either Text [CacheParam])
+resolveParams customs conn = go []
+  where
+    go !acc [] = pure (Right (reverse acc))
+    go !acc (pm : pms) = do
+      result <- resolveParam customs conn pm
+      case result of
+        Left err -> pure (Left err)
+        Right cp -> go (cp : acc) pms
+
+resolveParam :: CustomTypeMap -> PQ.Connection -> ParamMeta -> IO (Either Text CacheParam)
+resolveParam customs conn ParamMeta {..} =
   let Oid oid = pmOid
    in case oidToHaskellTypeWith customs pmOid of
-        Nothing ->
-          Left $ "Unknown OID " <> T.pack (show oid) <> " for parameter $" <> T.pack (show pmIndex)
         Just ht ->
-          Right
+          pure . Right $
             CacheParam
               { cpIndex = pmIndex
               , cpPgOid = fromIntegral oid
               , cpPgTypeName = maybe "unknown" id (oidToTypeNameWith mempty pmOid)
               , cpHaskellType = htType ht
               , cpHaskellModule = htModule ht
+              , cpPgTypeCategory = Nothing
+              , cpPgEnumLabels = Nothing
               }
+        Nothing -> do
+          -- Auto-discover via pg_type
+          resolved <- resolveUnknownOid conn customs pmOid
+          case resolved of
+            Left err ->
+              pure . Left $ err <> " for parameter $" <> T.pack (show pmIndex)
+            Right rt ->
+              pure . Right $
+                CacheParam
+                  { cpIndex = pmIndex
+                  , cpPgOid = fromIntegral oid
+                  , cpPgTypeName = rtPgTypeName rt
+                  , cpHaskellType = htType (rtHaskellType rt)
+                  , cpHaskellModule = htModule (rtHaskellType rt)
+                  , cpPgTypeCategory = rtCategory rt
+                  , cpPgEnumLabels = rtEnumLabels rt
+                  }
 
-resolveColumn :: CustomTypeMap -> ColumnMeta -> Bool -> Either Text CacheColumn
-resolveColumn customs ColumnMeta {..} nullable =
+resolveColumns :: CustomTypeMap -> PQ.Connection -> [(ColumnMeta, Bool)] -> IO (Either Text [CacheColumn])
+resolveColumns customs conn = go []
+  where
+    go !acc [] = pure (Right (reverse acc))
+    go !acc ((cm, nullable) : rest) = do
+      result <- resolveColumn customs conn cm nullable
+      case result of
+        Left err -> pure (Left err)
+        Right cc -> go (cc : acc) rest
+
+resolveColumn :: CustomTypeMap -> PQ.Connection -> ColumnMeta -> Bool -> IO (Either Text CacheColumn)
+resolveColumn customs conn ColumnMeta {..} nullable =
   let Oid oid = cmOid
       Oid tOid = cmTableOid
+      tOidW32 = fromIntegral tOid :: Word32
+      mkColumn ht cat labels =
+        CacheColumn
+          { ccName = cmName
+          , ccPgOid = fromIntegral oid
+          , ccPgTypeName = maybe "unknown" id (oidToTypeNameWith mempty cmOid)
+          , ccNullable = nullable
+          , ccHaskellType = htType (resolveType nullable ht)
+          , ccHaskellModule = htModule ht
+          , ccSourceTableOid = if tOidW32 == 0 then Nothing else Just tOidW32
+          , ccSourceColumnNum = if cmColumnNumber == 0 then Nothing else Just cmColumnNumber
+          , ccPgTypeCategory = cat
+          , ccPgEnumLabels = labels
+          }
    in case oidToHaskellTypeWith customs cmOid of
-        Nothing ->
-          Left $ "Unknown OID " <> T.pack (show oid) <> " for column \"" <> cmName <> "\""
         Just baseHt ->
-          let ht = resolveType nullable baseHt
-              tOidW32 = fromIntegral tOid :: Word32
-           in Right
-                CacheColumn
-                  { ccName = cmName
-                  , ccPgOid = fromIntegral oid
-                  , ccPgTypeName = maybe "unknown" id (oidToTypeNameWith mempty cmOid)
-                  , ccNullable = nullable
-                  , ccHaskellType = htType ht
-                  , ccHaskellModule = htModule ht
-                  , ccSourceTableOid = if tOidW32 == 0 then Nothing else Just tOidW32
-                  , ccSourceColumnNum = if cmColumnNumber == 0 then Nothing else Just cmColumnNumber
+          pure . Right $ mkColumn baseHt Nothing Nothing
+        Nothing -> do
+          resolved <- resolveUnknownOid conn customs cmOid
+          case resolved of
+            Left err ->
+              pure . Left $ err <> " for column \"" <> cmName <> "\""
+            Right rt ->
+              pure . Right $
+                (mkColumn (rtHaskellType rt) (rtCategory rt) (rtEnumLabels rt))
+                  { ccPgTypeName = rtPgTypeName rt
                   }
 
 -- | Mask the password in a connection URL for display.

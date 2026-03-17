@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 module PgWire.Connection.FeaturesSpec (spec) where
 
 import PgWire.Connection.Config

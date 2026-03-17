@@ -1,6 +1,9 @@
 {-# OPTIONS_GHC -fno-full-laziness #-}
 
 -- | COPY protocol support for bulk data import/export.
+--
+-- COPY operations require exclusive access to the connection's wire,
+-- so they use 'submitExclusive' to pause the async pipeline.
 module Hsqlx.Copy
   ( copyIn
   , copyOut
@@ -14,14 +17,15 @@ import Data.ByteString.Builder qualified as B
 import Data.ByteString.Char8 qualified as BS8
 import Data.ByteString.Lazy qualified as LBS
 import Data.IORef
-import Data.Int (Int16, Int32, Int64)
+import Data.Int (Int16, Int64)
 import Data.Vector (Vector)
 import Data.Vector qualified as V
+import PgWire.Async (submitExclusive)
 import PgWire.Connection (Connection (..))
 import PgWire.Error (HsqlxError (..), throwHsqlx)
 import PgWire.Protocol.Backend
 import PgWire.Protocol.Frontend
-import PgWire.Wire (recvBackendMsg, sendFrontendMsg)
+import PgWire.Wire (WireConn, recvBackendMsg, sendFrontendMsg)
 
 -- | Result of a COPY IN operation.
 data CopyResult = CopyResult
@@ -37,21 +41,13 @@ data CopyResult = CopyResult
 -- >   sendChunk "Alice,alice@example.com\n"
 -- >   sendChunk "Bob,bob@example.com\n"
 copyIn :: Connection -> ByteString -> ((ByteString -> IO ()) -> IO ()) -> IO CopyResult
-copyIn conn sql producer = do
-  -- Send the COPY command via simple query
-  sendFrontendMsg (connWire conn) (Query sql)
-
-  -- Wait for CopyInResponse
-  waitCopyIn conn
-
-  -- Send data chunks
-  producer (\chunk -> sendFrontendMsg (connWire conn) (CopyData chunk))
-
-  -- Signal end of data
-  sendFrontendMsg (connWire conn) CopyDone
-
-  -- Collect result
-  collectCopyResult conn
+copyIn conn sql producer =
+  submitExclusive (connAsync conn) $ \wc txRef -> do
+    sendFrontendMsg wc (Query sql)
+    waitCopyIn wc
+    producer (\chunk -> sendFrontendMsg wc (CopyData chunk))
+    sendFrontendMsg wc CopyDone
+    collectCopyResult wc txRef
 
 -- | Execute a @COPY ... TO STDOUT@ command, receiving data in chunks
 -- via a callback.
@@ -61,25 +57,21 @@ copyIn conn sql producer = do
 -- > copyOut conn "COPY users TO STDOUT WITH (FORMAT csv)" $ \chunk -> do
 -- >   BS.putStr chunk
 copyOut :: Connection -> ByteString -> (ByteString -> IO ()) -> IO CopyResult
-copyOut conn sql consumer = do
-  sendFrontendMsg (connWire conn) (Query sql)
-
-  -- Wait for CopyOutResponse
-  waitCopyOut conn
-
-  -- Receive data chunks until CopyDone
-  let loop = do
-        msg <- recvBackendMsg (connWire conn)
-        case msg of
-          CopyDataMsg chunk -> do
-            consumer chunk
-            loop
-          CopyDoneMsg -> pure ()
-          ErrorResponse err -> throwHsqlx (QueryError err)
-          other -> throwHsqlx (ProtocolError ("Unexpected in COPY OUT: " <> BS8.pack (show other)))
-  loop
-
-  collectCopyResult conn
+copyOut conn sql consumer =
+  submitExclusive (connAsync conn) $ \wc txRef -> do
+    sendFrontendMsg wc (Query sql)
+    waitCopyOut wc
+    let loop = do
+          msg <- recvBackendMsg wc
+          case msg of
+            CopyDataMsg chunk -> do
+              consumer chunk
+              loop
+            CopyDoneMsg -> pure ()
+            ErrorResponse err -> throwHsqlx (QueryError err)
+            other -> throwHsqlx (ProtocolError ("Unexpected in COPY OUT: " <> BS8.pack (show other)))
+    loop
+    collectCopyResult wc txRef
 
 -- | Execute a @COPY ... FROM STDIN WITH (FORMAT binary)@ command,
 -- sending rows in PostgreSQL's binary COPY format.
@@ -105,23 +97,17 @@ copyInBinary
   -> ((Vector (Maybe ByteString) -> IO ()) -> IO ())
   -- ^ Producer: call @sendRow@ for each row
   -> IO CopyResult
-copyInBinary conn sql numCols producer = do
-  sendFrontendMsg (connWire conn) (Query sql)
-  waitCopyIn conn
-
-  -- Send binary COPY header
-  sendFrontendMsg (connWire conn) (CopyData binaryCopyHeader)
-
-  -- Send rows via producer
-  producer $ \row -> do
-    let rowBytes = encodeBinaryRow numCols row
-    sendFrontendMsg (connWire conn) (CopyData rowBytes)
-
-  -- Send binary COPY trailer + CopyDone
-  sendFrontendMsg (connWire conn) (CopyData binaryCopyTrailer)
-  sendFrontendMsg (connWire conn) CopyDone
-
-  collectCopyResult conn
+copyInBinary conn sql numCols producer =
+  submitExclusive (connAsync conn) $ \wc txRef -> do
+    sendFrontendMsg wc (Query sql)
+    waitCopyIn wc
+    sendFrontendMsg wc (CopyData binaryCopyHeader)
+    producer $ \row -> do
+      let rowBytes = encodeBinaryRow numCols row
+      sendFrontendMsg wc (CopyData rowBytes)
+    sendFrontendMsg wc (CopyData binaryCopyTrailer)
+    sendFrontendMsg wc CopyDone
+    collectCopyResult wc txRef
 
 -- | Binary COPY header:
 -- 11-byte signature: "PGCOPY\n\377\r\n\0"
@@ -150,31 +136,31 @@ encodeBinaryRow numCols row = LBS.toStrict . B.toLazyByteString $
 
 -- Internal ------------------------------------------------------------------
 
-waitCopyIn :: Connection -> IO ()
-waitCopyIn conn = do
-  msg <- recvBackendMsg (connWire conn)
+waitCopyIn :: WireConn -> IO ()
+waitCopyIn wc = do
+  msg <- recvBackendMsg wc
   case msg of
     CopyInResponse _ _ -> pure ()
     ErrorResponse err -> throwHsqlx (QueryError err)
     other -> throwHsqlx (ProtocolError ("Expected CopyInResponse, got: " <> BS8.pack (show other)))
 
-waitCopyOut :: Connection -> IO ()
-waitCopyOut conn = do
-  msg <- recvBackendMsg (connWire conn)
+waitCopyOut :: WireConn -> IO ()
+waitCopyOut wc = do
+  msg <- recvBackendMsg wc
   case msg of
     CopyOutResponse _ _ -> pure ()
     ErrorResponse err -> throwHsqlx (QueryError err)
     other -> throwHsqlx (ProtocolError ("Expected CopyOutResponse, got: " <> BS8.pack (show other)))
 
-collectCopyResult :: Connection -> IO CopyResult
-collectCopyResult conn = go 0
+collectCopyResult :: WireConn -> IORef TxStatus -> IO CopyResult
+collectCopyResult wc txRef = go 0
   where
     go !n = do
-      msg <- recvBackendMsg (connWire conn)
+      msg <- recvBackendMsg wc
       case msg of
         CommandComplete tag -> go (tagRows tag)
         ReadyForQuery status -> do
-          writeIORef (connTxStatus conn) status
+          writeIORef txRef status
           pure (CopyResult n)
         ErrorResponse err -> throwHsqlx (QueryError err)
         NoticeResponse _ -> go n

@@ -1,7 +1,6 @@
 module Hsqlx.CLI.CacheSpec (spec) where
 
 import Data.Aeson (eitherDecode, encode)
-import Data.Text qualified as T
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Hsqlx.CLI.Cache
 import Test.Hspec
@@ -69,6 +68,8 @@ sampleEntry now =
             , cpPgTypeName = "int4"
             , cpHaskellType = "Int32"
             , cpHaskellModule = "Data.Int"
+            , cpPgTypeCategory = Nothing
+            , cpPgEnumLabels = Nothing
             }
         ]
     , ceColumns =
@@ -81,6 +82,8 @@ sampleEntry now =
             , ccHaskellModule = "Data.Int"
             , ccSourceTableOid = Just 16385
             , ccSourceColumnNum = Just 1
+            , ccPgTypeCategory = Nothing
+            , ccPgEnumLabels = Nothing
             }
         , CacheColumn
             { ccName = "name"
@@ -91,6 +94,8 @@ sampleEntry now =
             , ccHaskellModule = "Data.Text"
             , ccSourceTableOid = Just 16385
             , ccSourceColumnNum = Just 2
+            , ccPgTypeCategory = Nothing
+            , ccPgEnumLabels = Nothing
             }
         ]
     }

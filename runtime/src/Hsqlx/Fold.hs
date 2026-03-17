@@ -5,6 +5,9 @@
 -- Process large result sets without buffering all rows in memory
 -- and without requiring a transaction or cursor.
 --
+-- Folds require exclusive access to the connection's wire so that rows
+-- can be processed one-at-a-time directly from the socket.
+--
 -- @
 -- -- Count and sum in one pass, constant memory:
 -- (count, total) <- executeWithFold conn stmt params $
@@ -18,15 +21,15 @@ module Hsqlx.Fold
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
-import Data.Map.Strict qualified as Map
 import Data.Vector (Vector)
 import Data.Vector qualified as V
+import PgWire.Async (submitExclusive)
 import PgWire.Connection (Connection (..))
 import PgWire.Error (HsqlxError (..), throwHsqlx)
 import PgWire.Protocol.Backend
 import PgWire.Protocol.Frontend
-import PgWire.Protocol.Oid qualified as Oid
-import PgWire.Wire (recvBackendMsg, sendFrontendMsg, sendFrontendMsgs)
+import PgWire.Wire (WireConn, recvBackendMsg, sendFrontendMsgs)
+import Hsqlx.Execute (ensurePrepared)
 import Hsqlx.Statement (Statement (..))
 
 -- | A strict left fold over result rows. Processes rows in constant
@@ -49,20 +52,21 @@ data RowFold a b = RowFold
 -- @
 executeWithFold :: Connection -> Statement p r -> p -> RowFold r b -> IO b
 executeWithFold conn stmt params (RowFold z0 step) = do
-  stmtName <- ensurePreparedFold conn stmt
+  stmtName <- ensurePrepared conn stmt
   let encodedParams = stmtEncode stmt params
-  sendFrontendMsgs (connWire conn)
-    [ Bind "" stmtName (V.singleton BinaryFormat) encodedParams (V.singleton BinaryFormat)
-    , Execute "" 0
-    , Sync
-    ]
-  collectFold conn (stmtDecode stmt) z0 step
+  submitExclusive (connAsync conn) $ \wc txRef -> do
+    sendFrontendMsgs wc
+      [ Bind "" stmtName (V.singleton BinaryFormat) encodedParams (V.singleton BinaryFormat)
+      , Execute "" 0
+      , Sync
+      ]
+    collectFold wc txRef (stmtDecode stmt) z0 step
 
-collectFold :: Connection -> (Vector (Maybe ByteString) -> Either String r) -> b -> (b -> r -> b) -> IO b
-collectFold conn decode = go
+collectFold :: WireConn -> IORef TxStatus -> (Vector (Maybe ByteString) -> Either String r) -> b -> (b -> r -> b) -> IO b
+collectFold wc txRef decode = go
   where
     go !acc step' = do
-      msg <- recvBackendMsg (connWire conn)
+      msg <- recvBackendMsg wc
       case msg of
         BindComplete -> go acc step'
         DataRow vals -> case decode vals of
@@ -71,41 +75,8 @@ collectFold conn decode = go
         CommandComplete _ -> go acc step'
         EmptyQueryResponse -> go acc step'
         ReadyForQuery status -> do
-          writeIORef (connTxStatus conn) status
+          writeIORef txRef status
           pure acc
         ErrorResponse err -> throwHsqlx (QueryError err)
         NoticeResponse _ -> go acc step'
         other -> throwHsqlx (ProtocolError ("Unexpected in fold: " <> BS8.pack (show other)))
-
-ensurePreparedFold :: Connection -> Statement p r -> IO ByteString
-ensurePreparedFold conn stmt = do
-  cache <- readIORef (connStmtCache conn)
-  let sql = stmtSQL stmt
-  case Map.lookup sql cache of
-    Just name -> pure name
-    Nothing -> do
-      counter <- atomicModifyIORef' (connStmtCounter conn) (\n -> (n + 1, n))
-      let name = "s" <> BS8.pack (show counter)
-          oids = V.map Oid.unOid (stmtParamOids stmt)
-      sendFrontendMsg (connWire conn) (Parse name sql oids)
-      sendFrontendMsg (connWire conn) Sync
-      waitParseFold conn
-      modifyIORef' (connStmtCache conn) (Map.insert sql name)
-      pure name
-
-waitParseFold :: Connection -> IO ()
-waitParseFold conn = do
-  msg <- recvBackendMsg (connWire conn)
-  case msg of
-    ParseComplete -> waitReadyFold conn
-    ErrorResponse err -> do
-      waitReadyFold conn
-      throwHsqlx (QueryError err)
-    other -> throwHsqlx (ProtocolError ("Expected ParseComplete: " <> BS8.pack (show other)))
-
-waitReadyFold :: Connection -> IO ()
-waitReadyFold conn = do
-  msg <- recvBackendMsg (connWire conn)
-  case msg of
-    ReadyForQuery status -> writeIORef (connTxStatus conn) status
-    _ -> waitReadyFold conn

@@ -16,6 +16,7 @@ data HsqlxError
   | DecodeError ByteString
   | PoolTimeout
   | PoolClosed
+  | ConnectionDead
   deriving stock (Show, Eq)
 
 instance Exception HsqlxError

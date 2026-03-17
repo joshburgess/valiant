@@ -24,20 +24,19 @@ module Hsqlx.Batch
 
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
+import Data.IORef
+import Data.Map.Strict qualified as Map
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 import Data.Word (Word32)
+import PgWire.Async (Request (..), Response (..), ResponseCollector (..), submitRequest)
 import PgWire.Binary.Types (PgEncode (..))
 import PgWire.Connection (Connection (..))
 import PgWire.Error (HsqlxError (..), throwHsqlx)
-import PgWire.Protocol.Backend
 import PgWire.Protocol.Frontend
 import PgWire.Protocol.Oid (Oid (..))
-import PgWire.Wire (recvBackendMsg, sendFrontendMsg, sendFrontendMsgs)
 import Hsqlx.Binary.Array (pgEncodeArray)
 import Hsqlx.FromRow (FromRow (..))
-import Data.IORef
-import Data.Map.Strict qualified as Map
 
 -- | Fetch rows matching any of the given IDs in a single query.
 --
@@ -67,8 +66,8 @@ fetchByIds conn sql elemOid ids = do
   -- Prepare
   stmtName <- ensurePreparedRaw conn sql (V.singleton (unOid arrayOid))
 
-  -- Bind with the array parameter + Execute + Sync
-  sendFrontendMsgs (connWire conn)
+  -- Bind + Execute + Sync via async channel
+  resp <- submitRequest (connAsync conn) $ ReqExtendedQuery
     [ Bind "" stmtName
         (V.singleton BinaryFormat)
         (V.singleton (Just arrayBytes))
@@ -76,9 +75,13 @@ fetchByIds conn sql elemOid ids = do
     , Execute "" 0
     , Sync
     ]
+    CollectRows
 
-  -- Collect and decode rows
-  collectAndDecode conn
+  case resp of
+    RespRows rows -> mapM (\row -> case fromRow row of
+      Left err -> throwHsqlx (DecodeError (BS8.pack err))
+      Right !val -> pure val) rows
+    _ -> throwHsqlx (ProtocolError "fetchByIds: unexpected response type")
 
 -- Map element OID to array OID
 arrayOidFor :: Oid -> Oid
@@ -107,43 +110,9 @@ ensurePreparedRaw conn sql oids = do
     Nothing -> do
       counter <- atomicModifyIORef' (connStmtCounter conn) (\n -> (n + 1, n))
       let name = "s" <> BS8.pack (show counter)
-      sendFrontendMsg (connWire conn) (Parse name sql oids)
-      sendFrontendMsg (connWire conn) Sync
-      waitParse conn
-      modifyIORef' (connStmtCache conn) (Map.insert sql name)
-      pure name
-
-collectAndDecode :: (FromRow r) => Connection -> IO [r]
-collectAndDecode conn = go id
-  where
-    go !acc = do
-      msg <- recvBackendMsg (connWire conn)
-      case msg of
-        BindComplete -> go acc
-        DataRow vals -> case fromRow vals of
-          Left err -> throwHsqlx (DecodeError (BS8.pack err))
-          Right !val -> go (acc . (val :))
-        CommandComplete _ -> go acc
-        EmptyQueryResponse -> go acc
-        ReadyForQuery status -> do
-          writeIORef (connTxStatus conn) status
-          pure (acc [])
-        ErrorResponse err -> throwHsqlx (QueryError err)
-        NoticeResponse _ -> go acc
-        other -> throwHsqlx (ProtocolError ("Unexpected in batch fetch: " <> BS8.pack (show other)))
-
-waitParse :: Connection -> IO ()
-waitParse conn = do
-  msg <- recvBackendMsg (connWire conn)
-  case msg of
-    ParseComplete -> waitReady conn
-    ErrorResponse err -> do
-      waitReady conn
-      throwHsqlx (QueryError err)
-    other -> throwHsqlx (ProtocolError ("Expected ParseComplete: " <> BS8.pack (show other)))
-  where
-    waitReady c = do
-      m <- recvBackendMsg (connWire c)
-      case m of
-        ReadyForQuery status -> writeIORef (connTxStatus c) status
-        _ -> waitReady c
+      resp <- submitRequest (connAsync conn) $ ReqPrepare (Parse name sql oids)
+      case resp of
+        RespParsed -> do
+          modifyIORef' (connStmtCache conn) (Map.insert sql name)
+          pure name
+        _ -> throwHsqlx (ProtocolError "ensurePreparedRaw: unexpected response type")

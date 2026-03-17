@@ -1,9 +1,7 @@
 module PgWire.Protocol.BuildersSpec (spec) where
 
 import Data.ByteString qualified as BS
-import Data.ByteString.Builder qualified as B
-import Data.ByteString.Lazy qualified as LBS
-import Data.Int (Int16, Int32)
+import Data.Int (Int32)
 import Data.Vector qualified as V
 import PgWire.Protocol.Builders (buildFrontendMsg, buildStartup)
 import PgWire.Protocol.Frontend

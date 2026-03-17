@@ -7,7 +7,6 @@ import Data.Text (Text)
 import Data.Maybe (isJust)
 import Data.Vector qualified as V
 import Hsqlx
-import Hsqlx.Fold (RowFold (..), executeWithFold)
 import PgWire.Binary.Types (PgEncode (..))
 import PgWire.Connection
 import PgWire.Connection.Config (parseConnString)

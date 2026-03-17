@@ -11,7 +11,6 @@
 --   curl http://localhost:3000/users
 module Main where
 
-import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (FromJSON, ToJSON, object, (.=))
 import Data.ByteString.Char8 qualified as BS8
 import Data.Int (Int32)
@@ -134,11 +133,11 @@ main = do
         Nothing -> do
           status status404
           json (object ["error" .= ("Post not found" :: Text)])
-        Just (i, title, body, published, author) ->
+        Just (i, title, postBody, published, author) ->
           json $ object
             [ "id" .= i
             , "title" .= title
-            , "body" .= (body :: Maybe Text)
+            , "body" .= (postBody :: Maybe Text)
             , "published_at" .= (published :: Maybe UTCTime)
             , "author" .= (author :: Text)
             ]
@@ -163,10 +162,10 @@ main = do
     -- ── Seed data ──────────────────────────────────────────────────
 
     post "/seed" $ do
-      liftIO $ withTransaction pool $ \tx -> do
+      _ <- liftIO $ withTransaction pool $ \tx -> do
         let conn = txConn tx
         -- Batch-insert users using pipelining
-        executeBatch conn insertUserBatch
+        _ <- executeBatch conn insertUserBatch
           [ ("Alice", Just "alice@example.com")
           , ("Bob", Just "bob@example.com")
           , ("Carol", Nothing)

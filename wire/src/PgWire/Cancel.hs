@@ -21,7 +21,6 @@ module PgWire.Cancel
 import Control.Concurrent.Async (race)
 import Control.Concurrent (threadDelay)
 import Control.Exception (SomeException, try)
-import Data.ByteString (ByteString)
 import Data.ByteString.Builder qualified as B
 import Data.ByteString.Lazy qualified as LBS
 import Data.Int (Int32)

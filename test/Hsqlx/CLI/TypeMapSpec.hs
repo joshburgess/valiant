@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 module Hsqlx.CLI.TypeMapSpec (spec) where
 
 import Data.Map.Strict qualified as Map

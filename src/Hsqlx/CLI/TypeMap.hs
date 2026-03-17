@@ -1,10 +1,12 @@
 module Hsqlx.CLI.TypeMap
   ( HaskellType (..)
+  , ResolvedType (..)
   , oidToHaskellType
   , oidToTypeName
   , resolveType
   , oidToHaskellTypeWith
   , oidToTypeNameWith
+  , resolveUnknownOid
   , isArrayOid
   , arrayElementOid
   ) where
@@ -12,7 +14,11 @@ module Hsqlx.CLI.TypeMap
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
+import Data.Text qualified as T
 import Database.PostgreSQL.LibPQ (Oid (..))
+import Foreign.C.Types (CUInt)
+import Hsqlx.CLI.Describe (PgTypeCategory (..), PgTypeInfo (..), queryEnumLabels, queryRangeSubtype, queryTypeInfo)
+import Database.PostgreSQL.LibPQ qualified as PQ
 
 -- | A Haskell type with its originating module.
 data HaskellType = HaskellType
@@ -71,6 +77,104 @@ arrayHaskellType oid customs = do
       { htType = "Vector " <> htType elemHt
       , htModule = "Data.Vector"
       }
+
+-- Automatic type discovery ------------------------------------------------
+
+-- | Result of resolving an unknown OID via @pg_type@ introspection.
+data ResolvedType = ResolvedType
+  { rtHaskellType :: HaskellType
+  , rtPgTypeName :: Text
+  , rtCategory :: Maybe Text
+  -- ^ @\"enum\"@, @\"domain\"@, @\"range\"@ — stored in the cache JSON.
+  , rtEnumLabels :: Maybe [Text]
+  -- ^ Enum labels, if this is an enum type.
+  }
+  deriving stock (Show)
+
+-- | Attempt to resolve an unknown OID by querying @pg_type@.
+-- Handles enums (→ 'Text'), domains (→ unwrap to base type),
+-- ranges (→ @PgRange BaseType@), and composites (→ error).
+resolveUnknownOid
+  :: PQ.Connection
+  -> Map Oid HaskellType
+  -- ^ Custom type overrides
+  -> Oid
+  -> IO (Either Text ResolvedType)
+resolveUnknownOid conn customs oid = do
+  mInfo <- queryTypeInfo conn oid
+  case mInfo of
+    Nothing ->
+      let Oid raw = oid
+       in pure . Left $ "Unknown OID " <> T.pack (show raw) <> " (not found in pg_type)"
+    Just info -> case ptiCategory info of
+      PgEnum -> do
+        labels <- queryEnumLabels conn oid
+        pure . Right $
+          ResolvedType
+            { rtHaskellType = HaskellType "Text" "Data.Text"
+            , rtPgTypeName = ptiName info
+            , rtCategory = Just "enum"
+            , rtEnumLabels = Just labels
+            }
+      PgDomain -> do
+        -- Follow typbasetype to the underlying type
+        let baseOid = Oid (fromIntegral (ptiBaseOid info) :: CUInt)
+        case oidToHaskellTypeWith customs baseOid of
+          Just ht ->
+            pure . Right $
+              ResolvedType
+                { rtHaskellType = ht
+                , rtPgTypeName = ptiName info
+                , rtCategory = Just "domain"
+                , rtEnumLabels = Nothing
+                }
+          Nothing -> do
+            -- Recursively resolve the base type (domain over domain, etc.)
+            nested <- resolveUnknownOid conn customs baseOid
+            case nested of
+              Left err -> pure . Left $ "Domain " <> ptiName info <> " -> " <> err
+              Right rt ->
+                pure . Right $
+                  rt
+                    { rtPgTypeName = ptiName info
+                    , rtCategory = Just "domain"
+                    }
+      PgRange -> do
+        mSubOid <- queryRangeSubtype conn oid
+        case mSubOid of
+          Nothing ->
+            pure . Left $ "Range type " <> ptiName info <> ": could not determine subtype"
+          Just subOid -> do
+            mSubHt <- case oidToHaskellTypeWith customs subOid of
+              Just ht -> pure (Right ht)
+              Nothing -> do
+                nested <- resolveUnknownOid conn customs subOid
+                pure (rtHaskellType <$> nested)
+            case mSubHt of
+              Left err -> pure . Left $ "Range type " <> ptiName info <> " subtype: " <> err
+              Right subHt ->
+                pure . Right $
+                  ResolvedType
+                    { rtHaskellType =
+                        HaskellType ("PgRange " <> htType subHt) "Hsqlx"
+                    , rtPgTypeName = ptiName info
+                    , rtCategory = Just "range"
+                    , rtEnumLabels = Nothing
+                    }
+      PgComposite ->
+        pure . Left $
+          "Composite type "
+            <> ptiName info
+            <> " (OID "
+            <> T.pack (show (let Oid raw = oid in raw))
+            <> ") cannot be auto-mapped. Register it in hsqlx-types.json or cast in SQL."
+      _ ->
+        pure . Left $
+          "Unknown type "
+            <> ptiName info
+            <> " (OID "
+            <> T.pack (show (let Oid raw = oid in raw))
+            <> "). Register it in hsqlx-types.json or cast in SQL."
 
 -- Internal mapping tables ------------------------------------------------
 

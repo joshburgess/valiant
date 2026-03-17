@@ -24,17 +24,16 @@ import Control.Concurrent.Async (Async, async, cancel, race)
 import Control.Concurrent.STM
 import Control.Exception (SomeException, catch, mask, onException, try)
 import Data.ByteString (ByteString)
-import Data.Hashable (hash)
 import Data.IORef
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Sequence (Seq)
 import Data.Sequence qualified as Seq
 import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
-import Data.Word (Word64)
 import PgWire.Connection (Connection (..), close, connectString, simpleQuery)
 import PgWire.Error (HsqlxError (..), throwHsqlx)
 import PgWire.Pool.Config (PoolConfig (..))
+import PgWire.TypeCache (TypeCache, newTypeCache)
 
 -- | A connection pool.
 data Pool = Pool
@@ -48,6 +47,9 @@ data Pool = Pool
   -- ^ Shared statement cache: hash(SQL) → server-side statement name.
   -- When connection A prepares a statement, it registers here.
   -- Connection B can skip Parse if the name is already registered.
+  , pTypeCache :: TypeCache
+  -- ^ Pool-level cache for resolved PG type metadata (OID → TypeInfo).
+  -- Avoids redundant @pg_type@ round-trips across connections.
   }
 
 data PoolEntry = PoolEntry
@@ -65,6 +67,7 @@ newPool cfg = do
   closed <- newTVarIO False
   reaperRef <- newIORef (error "reaper not started")
   sharedStmts <- newTVarIO Map.empty
+  typeCache <- newTypeCache
   let pool =
         Pool
           { pConfig = cfg
@@ -74,6 +77,7 @@ newPool cfg = do
           , pClosed = closed
           , pReaper = reaperRef
           , pSharedStmts = sharedStmts
+          , pTypeCache = typeCache
           }
   reaper <- async (reaperThread pool)
   writeIORef reaperRef reaper

@@ -1,5 +1,6 @@
 module PgWire.Protocol.Builders
   ( buildFrontendMsg
+  , buildFrontendMsgsConcat
   , buildStartup
   ) where
 
@@ -12,13 +13,19 @@ import Data.ByteString.Lazy qualified as LBS
 import Data.Int (Int16, Int32)
 import Data.Vector (Vector)
 import Data.Vector qualified as V
-import Data.Word (Word32)
 import PgWire.Protocol.Frontend
 
 -- | Build a complete frontend message as a strict 'ByteString'.
 buildFrontendMsg :: FrontendMsg -> ByteString
 buildFrontendMsg = LBS.toStrict . B.toLazyByteString . encodeFrontendMsg
 {-# INLINE buildFrontendMsg #-}
+
+-- | Fuse multiple frontend messages into a single strict 'ByteString'.
+-- Uses one 'Builder' pass and one 'toStrict' call, eliminating N-1
+-- intermediate allocations compared to mapping 'buildFrontendMsg'.
+buildFrontendMsgsConcat :: [FrontendMsg] -> ByteString
+buildFrontendMsgsConcat = LBS.toStrict . B.toLazyByteString . foldMap encodeFrontendMsg
+{-# INLINE buildFrontendMsgsConcat #-}
 
 -- | Build the startup message (special: no tag byte).
 buildStartup :: StartupParams -> ByteString

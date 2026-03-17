@@ -14,7 +14,7 @@ spec = do
           dropSchema conn
           createSchema conn
 
-        withTransaction pool $ \tx ->
+        _ <- withTransaction pool $ \tx ->
           simpleQuery (txConn tx) "INSERT INTO users (name) VALUES ('Alice')"
 
         count <- withResource pool $ \conn -> do

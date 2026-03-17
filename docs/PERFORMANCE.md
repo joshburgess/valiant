@@ -305,17 +305,27 @@ type family Nullable (a :: Type) :: Bool where
 ## Running benchmarks
 
 ```bash
-# Start a test Postgres instance
-eval $(scripts/pg-setup.sh)
+# Start Postgres via docker-compose (tuned for benchmarks: tmpfs, fsync=off)
+docker compose up -d --wait
+export DATABASE_URL="postgres://hsqlx_test:hsqlx_test@localhost:5433/hsqlx_test"
 
 # Codec benchmarks (pure, no database needed)
-cabal bench hsqlx-bench
+cabal bench hsqlx-bench --benchmark-options='--match prefix codec'
+
+# Single-thread query benchmarks
+cabal bench hsqlx-bench --benchmark-options='--match prefix query'
+
+# Concurrent benchmarks (the async split showcase — use -N for capabilities)
+cabal bench hsqlx-bench --benchmark-options='+RTS -N -RTS --match prefix concurrent'
+
+# All benchmarks
+cabal bench hsqlx-bench --benchmark-options='+RTS -N -RTS'
 
 # Comparative benchmarks vs hasql and postgresql-simple
 cabal run bench-compare
 
 # Teardown
-scripts/pg-teardown.sh
+docker compose down
 ```
 
 ---
@@ -457,7 +467,7 @@ faster, Scientific encode 1.5x faster.*
 
 ### Pass 4: Protocol-level optimizations
 
-The final pass targeted the protocol encoding and wire framing layers.
+The fourth pass targeted the protocol encoding and wire framing layers.
 
 **Pre-computed message sizes.** The `withTag` helper was materializing
 the payload `Builder` into a `ByteString` just to call `BS.length`,
@@ -494,6 +504,130 @@ to `Streaming.hs` and `Copy.hs` as a safety measure.
 *Result: every protocol message now encodes in a single pass with zero
 intermediate allocations for the payload.*
 
+### Pass 5: Sender/receiver split (async pipelining)
+
+The fifth pass was the largest architectural change: splitting each
+connection into dedicated writer and reader green threads. This is
+the technique behind asyncpg's 3x advantage over psycopg2 on
+concurrent workloads.
+
+**Architecture.** After the startup handshake, each connection spawns
+two threads:
+
+```
+App thread 1 ──┐                     ┌── Writer thread ── sendMany ──┐
+App thread 2 ──┼── TBQueue(64) ──────┤                               ├── socket ── PG
+App thread N ──┘                     └── Reader thread ── recvMsg  ──┘
+                                              │
+                                         TQueue (pending MVars, FIFO)
+```
+
+Application threads put `Request`s into a `TBQueue`, then block on an
+`MVar` for the response. The writer drains the queue, batches messages
+via `sendMany`, and enqueues response MVars into a `TQueue`. The reader
+parses backend messages and fills MVars in FIFO order.
+
+PostgreSQL processes messages in strict order — the i-th response always
+corresponds to the i-th request. No correlation IDs needed.
+
+**Concurrent throughput (single connection, `SELECT` by PK + `COUNT`):**
+
+| Threads | Total queries | Wall time | Queries/sec | Scaling |
+|---------|--------------|-----------|-------------|---------|
+| 1 | 100 | 124ms | 806/s | 1.0x |
+| 4 | 400 | 212ms | 1,887/s | 2.3x |
+| 16 | 1,600 | 420ms | 3,810/s | 4.7x |
+| 32 | 3,200 | 553ms | 5,787/s | 7.2x |
+
+32 threads on ONE connection achieve 7.2x the throughput of a single
+thread. Without the async split, they would serialize and take 32x as
+long.
+
+**Key design decisions:**
+
+- *Startup stays serial* — async threads spawn after authentication.
+- *TBQueue capacity 64* — backpressure prevents unbounded memory growth.
+- *`link2` for thread death* — if reader or writer dies, both die. All
+  pending MVars are filled with `ConnectionDead`.
+- *COPY/cursors/folds use exclusive mode* — `submitExclusive` pauses
+  the pipeline and gives the caller direct socket access, since these
+  operations are streaming state machines that can't be multiplexed.
+
+**Reader error recovery.** Query errors (`ErrorResponse`) are per-request,
+not connection-fatal. The reader catches `HsqlxError`, drains to
+`ReadyForQuery`, delivers the error to the specific caller's MVar, and
+continues serving other requests. Without this fix, any query error
+would kill the reader thread and the entire connection.
+
+*Result: 7.2x concurrent throughput scaling on a single connection.*
+
+### Pass 6: Parse+Bind+Execute coalescing
+
+Borrowed directly from asyncpg. Before this optimization, a first-time
+query required two round-trips:
+
+```
+Round-trip 1: Parse + Sync  →  ParseComplete + ReadyForQuery
+Round-trip 2: Bind + Execute + Sync  →  rows + ReadyForQuery
+```
+
+After coalescing, the first execution is a single round-trip:
+
+```
+Round-trip 1: Parse + Bind + Execute + Sync  →  ParseComplete + rows + ReadyForQuery
+```
+
+Subsequent executions (cache hit) were always 1 round-trip and are
+unchanged.
+
+The reader's row and command collectors skip `ParseComplete` the same
+way they skip `BindComplete` — no new collector types needed.
+
+**Flush instead of Sync for preparation.** The `ensurePrepared` path
+(used by Pipeline and Fold) now sends `Parse + Flush` instead of
+`Parse + Sync`. `Flush` makes Postgres send `ParseComplete` without
+the `ReadyForQuery` overhead — one fewer message per cold statement
+preparation.
+
+*Result: first-execution latency halved (2 round-trips → 1). Matters
+at application startup, new pool connections, and dynamic queries.*
+
+### Pass 7: Allocation and batch streaming
+
+**Constant format vectors.** Every query allocated `V.singleton
+BinaryFormat` for parameter and result format codes — a fresh heap
+allocation per call for a value that never changes. Replaced with a
+module-level `{-# NOINLINE #-}` CAF:
+
+```haskell
+binaryFmtVec :: Vector FormatCode
+binaryFmtVec = V.singleton BinaryFormat
+{-# NOINLINE binaryFmtVec #-}
+```
+
+**Streaming batch execution.** `executeBatch` previously materialized
+the entire `[FrontendMsg]` message list before sending. For a 10,000-row
+insert, that's 20,000 `FrontendMsg` ADT values in memory. Now, batches
+larger than 256 items switch to streaming mode: the connection enters
+exclusive mode and streams Bind+Execute pairs in chunks of 256, sending
+each chunk immediately. Memory is bounded to ~256 messages regardless of
+batch size, and Postgres starts processing early rows while the client
+is still encoding later ones.
+
+```haskell
+-- Small batch (≤256): coalesced through async channel
+executeBatch conn stmt small = submitRequest ... (ReqExtendedQuery allMsgs ...)
+
+-- Large batch (>256): streamed in chunks via exclusive mode
+executeBatch conn stmt large = submitExclusive ... $ \wc _ -> do
+  streamBatchChunks wc name stmt large  -- sends in 256-item chunks
+  sendFrontendMsg wc Sync
+  collectBatchCmdWire wc ...
+```
+
+*Result: bounded memory for large batch inserts, reduced GC pressure
+on every query via constant vectors.*
+
 ### Summary: encode path improvement
 
 | Stage | Int32 encode | Cumulative |
@@ -510,9 +644,15 @@ intermediate allocations for the payload.*
 | Encode | Direct byte writes (`unsafeCreate`) | 5-6x per value |
 | Decode | Unrolled int64, bang patterns | 1.2-1.4x per value |
 | Protocol | Pre-computed message sizes | Eliminated double-copy |
+| Protocol | Parse+Bind+Execute coalescing | First-exec latency halved |
+| Protocol | Flush instead of Sync for preparation | 1 fewer message per cold stmt |
 | Wire | Merged 5-byte header recv | 1 fewer syscall/message |
 | Wire | TCP_NODELAY + message coalescing | Latency parity with C |
+| Async | Sender/receiver split (writer+reader threads) | 7.2x at 32 concurrent threads |
+| Async | Reader error recovery | Query errors no longer kill connection |
 | Execute | Fused decode + DList accumulation | Eliminated intermediate list + reverse |
 | Batch | Pipelined Bind+Execute | 40-100x for N inserts |
+| Batch | Streaming chunks for large batches | Bounded memory regardless of size |
+| Alloc | Constant format vectors (`binaryFmtVec`) | Eliminated per-query Vector alloc |
 | Strictness | Bang patterns, foldl', UNPACK | Zero space leaks |
 | Safety | -fno-full-laziness, K8K stack tests | Regression-proof |

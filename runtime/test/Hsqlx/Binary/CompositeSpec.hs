@@ -1,10 +1,11 @@
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 module Hsqlx.Binary.CompositeSpec (spec) where
 
 import Data.ByteString qualified as BS
 import Hsqlx.Binary.Composite
 import Hsqlx.Binary.Decode ()
 import Hsqlx.Binary.Encode ()
-import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
+import PgWire.Binary.Types (PgEncode (..))
 import Data.Int (Int32)
 import Test.Hspec
 

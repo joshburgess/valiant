@@ -185,9 +185,13 @@ snakeToCamel s =
     capitalize [] = []
     capitalize (c : cs) =
       let (w, rest') = break (== '_') (c : cs)
-       in (toUpper (head w) : tail w) <> case rest' of
-            [] -> []
-            (_ : rs) -> capitalize rs
+       in case w of
+            (x : xs) -> (toUpper x : xs) <> case rest' of
+              [] -> []
+              (_ : rs) -> capitalize rs
+            [] -> case rest' of
+              [] -> []
+              (_ : rs) -> capitalize rs
 
 formatParamType :: [CacheParam] -> String
 formatParamType [] = "()"

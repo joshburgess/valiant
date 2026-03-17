@@ -20,7 +20,6 @@ import Data.ByteString.Lazy qualified as LBS
 import Data.Int (Int16)
 import Data.Scientific (Scientific)
 import Data.Scientific qualified as Sci
-import Data.Word (Word8)
 import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
 import PgWire.Protocol.Oid (oidNumeric)
 
