@@ -44,7 +44,8 @@ import Network.Socket qualified as NS
 import Network.Socket.ByteString qualified as NSB
 import Network.Socket (setSocketOption, SocketOption(..))
 import Network.TLS qualified as TLS
-import Network.TLS (ClientParams (..), Supported (..), Shared (..))
+import Network.TLS (ClientParams (..), ClientHooks (..), Supported (..), Shared (..), Credentials (..), Credential)
+import Data.X509.CertificateStore (readCertificateStore)
 import System.X509 (getSystemCertificateStore)
 
 -- | Abstraction over a Postgres wire connection (plain TCP or TLS).
@@ -128,22 +129,44 @@ upgradeTls wc tlsCfg = do
   resp <- wcRecv wc 1
   case BS.index resp 0 of
     83 {- S -} -> do
-      store <- getSystemCertificateStore
-      -- Load custom CA cert if provided
+      -- Load CA certificate store
+      systemStore <- getSystemCertificateStore
       caStore <- case tlsCaCert tlsCfg of
-        Nothing -> pure store
+        Nothing -> pure systemStore
+        Just "system" -> pure systemStore
         Just path -> do
-          result <- TLS.credentialLoadX509 path (maybe "" id (tlsClientKey tlsCfg))
-          pure store  -- For CA, we'd use readSignedObject, but for simplicity use system store + validation hook
+          mStore <- readCertificateStore path
+          pure (maybe systemStore id mStore)
+
+      -- Load client certificate + key if provided
+      clientCred <- case (tlsClientCert tlsCfg, tlsClientKey tlsCfg) of
+        (Just certPath, Just keyPath) -> do
+          result <- TLS.credentialLoadX509 certPath keyPath
+          case result of
+            Right cred -> pure (Credentials [cred])
+            Left err -> do
+              -- Non-fatal: warn but continue without client cert
+              pure (Credentials [])
+        _ -> pure (Credentials [])
+
       let hostname = tlsHostname tlsCfg
           baseParams = TLS.defaultParamsClient hostname ""
+          -- Configure certificate validation based on mode
+          hooks = (clientHooks baseParams)
+            { onServerCertificate =
+                if tlsVerify tlsCfg
+                  then onServerCertificate (clientHooks baseParams)  -- default validation
+                  else \_ _ _ _ -> pure []  -- skip validation (sslmode=require)
+            }
           clientParams = baseParams
             { clientSupported = (clientSupported baseParams)
                 { supportedVersions = [TLS.TLS13, TLS.TLS12]
                 }
             , clientShared = (clientShared baseParams)
-                { sharedCAStore = store
+                { sharedCAStore = caStore
+                , sharedCredentials = clientCred
                 }
+            , clientHooks = hooks
             }
       ctx <- TLS.contextNew (wireBackend wc) clientParams
       TLS.handshake ctx

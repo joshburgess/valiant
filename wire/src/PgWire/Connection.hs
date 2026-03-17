@@ -107,42 +107,51 @@ data ColumnDescription = ColumnDescription
 -- tries each in order until one succeeds. If @ccTargetSessionAttrs@
 -- is set, verifies the server matches (e.g., primary vs standby).
 connect :: ConnConfig -> IO Connection
-connect cfg = do
+connect cfg0 = do
+  -- Auto-lookup password from ~/.pgpass if not provided
+  cfg <- if BS8.null (ccPassword cfg0)
+    then do
+      mPw <- lookupPgpass cfg0
+      pure $ case mPw of
+        Just pw -> cfg0 { ccPassword = pw }
+        Nothing -> cfg0
+    else pure cfg0
   let hosts = parseHosts (ccHost cfg)
   orderedHosts <- if ccLoadBalanceHosts cfg
     then shuffleHosts hosts
     else pure hosts
-  tryHosts orderedHosts
-  where
-    tryHosts [] = throwHsqlx (ConnectionError "All hosts failed")
-    tryHosts [h] = connectSingleHost cfg { ccHost = h }
-    tryHosts (h : hs) = do
-      result <- try @SomeException (connectSingleHost cfg { ccHost = h })
-      case result of
-        Right conn -> do
-          -- Check target_session_attrs if set
-          ok <- checkSessionAttrs conn (ccTargetSessionAttrs cfg)
-          if ok
-            then pure conn
-            else do
-              close conn
-              tryHosts hs
-        Left _ -> tryHosts hs
+  tryHosts cfg orderedHosts
 
-    checkSessionAttrs _ SessionAny = pure True
-    checkSessionAttrs conn attr = do
-      (rows, _) <- simpleQuery conn "SHOW transaction_read_only"
-      case rows of
-        [[Just val]] ->
-          let readOnly = val == "on"
-           in pure $ case attr of
-                SessionReadWrite -> not readOnly
-                SessionReadOnly -> readOnly
-                SessionPrimary -> not readOnly
-                SessionStandby -> readOnly
-                SessionPreferStandby -> True -- accept either
-                SessionAny -> True
-        _ -> pure True -- can't determine, accept
+tryHosts :: ConnConfig -> [String] -> IO Connection
+tryHosts _ [] = throwHsqlx (ConnectionError "All hosts failed")
+tryHosts cfg [h] = connectSingleHost cfg { ccHost = h }
+tryHosts cfg (h : hs) = do
+  result <- try @SomeException (connectSingleHost cfg { ccHost = h })
+  case result of
+    Right conn -> do
+      ok <- checkSessionAttrs conn (ccTargetSessionAttrs cfg)
+      if ok
+        then pure conn
+        else do
+          close conn
+          tryHosts cfg hs
+    Left _ -> tryHosts cfg hs
+
+checkSessionAttrs :: Connection -> TargetSessionAttrs -> IO Bool
+checkSessionAttrs _ SessionAny = pure True
+checkSessionAttrs conn attr = do
+  (rows, _) <- simpleQuery conn "SHOW transaction_read_only"
+  case rows of
+    [[Just val]] ->
+      let readOnly = val == "on"
+       in pure $ case attr of
+            SessionReadWrite -> not readOnly
+            SessionReadOnly -> readOnly
+            SessionPrimary -> not readOnly
+            SessionStandby -> readOnly
+            SessionPreferStandby -> True
+            SessionAny -> True
+    _ -> pure True
 
 -- | Fisher-Yates shuffle for load balancing
 shuffleHosts :: [a] -> IO [a]
