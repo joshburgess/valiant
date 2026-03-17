@@ -41,6 +41,39 @@ Last updated: 2026-03-17
 - **-fno-full-laziness** — Safety guard on streaming modules
 - **Scientific encoder rewrite** — ByteString instead of String
 - **GHC 9.10.3 upgrade** — Core libraries build on latest LTS GHC
+- **Sender/receiver split** — Dedicated writer+reader threads per connection,
+  automatic pipelining for concurrent workloads, 7.2x scaling at 32 threads
+- **Vectored I/O** — `sendMany` for scatter-gather, then fused Builder
+  encoding (`buildFrontendMsgsConcat`) for single-allocation single-syscall sends
+- **`unsafeIndex` in decode paths** — Bounds-checked at framing layer,
+  unchecked in per-column hot path
+- **Cross-connection statement cache** — Pool-level `TVar (Map Int ByteString)`
+  shared across connections; connection B skips Parse if A already prepared
+- **Statement cache key hashing** — `Hashable`-based Int keys instead of
+  full SQL text comparison
+- **RowFold** — `executeWithFold` for constant-memory streaming without cursors
+- **Binary COPY format** — `copyInBinary` with binary tuple encoding
+- **Protocol tracing** — `setTraceHandler` callback on raw wire bytes
+- **Multi-host failover** — Comma-separated hosts, `target_session_attrs`,
+  `load_balance_hosts` (Fisher-Yates shuffle)
+- **Parse+Bind coalescing** — First-execution single round-trip
+- **Flush-based preparation** — `Parse + Flush` instead of `Parse + Sync`
+- **Constant format vectors** — Module-level CAF for `binaryFmtVec`
+- **Streaming batch execution** — Chunks of 256 for large batches, bounded memory
+- **Reader error recovery** — Query errors are per-request, not connection-fatal
+- **Fused Builder encoding** — `buildFrontendMsgsConcat` fuses N messages into
+  one Builder pass, one `toStrict`, one `send()`
+- **Direct-to-Vector DataRow parsing** — `V.create` with mutable vector,
+  validation pass then unsafe fill pass, eliminates intermediate list
+- **Pool-level TypeCache** — `TVar (Map Word32 TypeInfo)` shared across
+  connections for resolved PG type metadata
+- **Auto PG type discovery** — `hsqlx prepare` queries `pg_type`/`pg_enum`/
+  `pg_range` for unknown OIDs instead of failing; enums→Text, domains→unwrap,
+  ranges→PgRange
+- **PgEnum type class** — `Hsqlx.Binary.Enum` codec for enum binary format
+- **Extended cache format** — `pg_type_category` and `pg_enum_labels` in
+  cache JSON (backward-compatible optional fields)
+- **`-Werror`** — All four cabal packages compile warning-free
 
 ---
 
@@ -377,91 +410,14 @@ strictly more powerful than a C callback table.
 
 ---
 
-## Critical: Architectural
-
-### Sender/receiver split (automatic pipelining)
-
-**Status:** Not implemented. Current design is serial: one thread sends
-a request and waits for the response before the next thread can use the
-connection.
-
-**Impact:** When multiple green threads share a connection (via pool),
-they serialize on the connection. With a sender/receiver split, multiple
-threads' queries would be automatically batched into a single send,
-providing implicit pipelining without any explicit `Pipeline` API.
-
-**Implementation:** Three green threads per connection:
-1. Application threads put `Request` into a `TBQueue`, block on `MVar`
-2. Writer thread drains `TBQueue`, batches into one `sendMany`, enqueues
-   response `MVar`s into a `TQueue`
-3. Reader thread reads from socket, fills `MVar`s in order
-
-```haskell
-data Connection = Connection
-  { connSendChan :: !(TBQueue Request)
-  , connReader   :: !(Async Void)
-  , connWriter   :: !(Async Void)
-  , connPending  :: !(TQueue (MVar Response))
-  }
-```
-
-This is the architecture behind asyncpg's 3x advantage over psycopg2 on
-concurrent workloads. It would make our `Pipeline` API unnecessary for
-the concurrent case — any green threads hitting the same connection
-would get automatic pipelining for free.
-
-**Effort:** Large. Requires rearchitecting `Connection`, `Execute`,
-and how the pool dispatches work. Touches nearly every module.
-
----
-
-### Vectored I/O (`sendMany`)
-
-**Status:** We use `BS.concat (map buildFrontendMsg msgs)` which copies
-all message bytes into one contiguous buffer before sending.
-
-**Impact:** `Network.Socket.ByteString.sendMany` does scatter-gather I/O
-— sends multiple `ByteString` chunks in a single syscall without copying
-them together. Eliminates the `BS.concat` allocation on every pipelined
-send.
-
-**Implementation:** Replace `sendFrontendMsgs` to use `sendMany` with
-the `Builder`'s lazy `ByteString` chunks directly:
-
-```haskell
-sendFrontendMsgs wc msgs =
-  NSB.sendMany (wcSocket wc)
-    (LBS.toChunks (B.toLazyByteString (foldMap encodeFrontendMsg msgs)))
-```
-
-**Effort:** Small. Requires exposing the socket from `WireConn`.
-
----
-
 ## High Priority: Performance
-
-### `unsafeIndex` in decode hot paths
-
-**Status:** All `BS.index` calls in decoders are bounds-checked.
-
-**Impact:** In the decode hot path (every column of every row), we pay
-for bounds checking that is redundant — the message length has already
-been validated during framing. On millions of rows, this adds up.
-
-**Implementation:** Replace `BS.index` with `Data.ByteString.Unsafe.unsafeIndex`
-in `decodeInt16BE`, `decodeInt32BE`, `decodeInt64BE`, and the DataRow parser.
-Leave bounds checks in the message framing layer where they protect
-against malformed input.
-
-**Effort:** Small.
-
----
 
 ### Pinned ByteStrings for socket writes
 
-**Status:** Our `ByteString`s may be unpinned. GHC's socket send
-functions need pinned memory, causing an implicit copy to pinned
-memory on every send.
+**Status:** Not implemented.
+
+Our `ByteString`s may be unpinned. GHC's socket send functions need
+pinned memory, causing an implicit copy to pinned memory on every send.
 
 **Impact:** Extra allocation + copy on every socket write.
 
@@ -473,113 +429,35 @@ allocates pinned) for the write path, or use `mallocBytes` +
 
 ---
 
-### RowFold (constant-memory streaming without cursors)
-
-**Status:** Large result sets require cursors (`withCursor`/`fetchBatch`)
-which need a transaction. No fold-based streaming.
-
-**Impact:** Cannot process million-row results in constant memory
-without an explicit transaction and cursor.
-
-**Implementation:**
-```haskell
-data RowFold a b = RowFold
-  { foldInit    :: !b
-  , foldStep    :: !(b -> a -> b)
-  , foldExtract :: !(b -> IO b)
-  }
-
-executeWithFold :: Connection -> Statement p a -> p -> RowFold a b -> IO b
-```
-
-Decode and fold each `DataRow` as it arrives from the wire. No list,
-no buffering. Works outside transactions.
-
-**Effort:** Medium.
-
----
-
-### Cross-connection statement cache sharing
-
-**Status:** Each connection maintains its own independent statement
-cache. When a connection is returned to the pool and a new one is
-acquired, the new connection re-prepares all statements.
-
-**Impact:** Repeated `Parse` round-trips for the same statements across
-different connections from the same pool.
-
-**Implementation:** Share a `TVar (HashMap Word64 ByteString)` across
-all pool connections mapping SQL hash → server-side statement name.
-When connection A prepares a statement, register it. When connection B
-needs the same statement, skip Parse and go straight to Bind+Execute.
-Requires consistent naming scheme across connections.
-
-**Effort:** Medium.
-
----
-
-### Statement cache key hashing
-
-**Status:** Statement cache uses `Map ByteString ByteString` keyed by
-the full SQL text. Lookup is O(n) in key length per comparison.
-
-**Impact:** For long SQL strings, map lookups are slower than necessary.
-
-**Implementation:** Hash SQL text to `Word64` using FNV-1a or xxHash.
-Use `HashMap Word64 ByteString` for O(1) expected lookup.
-
-**Effort:** Small.
-
----
-
 ## Medium Priority: Features
 
-### Multi-host failover
+### Connection pool optimization
 
-**Status:** Connection strings only support a single host.
+**Status:** The current pool (`PgWire.Pool`) is functional but basic.
 
-**Impact:** Cannot connect to HA Postgres setups with multiple hosts.
+**Impact:** Production workloads need more sophisticated pool behavior:
+configurable min/max connections, connection warm-up, better metrics
+and observability, stricter resource lifecycle management.
 
-**Implementation:** Parse multiple hosts from the connection string,
-attempt connection to each in order, fall back on failure. Support
-`target_session_attrs` to distinguish primary vs standby.
+**Inspiration:** `deadpool-postgres` (Haskell) for API design and
+lifecycle management patterns.
 
----
-
-### Binary COPY format
-
-**Status:** COPY IN/OUT works with text and CSV formats.
-
-**Impact:** Binary COPY is the fastest possible Postgres ingest path.
-The binary format matches the column data format in `DataRow`, so the
-same codec infrastructure is reused.
-
-**Implementation:** Write binary COPY header (signature + flags + header
-extension), then encode each row as binary tuple data using existing
-`pgEncode` instances.
+**Effort:** Medium-large.
 
 ---
 
-### Single-row mode
+### ReaderT convenience layer
 
-**Status:** Results are fully collected before returning.
+**Status:** Not implemented.
 
-**Impact:** Cannot process rows one-at-a-time for very large result sets
-without cursors.
+All runtime functions take `Connection` or `Pool` as explicit arguments.
+A `type Hsqlx a = ReaderT Pool IO a` wrapper with `runHsqlx` would be
+purely ergonomic, zero-cost at runtime (ReaderT is a newtype).
 
-**Implementation:** Send `Execute` with `max_rows=1` and process each
-`DataRow` as it arrives via a callback or fold.
+**Implementation:** New module `Hsqlx.Monad` with lifted versions of
+`fetchOne`, `fetchAll`, `execute`, `withTransaction`, etc.
 
----
-
-### Protocol tracing
-
-**Status:** No built-in way to log raw protocol messages.
-
-**Implementation:** Add a trace callback to `WireConn`:
-```haskell
-wcTrace :: Maybe (Direction -> ByteString -> IO ())
-```
+**Effort:** Small.
 
 ---
 
@@ -593,6 +471,27 @@ wcTrace :: Maybe (Direction -> ByteString -> IO ())
 the same `pg-wire` codec library. Enables QuickCheck fuzzing of the
 client against malformed/unexpected server responses.
 
+**Effort:** Medium-large.
+
+---
+
+### Conduit/streaming integration
+
+Optional extension packages (`hsqlx-conduit`, `hsqlx-streaming`) for
+integration with streaming ecosystems. Core library stays
+dependency-minimal with `RowFold`.
+
+**Effort:** Small per adapter.
+
+---
+
+### GHC plugin port to 9.10
+
+The GHC source plugin currently requires GHC 9.4. Needs CPP
+conditionals or `ghc-tcplugin-api` for the GHC API changes in 9.6-9.10.
+
+**Effort:** Medium.
+
 ---
 
 ## Nice to Have
@@ -605,12 +504,6 @@ Rarely needed outside enterprise. Requires the `gssapi` package.
 
 `lo_create`/`lo_read`/`lo_write`. Rarely used in modern applications.
 
-### Conduit/streaming integration
-
-Optional extension packages (`hsqlx-conduit`, `hsqlx-streaming`) for
-integration with streaming ecosystems. Core library stays
-dependency-minimal with `RowFold`.
-
 ### Pre-allocated receive buffer
 
 Replace `recvExact`'s list accumulation with a pre-allocated
@@ -621,22 +514,14 @@ Replace `recvExact`'s list accumulation with a pre-allocated
 For columns of known fixed-size types, use unboxed vectors to avoid
 per-value heap allocation.
 
-### GHC plugin port to 9.10
-
-The GHC source plugin currently requires GHC 9.4. Needs CPP
-conditionals or `ghc-tcplugin-api` for the GHC API changes in 9.6-9.10.
-
 ---
 
 ## Recommended iteration order
 
-1. **`unsafeIndex` in decode paths** — small, immediate perf win
-2. **Vectored I/O (`sendMany`)** — small, eliminates concat on send
-3. **RowFold streaming** — medium, enables constant-memory large results
-4. **Binary COPY format** — medium, fastest bulk ingest
-5. **Cross-connection statement cache** — medium, reduces Parse round-trips
-6. **Statement cache hashing** — small, faster lookups
-7. **Sender/receiver split** — large, transformative for concurrent perf
-8. **Multi-host failover** — medium, production necessity for HA
-9. **Protocol tracing** — small, debugging aid
-10. **GHC plugin 9.10 port** — medium, ecosystem compatibility
+1. **Pinned ByteStrings** — small, eliminates implicit copy on send
+2. **Connection pool optimization** — medium-large, production necessity
+3. **ReaderT convenience layer** — small, ergonomic win
+4. **GHC plugin 9.10 port** — medium, ecosystem compatibility
+5. **Mock server** — medium-large, enables property-based testing
+6. **Pre-allocated receive buffer** — small, reduces recv allocations
+7. **Conduit integration** — small, streaming ecosystem interop

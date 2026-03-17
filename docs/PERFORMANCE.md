@@ -176,12 +176,15 @@ Sequential (N round-trips):      Pipelined (1 round-trip):
 
 Neither hasql nor postgresql-simple expose pipelining.
 
-### 4. Message coalescing
+### 4. Message coalescing and fused encoding
 
 When sending Bind+Execute+Sync (or any sequence of messages), hsqlx
-concatenates all protocol messages into a single `send()` syscall via
-`sendFrontendMsgs`. Combined with `TCP_NODELAY`, this eliminates the
-latency penalty of small messages.
+fuses all protocol messages into a single `Builder`, materializes once
+via `buildFrontendMsgsConcat`, and sends with a single `send()` syscall.
+For a typical 3-message batch (~100 bytes), this eliminates 2
+intermediate `ByteString` allocations compared to per-message encoding.
+Combined with `TCP_NODELAY`, this eliminates the latency penalty of
+small messages.
 
 ### 5. Pre-computed message sizes
 
@@ -241,8 +244,10 @@ type family Nullable (a :: Type) :: Bool where
 
 - Direct byte writes via `unsafeCreate` + `pokeByteOff` for fixed-size
   encodes (eliminated `Builder` intermediate for 2-8 byte values)
-- `V.fromListN` with known size for `DataRow` parsing and `ToParams`
-  tuple encoding (Vector pre-allocates exact buffer)
+- Direct-to-Vector `DataRow` parsing via `V.create` with mutable vector
+  (eliminated intermediate `[Maybe ByteString]` list entirely)
+- `V.fromListN` with known size for `ToParams` tuple encoding
+  (Vector pre-allocates exact buffer)
 - Difference lists in row collection (eliminates O(n) `reverse`)
 - Pre-computed message sizes (eliminates double-copy in protocol encoding)
 - Fused row decoding (eliminates intermediate raw row list)
@@ -628,6 +633,58 @@ executeBatch conn stmt large = submitExclusive ... $ \wc _ -> do
 *Result: bounded memory for large batch inserts, reduced GC pressure
 on every query via constant vectors.*
 
+### Pass 8: Fused encoding and direct-to-vector parsing
+
+The eighth pass eliminated the remaining per-message and per-row
+allocation overhead in the two hottest paths: protocol encoding and
+DataRow parsing.
+
+**Fused Builder encoding.** `sendFrontendMsgs` previously called
+`buildFrontendMsg` per message — each doing `toLazyByteString` +
+`toStrict` independently — then passed the chunks to `sendMany`.
+Replaced with `buildFrontendMsgsConcat`, which fuses all messages
+into a single `Builder`, materializes once, and sends with a single
+`send()`:
+
+```haskell
+-- Before: N toStrict calls, sendMany with N iovecs
+sendFrontendMsgs wc msgs = do
+  let chunks = map buildFrontendMsg msgs
+  wcSendMany wc chunks
+
+-- After: 1 toStrict call, 1 send
+sendFrontendMsgs wc msgs = do
+  let bytes = buildFrontendMsgsConcat msgs
+  wcSend wc bytes
+```
+
+For a typical Bind+Execute+Sync batch (~100 bytes total), this
+eliminates 2 intermediate `ByteString` allocations and replaces
+`sendMany` (writev with 3 iovecs) with a single `send`.
+
+**Direct-to-Vector DataRow parsing.** `parseDataRow` previously built
+a `[Maybe ByteString]` list via recursive `parseColValues`, then
+converted to a Vector via `V.fromListN`. The list is O(n) cons cells
+immediately consumed. Replaced with `V.create` using a mutable vector:
+
+```haskell
+-- Before: list intermediate
+(vals, _) <- parseColValues n (BS.drop 2 bs)
+Right (DataRow (V.fromListN n vals))
+
+-- After: direct mutable write, validation + fill passes
+vals <- parseColsDirect n bs 2
+Right (DataRow vals)
+```
+
+The validation pass checks all column lengths fit within the buffer
+(safety), then the fill pass uses `unsafeIndex`/`unsafeTake`/
+`unsafeDrop` for zero-copy column slicing. For a 20-column row, this
+saves 20 cons cells per row.
+
+*Result: eliminated per-message and per-row intermediate allocations
+in the two highest-frequency code paths.*
+
 ### Summary: encode path improvement
 
 | Stage | Int32 encode | Cumulative |
@@ -654,5 +711,7 @@ on every query via constant vectors.*
 | Batch | Pipelined Bind+Execute | 40-100x for N inserts |
 | Batch | Streaming chunks for large batches | Bounded memory regardless of size |
 | Alloc | Constant format vectors (`binaryFmtVec`) | Eliminated per-query Vector alloc |
+| Encode | Fused Builder (`buildFrontendMsgsConcat`) | 1 alloc + 1 send per batch, not N |
+| Decode | Direct-to-Vector DataRow (`V.create`) | Eliminated per-row list intermediate |
 | Strictness | Bang patterns, foldl', UNPACK | Zero space leaks |
 | Safety | -fno-full-laziness, K8K stack tests | Regression-proof |
