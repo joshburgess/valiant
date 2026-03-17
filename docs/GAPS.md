@@ -74,6 +74,11 @@ Last updated: 2026-03-17
 - **Extended cache format** — `pg_type_category` and `pg_enum_labels` in
   cache JSON (backward-compatible optional fields)
 - **`-Werror`** — All four cabal packages compile warning-free
+- **Named parameters** — `:name` syntax in SQL files, `ToNamedParams` type class,
+  `mkStatementNamed` constructor, Generic-based record encoding with field
+  reordering and clear mismatch error messages
+- **Hsqlx.Monad** — `type Hsqlx = ReaderT Pool IO` convenience monad with
+  lifted `fetchOneM`, `fetchAllM`, `executeM`, `withTransactionM`, etc.
 
 ---
 
@@ -427,21 +432,6 @@ lifecycle management patterns.
 
 ---
 
-### ReaderT convenience layer
-
-**Status:** Not implemented.
-
-All runtime functions take `Connection` or `Pool` as explicit arguments.
-A `type Hsqlx a = ReaderT Pool IO a` wrapper with `runHsqlx` would be
-purely ergonomic, zero-cost at runtime (ReaderT is a newtype).
-
-**Implementation:** New module `Hsqlx.Monad` with lifted versions of
-`fetchOne`, `fetchAll`, `execute`, `withTransaction`, etc.
-
-**Effort:** Small.
-
----
-
 ### Mock server for testing
 
 **Status:** All tests run against real Postgres.
@@ -500,8 +490,7 @@ per-value heap allocation.
 ## Recommended iteration order
 
 1. **Connection pool optimization** — medium-large, production necessity
-2. **ReaderT convenience layer** — small, ergonomic win
-3. **GHC plugin 9.10 port** — medium, ecosystem compatibility
-4. **Mock server** — medium-large, enables property-based testing
-5. **Pre-allocated receive buffer** — small, reduces recv allocations
-6. **Conduit integration** — small, streaming ecosystem interop
+2. **GHC plugin 9.10 port** — medium, ecosystem compatibility
+3. **Mock server** — medium-large, enables property-based testing
+4. **Pre-allocated receive buffer** — small, reduces recv allocations
+5. **Conduit integration** — small, streaming ecosystem interop

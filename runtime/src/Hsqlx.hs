@@ -114,6 +114,12 @@ module Hsqlx
   , withTransactionLevel
   , withSavepoint
 
+    -- * Hsqlx monad (optional convenience)
+    -- | A 'ReaderT Pool IO' monad that carries the pool implicitly.
+    -- Import "Hsqlx.Monad" for the lifted @*M@ functions.
+  , Hsqlx
+  , runHsqlx
+
     -- * Cancellation
     -- | Cancel in-flight queries. 'cancelQuery' opens a separate TCP
     -- connection and sends a CancelRequest to the server.
@@ -197,6 +203,7 @@ import Hsqlx.Execute (execute, executeBatch, fetchAll, fetchBatchAll, fetchBatch
 import Hsqlx.Fold (RowFold (..), executeWithFold)
 import Hsqlx.FromRow (FromRow (..))
 import Hsqlx.Logging (LogEvent (..), LogLevel (..), Logger, nullLogger, stderrLogger)
+import Hsqlx.Monad (Hsqlx, runHsqlx)
 import Hsqlx.NamedParams (NamedStatement, ToNamedParams (..), mkStatementNamed)
 import Hsqlx.Notify (Notification (..), listen, unlisten, waitForNotification, waitForNotificationTimeout)
 import Hsqlx.Pipeline (Pipeline, pipeFetchOne, pipeFetchAll, pipeFetchScalar, pipeExecute, runPipeline)
