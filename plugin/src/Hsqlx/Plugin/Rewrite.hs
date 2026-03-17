@@ -6,19 +6,15 @@ module Hsqlx.Plugin.Rewrite
 import Control.Monad.IO.Class (liftIO)
 import Data.ByteString qualified as BS
 import Data.Text qualified as T
-import Data.Word (Word32)
 import GHC.Driver.Env.Types (Hsc)
 import GHC.Data.FastString (fsLit, unpackFS)
 import GHC.Hs
-import GHC.Parser.Annotation (noAnn, noLocA)
-import GHC.Plugins (GenLocated (..))
+import GHC.Plugins (GenLocated (..), Outputable, ppr, showSDocUnsafe)
 import GHC.Types.PkgQual (RawPkgQual (..))
-import GHC.Hs.ImpExp (ImportDeclQualifiedStyle (..))
 import GHC.Unit.Types (IsBootInterface (..))
 import GHC.Types.Name.Occurrence (mkVarOcc, occNameString)
 import GHC.Types.Name.Reader (mkRdrQual, rdrNameOcc)
-import GHC.Types.SourceText (IntegralLit (..), SourceText (..), mkIntegralLit)
-import GHC.Unit.Module.Name (mkModuleName)
+import GHC.Types.SourceText (SourceText (..), mkIntegralLit)
 import Hsqlx.Plugin.Cache (CacheColumn (..), CacheEntry (..), CacheParam (..), findCacheFile)
 import Hsqlx.Plugin.Config (PluginConfig (..))
 import Hsqlx.Plugin.Hash (sha256Hex)
@@ -27,12 +23,15 @@ import System.FilePath ((</>))
 
 -- | Rewrite a parsed module, replacing queryFile calls with mkStatement calls.
 -- Returns the modified module and whether any rewrites were made.
-rewriteModule :: PluginConfig -> HsModule -> Hsc (HsModule, Bool)
+rewriteModule :: PluginConfig -> HsModule GhcPs -> Hsc (HsModule GhcPs, Bool)
 rewriteModule config hsmod = do
   (decls', anyRewritten) <- rewriteDecls config (hsmodDecls hsmod)
   let hsmod' =
         if anyRewritten
-          then hsmod {hsmodDecls = decls', hsmodImports = addImport (hsmodImports hsmod)}
+          then hsmod
+            { hsmodDecls = decls'
+            , hsmodImports = addImport (stripQueryFileImports (hsmodImports hsmod))
+            }
           else hsmod
   pure (hsmod', anyRewritten)
 
@@ -95,13 +94,27 @@ rewriteExpr config (HsApp appAnn (L fLoc func) (L aLoc arg))
         Just entry -> do
           let replacement = buildMkStatementCall entry
           pure (replacement, True)
-        Nothing ->
-          -- Cache not found; leave queryFile as-is.
-          -- typeCheckResultAction will emit HSQLX-002.
-          pure (HsApp appAnn (L fLoc func) (L aLoc arg), False)
+        Nothing -> do
+          -- Cache or file not found. Rewrite to a placeholder mkStatement
+          -- call so the HsqlxPluginRequired TypeError doesn't fire.
+          -- The typecheck phase will detect the path and emit HSQLX-001/002.
+          let placeholder = buildPlaceholderCall path
+          pure (placeholder, True)
 rewriteExpr _ expr = pure (expr, False)
 
 -- Builders ----------------------------------------------------------------
+
+-- | Build a placeholder @mkStatement "" [] [] path@ for when cache is missing.
+-- This avoids the HsqlxPluginRequired TypeError while letting the typecheck
+-- phase detect the call and emit a proper HSQLX-001/002 error.
+buildPlaceholderCall :: String -> HsExpr GhcPs
+buildPlaceholderCall path =
+  let mkSt = mkQualVar "Hsqlx.Statement" "mkStatement"
+      sql = mkStrLit ""
+      oids = mkIntList []
+      cols = mkStrList []
+      pathLit = mkStrLit path
+   in unLoc (mkSt `app` sql `app` oids `app` cols `app` pathLit)
 
 -- | Build: @Hsqlx.Statement.mkStatement sqlStr oids colNames path@
 buildMkStatementCall :: CacheEntry -> HsExpr GhcPs
@@ -118,19 +131,19 @@ mkQualVar modName varName =
   noLocA $ HsVar noExtField (noLocA (mkRdrQual (mkModuleName modName) (mkVarOcc varName)))
 
 mkStrLit :: String -> LHsExpr GhcPs
-mkStrLit s = noLocA $ HsLit noAnn (HsString NoSourceText (fsLit s))
+mkStrLit s = noLocA $ HsLit noExtField (HsString NoSourceText (fsLit s))
 
 mkIntList :: [Int] -> LHsExpr GhcPs
 mkIntList xs = noLocA $ ExplicitList noAnn [mkIntLit (fromIntegral x) | x <- xs]
 
 mkIntLit :: Integer -> LHsExpr GhcPs
-mkIntLit n = noLocA $ HsOverLit noAnn (mkHsIntegral (mkIntegralLit n))
+mkIntLit n = noLocA $ HsOverLit noExtField (mkHsIntegral (mkIntegralLit n))
 
 mkStrList :: [String] -> LHsExpr GhcPs
 mkStrList xs = noLocA $ ExplicitList noAnn [mkStrLit s | s <- xs]
 
 app :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
-app f x = noLocA $ HsApp noAnn f x
+app f x = noLocA $ HsApp noExtField f x
 
 unLoc :: GenLocated l a -> a
 unLoc (L _ a) = a
@@ -158,7 +171,29 @@ loadCacheForPath config path = do
       let hash = sha256Hex content
       findCacheFile (pcCacheDir config) path hash
 
--- | Add @import qualified Hsqlx.Statement (mkStatement)@ to the import list.
+-- | Remove @queryFile@ and @queryFileAs@ from explicit import lists.
+-- After the plugin rewrites these calls to @mkStatement@, the imports
+-- would be redundant and trigger @-Wunused-imports@.
+-- Uses 'showPpr' to convert IE items to strings for robust matching
+-- across GHC versions.
+stripQueryFileImports :: [LImportDecl GhcPs] -> [LImportDecl GhcPs]
+stripQueryFileImports = map stripImportDecl
+  where
+    stripImportDecl (L loc decl) = case ideclImportList decl of
+      Just (listType, L listLoc ies) ->
+        let ies' = filter (not . isQueryFileIE) ies
+         in L loc decl { ideclImportList = Just (listType, L listLoc ies') }
+      Nothing -> L loc decl
+
+    isQueryFileIE :: LIE GhcPs -> Bool
+    isQueryFileIE (L _ ie) =
+      let s = showPprUnsafe ie
+       in s == "queryFile" || s == "queryFileAs"
+
+    showPprUnsafe :: (Outputable a) => a -> String
+    showPprUnsafe = showSDocUnsafe . ppr
+
+-- | Add @import qualified Hsqlx.Statement@ (implicit) to the import list.
 addImport :: [LImportDecl GhcPs] -> [LImportDecl GhcPs]
 addImport imports = mkStatementImport : imports
 
@@ -166,14 +201,12 @@ mkStatementImport :: LImportDecl GhcPs
 mkStatementImport =
   noLocA
     ImportDecl
-      { ideclExt = noAnn
-      , ideclSourceSrc = NoSourceText
+      { ideclExt = XImportDeclPass noAnn NoSourceText True
       , ideclName = noLocA (mkModuleName "Hsqlx.Statement")
       , ideclPkgQual = NoRawPkgQual
       , ideclSource = NotBoot
       , ideclSafe = False
       , ideclQualified = QualifiedPre
-      , ideclImplicit = False
       , ideclAs = Nothing
-      , ideclHiding = Nothing
+      , ideclImportList = Nothing
       }

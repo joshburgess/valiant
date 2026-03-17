@@ -9,6 +9,7 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
+import Hsqlx.CLI.Command.Prepare (runPrepare)
 import Hsqlx.CLI.Config (AppEnv (..))
 import Hsqlx.CLI.Discover (SqlFile (..), discoverSqlFiles)
 import Hsqlx.CLI.Error (HsqlxCliError (..), dieWithError)
@@ -18,6 +19,7 @@ import System.Exit (ExitCode (..))
 
 -- | Run prepare in a loop, watching for SQL file changes.
 -- Polls every 2 seconds (fsnotify can be added later for efficiency).
+-- Automatically re-prepares when changes are detected.
 runWatch :: AppEnv -> IO ExitCode
 runWatch env = do
   _ <- case appDatabaseUrl env of
@@ -30,31 +32,39 @@ runWatch env = do
   printHeader $ "Watching " <> T.pack (appSqlDir env) <> " for changes..."
   printLn ""
 
-  -- Track known file hashes
-  hashRef <- newIORef Map.empty
+  -- Initial prepare
+  printLn "  Running initial prepare..."
+  _ <- runPrepare env
+  printLn ""
 
-  -- Initial scan
-  scanAndReport env hashRef
+  -- Track known file hashes
+  files <- discoverSqlFiles (appSqlDir env)
+  hashRef <- newIORef (Map.fromList [(sqlRelPath sf, sqlHash sf) | sf <- files])
 
   -- Poll loop
   _ <- forever $ do
     threadDelay 2000000 -- 2 seconds
-    scanAndReport env hashRef
+    scanAndPrepare env hashRef
 
   -- unreachable, but needed for type
   pure ExitSuccess
 
--- | Scan all SQL files, detect changes, and report.
-scanAndReport :: AppEnv -> IORef (Map FilePath Text) -> IO ()
-scanAndReport env hashRef = do
+-- | Scan all SQL files, detect changes, report, and re-prepare if needed.
+scanAndPrepare :: AppEnv -> IORef (Map FilePath Text) -> IO ()
+scanAndPrepare env hashRef = do
   files <- discoverSqlFiles (appSqlDir env)
   oldHashes <- readIORef hashRef
 
   let newHashes = Map.fromList [(sqlRelPath sf, sqlHash sf) | sf <- files]
       changes = detectChanges oldHashes newHashes
 
-  -- Report changes
-  mapM_ (reportChange env) changes
+  when (not (null changes)) $ do
+    mapM_ reportChange changes
+    printLn "  Re-preparing..."
+    exitCode <- runPrepare env
+    case exitCode of
+      ExitSuccess -> printLn ""
+      ExitFailure _ -> printLn "  (Some queries failed. Fix the SQL and save again.)\n"
 
   -- Update stored hashes
   writeIORef hashRef newHashes
@@ -71,10 +81,10 @@ detectChanges old new =
       deleted = [FileDeleted k | k <- Map.keys old, not (Map.member k new)]
    in added ++ modified ++ deleted
 
-reportChange :: AppEnv -> FileChange -> IO ()
-reportChange _env (FileAdded path) =
+reportChange :: FileChange -> IO ()
+reportChange (FileAdded path) =
   printLn $ "  [+] " <> T.pack path <> " (new file)"
-reportChange _env (FileModified path) =
+reportChange (FileModified path) =
   printLn $ "  [~] " <> T.pack path <> " (modified)"
-reportChange _env (FileDeleted path) =
+reportChange (FileDeleted path) =
   printLn $ "  [-] " <> T.pack path <> " (deleted)"

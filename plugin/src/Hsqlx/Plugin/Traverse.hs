@@ -1,4 +1,4 @@
--- | Walk the typechecked AST to find queryFile/queryFileAs call sites.
+-- | Walk the typechecked AST to find queryFile/queryFileAs/mkStatement call sites.
 module Hsqlx.Plugin.Traverse
   ( QueryFileCall (..)
   , findQueryFileCalls
@@ -22,7 +22,9 @@ data QueryFileCall = QueryFileCall
   , qfcBindName :: String
   }
 
--- | Find all queryFile/queryFileAs calls in the typechecked module.
+-- | Find all queryFile/queryFileAs/mkStatement calls in the typechecked module.
+-- After the parse-phase rewrite, queryFile calls become mkStatement calls.
+-- We detect both forms to handle modules compiled with and without rewriting.
 findQueryFileCalls :: TcGblEnv -> [QueryFileCall]
 findQueryFileCalls env =
   concatMap findInBind (bagToList (tcg_binds env))
@@ -57,31 +59,71 @@ findCallsInLExpr :: LHsExpr GhcTc -> [(SrcSpan, String)]
 findCallsInLExpr (L ann expr) = findCallsInExpr (getLocA (L ann expr)) expr
 
 findCallsInExpr :: SrcSpan -> HsExpr GhcTc -> [(SrcSpan, String)]
-findCallsInExpr sp = \case
-  HsApp _ (L _ func) (L _ arg)
-    | isQueryFileExpr func
-    , Just path <- extractStringLit arg ->
-        [(sp, path)]
-  HsApp _ func arg ->
-    findCallsInLExpr func ++ findCallsInLExpr arg
-  OpApp _ l op r ->
-    findCallsInLExpr l ++ findCallsInLExpr op ++ findCallsInLExpr r
-  NegApp _ e _ -> findCallsInLExpr e
-  HsPar _ _ e _ -> findCallsInLExpr e
-  SectionL _ e1 e2 -> findCallsInLExpr e1 ++ findCallsInLExpr e2
-  SectionR _ e1 e2 -> findCallsInLExpr e1 ++ findCallsInLExpr e2
-  ExplicitTuple _ args _ ->
-    concatMap (\case Present _ e -> findCallsInLExpr e; _ -> []) args
-  HsLet _ _ _ _ e -> findCallsInLExpr e
-  HsCase _ scrut mg ->
-    findCallsInLExpr scrut ++ findCallsInMG mg
-  HsIf _ c t f ->
-    findCallsInLExpr c ++ findCallsInLExpr t ++ findCallsInLExpr f
-  HsDo _ _ (L _ stmts) -> concatMap (\(L _ s) -> findCallsInStmt s) stmts
-  ExplicitList _ exprs -> concatMap findCallsInLExpr exprs
-  XExpr (WrapExpr (HsWrap _ inner)) -> findCallsInExpr sp inner
-  XExpr (ExpansionExpr (HsExpanded _ inner)) -> findCallsInExpr sp inner
-  _ -> []
+findCallsInExpr sp expr =
+  -- First, try to detect mkStatement (rewritten queryFile)
+  case extractMkStatementCall expr of
+    Just path -> [(sp, path)]
+    Nothing -> case expr of
+      -- Original queryFile "path.sql" (not rewritten)
+      HsApp _ (L _ func) (L _ arg)
+        | isQueryFileExpr func
+        , Just path <- extractStringLit arg ->
+            [(sp, path)]
+      HsApp _ func arg ->
+        findCallsInLExpr func ++ findCallsInLExpr arg
+      OpApp _ l op r ->
+        findCallsInLExpr l ++ findCallsInLExpr op ++ findCallsInLExpr r
+      NegApp _ e _ -> findCallsInLExpr e
+      HsPar _ e -> findCallsInLExpr e
+      SectionL _ e1 e2 -> findCallsInLExpr e1 ++ findCallsInLExpr e2
+      SectionR _ e1 e2 -> findCallsInLExpr e1 ++ findCallsInLExpr e2
+      ExplicitTuple _ args _ ->
+        concatMap (\case Present _ e -> findCallsInLExpr e; _ -> []) args
+      HsLet _ _ e -> findCallsInLExpr e
+      HsCase _ scrut mg ->
+        findCallsInLExpr scrut ++ findCallsInMG mg
+      HsIf _ c t f ->
+        findCallsInLExpr c ++ findCallsInLExpr t ++ findCallsInLExpr f
+      HsDo _ _ (L _ stmts) -> concatMap (\(L _ s) -> findCallsInStmt s) stmts
+      ExplicitList _ exprs -> concatMap findCallsInLExpr exprs
+      XExpr (WrapExpr (HsWrap _ inner)) -> findCallsInExpr sp inner
+      XExpr (ExpandedThingTc _ inner) -> findCallsInExpr sp inner
+      _ -> []
+
+-- | Try to extract the file path from a mkStatement call.
+-- After rewrite, the expression is:
+--   mkStatement sqlStr oidsLit colsLit pathStr
+-- Which in the AST is a chain of HsApp:
+--   (((mkStatement `app` sql) `app` oids) `app` cols) `app` path
+-- We collect all args from a left-nested application spine,
+-- check the head is mkStatement, and take the 4th arg as the path.
+extractMkStatementCall :: HsExpr GhcTc -> Maybe String
+extractMkStatementCall expr = do
+  let (f, args) = collectArgs expr
+  if isMkStatementExpr f && length args == 4
+    then extractStringLit (unLHsExpr (args !! 3))
+    else Nothing
+
+-- | Collect the function and arguments from a left-nested application spine.
+-- (((f a1) a2) a3) → (f, [a1, a2, a3])
+collectArgs :: HsExpr GhcTc -> (HsExpr GhcTc, [LHsExpr GhcTc])
+collectArgs (HsApp _ (L _ f) arg) =
+  let (head', args) = collectArgs f
+   in (head', args ++ [arg])
+collectArgs (XExpr (WrapExpr (HsWrap _ inner))) = collectArgs inner
+collectArgs other = (other, [])
+
+unLHsExpr :: LHsExpr GhcTc -> HsExpr GhcTc
+unLHsExpr (L _ e) = e
+
+isMkStatementExpr :: HsExpr GhcTc -> Bool
+isMkStatementExpr (HsVar _ (L _ var)) = isMkStatementName var
+isMkStatementExpr (XExpr (WrapExpr (HsWrap _ inner))) = isMkStatementExpr inner
+isMkStatementExpr _ = False
+
+isMkStatementName :: Var -> Bool
+isMkStatementName var =
+  occNameString (nameOccName (varName var)) == "mkStatement"
 
 findCallsInStmt :: StmtLR GhcTc GhcTc (LHsExpr GhcTc) -> [(SrcSpan, String)]
 findCallsInStmt (BodyStmt _ body _ _) = findCallsInLExpr body

@@ -13,7 +13,7 @@ module Main where
 
 import Data.Aeson (FromJSON, ToJSON, object, (.=))
 import Data.ByteString.Char8 qualified as BS8
-import Data.Int (Int32)
+import Data.Int (Int32, Int64)
 import Data.Text (Text)
 import Data.Time (UTCTime)
 import GHC.Generics (Generic)
@@ -117,7 +117,7 @@ main = do
     get "/posts/recent" $ do
       n <- queryParamMaybe "n" >>= \case
         Just v -> pure v
-        Nothing -> pure 10 :: ActionM Int32
+        Nothing -> pure 10 :: ActionM Int64
       posts <- liftIO $ withResource pool $ \conn ->
         fetchAll conn listRecentPosts n
       json [ object [ "id" .= i, "title" .= t

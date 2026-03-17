@@ -1,0 +1,32 @@
+{
+    "columns": [],
+    "database_url_hash": "62b373881bcc8dbafdfdc488ef1e8525e82a3586660ccaf97bef16bbbffae48d",
+    "file": "users/insert_batch.sql",
+    "hsqlx_version": "0.1.0",
+    "parameters": [
+        {
+            "haskell_module": "Data.Text",
+            "haskell_type": "Text",
+            "index": 1,
+            "name": null,
+            "pg_enum_labels": null,
+            "pg_oid": 25,
+            "pg_type_category": null,
+            "pg_type_name": "text"
+        },
+        {
+            "haskell_module": "Data.Text",
+            "haskell_type": "Text",
+            "index": 2,
+            "name": null,
+            "pg_enum_labels": null,
+            "pg_oid": 25,
+            "pg_type_category": null,
+            "pg_type_name": "text"
+        }
+    ],
+    "prepared_at": "2026-03-17T16:39:38.083074Z",
+    "sql": "INSERT INTO users (name, email)\nVALUES ($1, $2)\n",
+    "sql_hash": "98baa27ca3d79ffcfb5fde7e994b1b6db7283e2ff9cccfc1a907b982d5a50056",
+    "statement_type": "insert"
+}

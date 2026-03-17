@@ -11,7 +11,7 @@ module Hsqlx.Plugin
 import Control.Monad (forM_)
 import Data.ByteString qualified as BS
 import GHC.Driver.Env.Types (Hsc)
-import GHC.Driver.Plugins (ParsedResult (..), PsMessages (..))
+import GHC.Driver.Plugins (ParsedResult (..))
 import GHC.Hs (HsModule (..), HsParsedModule (..))
 import GHC.Unit.Module.ModSummary (ModSummary)
 import GHC.Plugins

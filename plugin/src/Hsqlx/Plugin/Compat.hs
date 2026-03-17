@@ -1,4 +1,4 @@
--- | GHC 9.4 compatibility layer for plugin diagnostics.
+-- | GHC 9.10 compatibility layer for plugin diagnostics.
 module Hsqlx.Plugin.Compat
   ( emitPluginError
   , addFileDependency
@@ -7,13 +7,13 @@ module Hsqlx.Plugin.Compat
 import GHC.Plugins (SDoc)
 import GHC.Tc.Errors.Types (TcRnMessage (..))
 import GHC.Tc.Utils.Monad (TcM, addErrAt, addDependentFiles)
-import GHC.Types.Error (mkPlainError, noHints)
+import GHC.Types.Error (mkSimpleUnknownDiagnostic, noHints, mkPlainError)
 import GHC.Types.SrcLoc (SrcSpan)
 
 -- | Emit a compile error from the plugin at a specific source location.
 emitPluginError :: SrcSpan -> SDoc -> TcM ()
 emitPluginError srcSpan msg =
-  addErrAt srcSpan (TcRnUnknownMessage (mkPlainError noHints msg))
+  addErrAt srcSpan (TcRnUnknownMessage (mkSimpleUnknownDiagnostic (mkPlainError noHints msg)))
 
 -- | Register a file as a dependency for recompilation tracking.
 addFileDependency :: FilePath -> TcM ()

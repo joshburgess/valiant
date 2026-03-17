@@ -44,7 +44,7 @@ library
     , directory             >=1.3     && <1.4
     , aeson                 >=2.1     && <2.3
     , cryptohash-sha256     >=0.11    && <0.12
-    , ghc                   >=9.4     && <9.5
+    , ghc                   >=9.10    && <9.12
     , time                  >=1.12    && <1.15
     , edit-distance         >=0.2     && <0.3
 
@@ -60,6 +60,7 @@ test-suite hsqlx-plugin-test
   other-modules:
     Hsqlx.Plugin.ConfigSpec
     Hsqlx.Plugin.CacheSpec
+    Hsqlx.Plugin.ErrorCaseSpec
 
   build-depends:
     , base          >=4.17 && <5
@@ -69,5 +70,33 @@ test-suite hsqlx-plugin-test
     , filepath
     , hspec         >=2.11 && <2.12
     , hsqlx-plugin
+    , process       >=1.6  && <1.8
     , temporary     >=1.3  && <1.4
     , text
+
+-- End-to-end test: compiles a module with the plugin loaded.
+-- Validates that queryFile calls are rewritten and type-checked.
+-- Requires: hsqlx prepare to have been run (cache files in ../.hsqlx/).
+test-suite hsqlx-plugin-e2e
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   e2e
+  main-is:          Main.hs
+  default-language: GHC2021
+  default-extensions:
+    OverloadedStrings
+
+  other-modules:
+    PluginE2E
+
+  ghc-options:
+    -fplugin=Hsqlx.Plugin
+    -fplugin-opt=Hsqlx.Plugin:sql-dir=../sql
+    -fplugin-opt=Hsqlx.Plugin:cache-dir=../.hsqlx
+
+  build-depends:
+    , base           >=4.17 && <5
+    , hsqlx
+    , hsqlx-plugin
+    , text
+    , time

@@ -1,5 +1,5 @@
 with-compiler: ghc-9.10.3
-packages: . runtime bench-compare wire example deps/entropy
+packages: . runtime bench-compare wire example deps/entropy plugin
 tests: True
 
 package text

@@ -5,6 +5,7 @@ module Hsqlx.Plugin.Verify
 
 import Data.Text (Text)
 import Data.Text qualified as T
+import GHC.Core.TyCon qualified as TyCon
 import GHC.Core.Type (Type, splitTyConApp_maybe)
 import GHC.Plugins (showSDocUnsafe, ppr, TyCon, tyConName, nameOccName, occNameString)
 import GHC.Tc.Utils.Monad (TcM)
@@ -63,7 +64,7 @@ verifyParams srcSpan path paramTy params = do
 
 checkParamType :: SrcSpan -> FilePath -> (Int, Text, Text) -> TcM ()
 checkParamType srcSpan path (idx, expected, actual)
-  | matchesTypeText expected actual = pure ()
+  | matchesParamTypeText expected actual = pure ()
   | otherwise = errParamTypeMismatch srcSpan path idx expected actual
 
 -- | Verify result types match.
@@ -113,27 +114,37 @@ isUnitType ty = case splitTyConApp_maybe ty of
 
 isUnitTyCon :: TyCon -> Bool
 isUnitTyCon tc = occNameString (nameOccName (tyConName tc)) == "()"
+  || TyCon.isUnboxedTupleTyCon tc && TyCon.tyConArity tc == 0
 
 isTupleTyCon :: TyCon -> Bool
-isTupleTyCon tc =
-  let name = occNameString (nameOccName (tyConName tc))
-   in case name of
-        ('(' : rest) -> all (== ',') (takeWhile (/= ')') rest)
-        _ -> False
+isTupleTyCon = TyCon.isTupleTyCon
 
 -- | Compare expected type text from cache with actual type text from GHC.
 -- This does a normalized comparison to handle differences in qualification.
 matchesTypeText :: Text -> Text -> Bool
 matchesTypeText expected actual =
   normalize expected == normalize actual
+
+-- | Like 'matchesTypeText' but for parameters: allows @Maybe T@ to match @T@.
+-- This is valid because Haskell's @Maybe@ encodes as SQL NULL, and Postgres
+-- doesn't prevent NULL values in parameters (the column constraint enforces it).
+matchesParamTypeText :: Text -> Text -> Bool
+matchesParamTypeText expected actual =
+  matchesTypeText expected actual
+    || matchesTypeText expected (stripMaybe actual)
   where
-    -- Strip module qualifiers and extra whitespace for comparison
-    normalize = T.strip . stripQualifiers
+    stripMaybe t = case T.words (normalize t) of
+      ("Maybe" : rest) -> T.unwords rest
+      _ -> t
 
-    stripQualifiers t =
-      -- "Data.Int.Int32" -> "Int32", "Maybe Data.Text.Text" -> "Maybe Text"
-      T.unwords [lastPart w | w <- T.words t]
+normalize :: Text -> Text
+normalize = T.strip . stripQualifiers
 
+stripQualifiers :: Text -> Text
+stripQualifiers t =
+  -- "Data.Int.Int32" -> "Int32", "Maybe Data.Text.Text" -> "Maybe Text"
+  T.unwords [lastPart w | w <- T.words t]
+  where
     lastPart w = case T.splitOn "." w of
       [] -> w
       parts -> last parts
