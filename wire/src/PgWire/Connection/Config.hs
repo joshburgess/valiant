@@ -1,3 +1,8 @@
+-- | Configuration types for PostgreSQL connections.
+--
+-- Supports both URI format (@postgres:\/\/user:pass\@host:port\/db@) and
+-- key=value format (@host=localhost port=5432 dbname=mydb@). Multi-host
+-- failover, TLS modes, and session attribute targeting are configurable.
 module PgWire.Connection.Config
   ( ConnConfig (..)
   , TlsMode (..)
@@ -22,7 +27,6 @@ data TlsMode
   | TlsVerifyFull    -- ^ Require SSL, verify cert + hostname match
   deriving stock (Show, Eq)
 
--- | Connection configuration.
 -- | Session attribute requirements for multi-host failover.
 data TargetSessionAttrs
   = SessionAny            -- ^ Connect to any server
@@ -33,6 +37,7 @@ data TargetSessionAttrs
   | SessionPreferStandby  -- ^ Prefer standby, fall back to primary
   deriving stock (Show, Eq)
 
+-- | Connection configuration for a single PostgreSQL server.
 data ConnConfig = ConnConfig
   { ccHost :: HostName
   -- ^ Primary host. For multi-host, use comma-separated: @\"host1,host2\"@.
@@ -73,6 +78,7 @@ data ConnConfig = ConnConfig
   }
   deriving stock (Show)
 
+-- | Default connection configuration: @localhost:5432@, no TLS, 10s connect timeout.
 defaultConnConfig :: ConnConfig
 defaultConnConfig =
   ConnConfig

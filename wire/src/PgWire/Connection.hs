@@ -115,14 +115,17 @@ connParams = awcParamStatus . connAsync
 connNoticeHandler :: Connection -> IORef (PgNotice -> IO ())
 connNoticeHandler = awcNoticeHandler . connAsync
 
--- | Result of 'describePrepared'.
+-- | Parameter type information returned by 'describePrepared'.
 data ParamDescription = ParamDescription
   { pdOids :: Vector Word32
+  -- ^ OIDs of each parameter's type (one per @$N@ placeholder).
   }
   deriving stock (Show, Eq)
 
+-- | Column metadata returned by 'describePrepared'.
 data ColumnDescription = ColumnDescription
   { cdFields :: Vector FieldInfo
+  -- ^ Name, type OID, table OID, column number, and format for each result column.
   }
   deriving stock (Show, Eq)
 

@@ -1,3 +1,14 @@
+-- | Configuration types for the connection pool.
+--
+-- Use 'defaultPoolConfig' as a starting point and override fields:
+--
+-- @
+-- cfg = 'defaultPoolConfig'
+--   { poolConnString = \"postgres:\/\/user:pass\@localhost\/mydb\"
+--   , poolSize = 20
+--   , poolRecyclingMethod = 'RecycleVerified'
+--   }
+-- @
 module PgWire.Pool.Config
   ( PoolConfig (..)
   , defaultPoolConfig

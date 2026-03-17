@@ -96,7 +96,7 @@ main = do
 
   -- Constant-memory streaming (no cursor/transaction needed)
   total <- withResource pool $ \conn ->
-    executeWithFold conn Q.listAll () (RowFold 0 (\n _ -> n + 1) pure)
+    executeWithFold conn Q.listAll () (RowFold 0 (\n _ -> n + 1))
 ```
 
 ## CLI tool
@@ -221,7 +221,7 @@ hsqlx/
 ├── example/              # Example REST API (scotty)
 ├── bench-compare/        # Comparative benchmarks vs hasql, pg-simple
 ├── scripts/              # pg-setup.sh, pg-teardown.sh
-├── docs/                 # PERFORMANCE.md, GAPS.md, ASYNC_ARCHITECTURE.md
+├── docs/                 # TUTORIAL.md, PERFORMANCE.md, ASYNC_ARCHITECTURE.md
 └── .hsqlx/               # Cached query metadata (committed to VCS)
 ```
 
@@ -251,7 +251,8 @@ hsqlx/
 | `bytea` | `ByteString` | `date` | `Day` |
 | `varchar` | `Text` | `time` | `TimeOfDay` |
 | `timestamp` | `LocalTime` | `timestamptz` | `UTCTime` |
-| `interval` | `PgInterval` | `int4[]`, etc. | `Vector Int32`, etc. |
+| `interval` | `PgInterval` | `inet`/`cidr` | `PgInet` |
+| `int4[]`, etc. | `Vector Int32`, etc. | | |
 
 Nullable columns are wrapped in `Maybe`. Custom types are auto-discovered
 from `pg_type` at prepare time: enums map to `Text`, domains unwrap to
