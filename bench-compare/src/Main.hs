@@ -47,9 +47,10 @@ selectBenchmarks mode bs url = case mode of
   "reads"     -> readBenches bs url
   "inserts"   -> insertBenches bs url
   "updates"   -> updateBenches bs url
+  "pipeline"  -> pipelineBenches bs
   "quick"     -> quickBenches bs url
   "hsqlx-only" -> hsqlxOnlyBenches bs
-  _           -> readBenches bs url <> insertBenches bs url <> updateBenches bs url
+  _           -> readBenches bs url <> insertBenches bs url <> updateBenches bs url <> pipelineBenches bs
 
 -- ── Read benchmarks ──────────────────────────────────────────────
 
@@ -135,6 +136,24 @@ updateBenches bs url =
       , bench "hasql"             $ whnfIO (BenchHasql.updateN url 5000)
       , bench "postgresql-simple" $ whnfIO (BenchPgSimple.updateN bs 5000)
       , bench "persistent"        $ whnfIO (BenchPersistent.updateN bs 5000)
+      ]
+  ]
+
+-- ── Pipeline benchmarks (hsqlx-only feature) ─────────────────────
+
+pipelineBenches :: BS8.ByteString -> [Benchmark]
+pipelineBenches bs =
+  [ bgroup "2 queries"
+      [ bench "pipelined (1 round-trip)"  $ whnfIO (BenchHsqlx.pipelinedReads2 bs)
+      , bench "sequential (2 round-trips)" $ whnfIO (BenchHsqlx.sequentialReads2 bs)
+      ]
+  , bgroup "3 queries"
+      [ bench "pipelined (1 round-trip)"  $ whnfIO (BenchHsqlx.pipelinedReads3 bs)
+      , bench "sequential (3 round-trips)" $ whnfIO (BenchHsqlx.sequentialReads3 bs)
+      ]
+  , bgroup "5 queries"
+      [ bench "pipelined (1 round-trip)"  $ whnfIO (BenchHsqlx.pipelinedReads5 bs)
+      , bench "sequential (5 round-trips)" $ whnfIO (BenchHsqlx.sequentialReads5 bs)
       ]
   ]
 

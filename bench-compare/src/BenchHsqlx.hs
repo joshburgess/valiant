@@ -6,6 +6,12 @@ module BenchHsqlx
   , insertN
   , insertNPipelined
   , updateN
+  , pipelinedReads2
+  , pipelinedReads3
+  , pipelinedReads5
+  , sequentialReads2
+  , sequentialReads3
+  , sequentialReads5
   ) where
 
 import Data.ByteString (ByteString)
@@ -15,6 +21,7 @@ import Data.Int (Int32, Int64)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Hsqlx
+import Hsqlx.Pipeline (Pipeline, pipeFetchOne, pipeFetchAll, pipeFetchScalar, runPipeline)
 import System.IO.Unsafe (unsafePerformIO)
 
 -- Cached connection
@@ -86,6 +93,14 @@ stmtUpdateById = mkStatement
   "UPDATE bench_users SET score = score + $1 WHERE id <= $2"
   [23, 23] [] "<bench>"
 
+stmtCount :: Statement () Int64
+stmtCount = mkStatement "SELECT count(*) FROM bench_users" [] ["count"] "<bench>"
+
+stmtFetchFive :: Statement () (Int32, Text)
+stmtFetchFive = mkStatement
+  "SELECT id, name FROM bench_users ORDER BY id LIMIT 5"
+  [] ["id", "name"] "<bench>"
+
 -- Benchmarks
 selectOne :: ByteString -> IO ()
 selectOne url = do
@@ -127,6 +142,60 @@ insertNPipelined url n = do
 updateN :: ByteString -> Int -> IO ()
 updateN url n = do
   conn <- getConn url
-  -- UPDATE ... WHERE id <= n — always affects exactly n rows, no reset needed
   _ <- execute conn stmtUpdateById (1, fromIntegral n :: Int32)
+  pure ()
+
+-- Pipelined reads: N queries in 1 round-trip
+pipelinedReads2 :: ByteString -> IO ()
+pipelinedReads2 url = do
+  conn <- getConn url
+  _ <- runPipeline conn $ (,)
+    <$> pipeFetchOne stmtFetchOne (1 :: Int32)
+    <*> pipeFetchScalar stmtCount ()
+  pure ()
+
+pipelinedReads3 :: ByteString -> IO ()
+pipelinedReads3 url = do
+  conn <- getConn url
+  _ <- runPipeline conn $ (,,)
+    <$> pipeFetchOne stmtFetchOne (1 :: Int32)
+    <*> pipeFetchAll stmtFetchFive ()
+    <*> pipeFetchScalar stmtCount ()
+  pure ()
+
+pipelinedReads5 :: ByteString -> IO ()
+pipelinedReads5 url = do
+  conn <- getConn url
+  _ <- runPipeline conn $ (,,,,)
+    <$> pipeFetchOne stmtFetchOne (1 :: Int32)
+    <*> pipeFetchOne stmtFetchOne (2 :: Int32)
+    <*> pipeFetchOne stmtFetchOne (3 :: Int32)
+    <*> pipeFetchAll stmtFetchFive ()
+    <*> pipeFetchScalar stmtCount ()
+  pure ()
+
+-- Sequential reads: same queries but N round-trips
+sequentialReads2 :: ByteString -> IO ()
+sequentialReads2 url = do
+  conn <- getConn url
+  _ <- fetchOne conn stmtFetchOne (1 :: Int32)
+  _ <- fetchScalar conn stmtCount ()
+  pure ()
+
+sequentialReads3 :: ByteString -> IO ()
+sequentialReads3 url = do
+  conn <- getConn url
+  _ <- fetchOne conn stmtFetchOne (1 :: Int32)
+  _ <- fetchAll conn stmtFetchFive ()
+  _ <- fetchScalar conn stmtCount ()
+  pure ()
+
+sequentialReads5 :: ByteString -> IO ()
+sequentialReads5 url = do
+  conn <- getConn url
+  _ <- fetchOne conn stmtFetchOne (1 :: Int32)
+  _ <- fetchOne conn stmtFetchOne (2 :: Int32)
+  _ <- fetchOne conn stmtFetchOne (3 :: Int32)
+  _ <- fetchAll conn stmtFetchFive ()
+  _ <- fetchScalar conn stmtCount ()
   pure ()
