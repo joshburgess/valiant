@@ -29,6 +29,14 @@ data ConnConfig = ConnConfig
   , ccQueryTimeout :: NominalDiffTime
   -- ^ Default timeout for query execution (seconds). 0 = no timeout.
   -- Can be overridden per-query with 'withQueryTimeout'.
+  , ccKeepalives :: Bool
+  -- ^ Enable TCP keepalives (default: True).
+  , ccKeepalivesIdle :: Int
+  -- ^ Seconds before first keepalive probe (default: 0 = system default).
+  , ccKeepalivesInterval :: Int
+  -- ^ Seconds between keepalive probes (default: 0 = system default).
+  , ccKeepalivesCount :: Int
+  -- ^ Number of failed probes before disconnect (default: 0 = system default).
   }
   deriving stock (Show)
 
@@ -44,6 +52,10 @@ defaultConnConfig =
     , ccAppName = "pg-wire"
     , ccConnectTimeout = 10
     , ccQueryTimeout = 0
+    , ccKeepalives = True
+    , ccKeepalivesIdle = 0
+    , ccKeepalivesInterval = 0
+    , ccKeepalivesCount = 0
     }
 
 -- | Parse a PostgreSQL connection string.
@@ -105,6 +117,10 @@ parseUri bs = do
       , ccAppName = "pg-wire"
       , ccConnectTimeout = readTimeout (lookup "connect_timeout" params)
       , ccQueryTimeout = 0
+      , ccKeepalives = True
+      , ccKeepalivesIdle = 0
+      , ccKeepalivesInterval = 0
+      , ccKeepalivesCount = 0
       }
 
 readTimeout :: Maybe ByteString -> NominalDiffTime
@@ -138,11 +154,20 @@ parseKeyValue bs =
           , ccQueryTimeout = case BS8.readInt (get "query_timeout" "0") of
               Just (n, _) | n > 0 -> fromIntegral n
               _ -> 0
+          , ccKeepalives = get "keepalives" "1" /= "0"
+          , ccKeepalivesIdle = readIntDef 0 (get "keepalives_idle" "0")
+          , ccKeepalivesInterval = readIntDef 0 (get "keepalives_interval" "0")
+          , ccKeepalivesCount = readIntDef 0 (get "keepalives_count" "0")
           }
   where
     parsePair p =
       let (k, v) = BS8.break (== '=') p
        in (k, BS8.drop 1 v)
+
+readIntDef :: Int -> ByteString -> Int
+readIntDef d bs = case BS8.readInt bs of
+  Just (n, _) -> n
+  Nothing -> d
 
 readPort :: ByteString -> Maybe Word16
 readPort bs

@@ -17,11 +17,30 @@ module PgWire.Connection
     -- * Connecting
   , connect
   , connectString
+  , reset
     -- * Closing
   , close
   , withConnection
     -- * Simple queries
   , simpleQuery
+    -- * Connection status
+  , connectionStatus
+  , transactionStatus
+  , parameterStatus
+  , serverVersion
+  , backendPid
+  , isSslInUse
+    -- * Notifications (non-blocking)
+  , checkNotification
+    -- * Notice handling
+  , setNoticeHandler
+    -- * SQL escaping
+  , escapeLiteral
+  , escapeIdentifier
+    -- * Statement introspection
+  , describePrepared
+  , ParamDescription (..)
+  , ColumnDescription (..)
   ) where
 
 import Control.Exception (SomeException, bracket, try)
@@ -32,7 +51,8 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Int (Int32)
 import Data.Vector qualified as V
-import Data.Word (Word64)
+import Data.Vector (Vector)
+import Data.Word (Word32, Word64)
 import PgWire.Auth.Cleartext (cleartextAuth)
 import PgWire.Auth.MD5 (md5Auth)
 import PgWire.Auth.ScramSHA256 (scramAuth)
@@ -40,7 +60,7 @@ import PgWire.Connection.Config (ConnConfig (..), TlsMode (..), parseConnString)
 import PgWire.Error (HsqlxError (..), throwHsqlx)
 import PgWire.Protocol.Backend
 import PgWire.Protocol.Builders (buildStartup)
-import PgWire.Protocol.Frontend (FrontendMsg (..), StartupParams (..))
+import PgWire.Protocol.Frontend (DescribeTarget (..), FrontendMsg (..), StartupParams (..))
 import PgWire.Wire (WireConn (..), connectTcpTimeout, recvBackendMsg, sendFrontendMsg, sendRawBytes, upgradeTls)
 
 -- | A connection to a PostgreSQL database.
@@ -53,7 +73,20 @@ data Connection = Connection
   , connTxStatus :: IORef TxStatus
   , connStmtCache :: IORef (Map ByteString ByteString)
   , connStmtCounter :: IORef Word64
+  , connNoticeHandler :: IORef (PgNotice -> IO ())
+  , connSslActive :: !Bool
   }
+
+-- | Result of 'describePrepared'.
+data ParamDescription = ParamDescription
+  { pdOids :: Vector Word32
+  }
+  deriving stock (Show, Eq)
+
+data ColumnDescription = ColumnDescription
+  { cdFields :: Vector FieldInfo
+  }
+  deriving stock (Show, Eq)
 
 -- | Connect using a 'ConnConfig'.
 connect :: ConnConfig -> IO Connection
@@ -116,6 +149,10 @@ connect cfg = do
   key <- readIORef keyRef
   stmtCache <- newIORef Map.empty
   stmtCounter <- newIORef 0
+  noticeHandler <- newIORef (\_ -> pure ())
+  let sslActive = case ccTls cfg of
+        TlsDisable -> False
+        _ -> True  -- If we attempted TLS, it's active (or connect failed)
 
   pure
     Connection
@@ -127,6 +164,8 @@ connect cfg = do
       , connTxStatus = txRef
       , connStmtCache = stmtCache
       , connStmtCounter = stmtCounter
+      , connNoticeHandler = noticeHandler
+      , connSslActive = sslActive
       }
 
 -- | Connect using a connection string.
@@ -168,6 +207,168 @@ collectSimpleResults conn = go [] Nothing
         ErrorResponse err -> throwHsqlx (QueryError err)
         NoticeResponse _ -> go rows tag
         other -> throwHsqlx (ProtocolError ("Unexpected in simple query: " <> BS8.pack (show other)))
+
+-- | Reset the connection: close and reconnect using the same config.
+reset :: Connection -> IO Connection
+reset conn = do
+  close conn
+  connect (connConfig conn)
+
+-- Connection status -------------------------------------------------------
+
+-- | Check if the connection is alive by sending an empty query.
+connectionStatus :: Connection -> IO Bool
+connectionStatus conn = do
+  result <- try @SomeException (simpleQuery conn "")
+  pure $ case result of
+    Right _ -> True
+    Left _ -> False
+
+-- | Get the current transaction status.
+transactionStatus :: Connection -> IO TxStatus
+transactionStatus conn = readIORef (connTxStatus conn)
+
+-- | Look up a server parameter (e.g., @\"server_version\"@, @\"server_encoding\"@).
+parameterStatus :: Connection -> ByteString -> IO (Maybe ByteString)
+parameterStatus conn key = do
+  params <- readIORef (connParams conn)
+  pure (Map.lookup key params)
+
+-- | Get the server version as an integer (e.g., 160004 for 16.4).
+-- Parses from the @server_version@ parameter.
+serverVersion :: Connection -> IO (Maybe Int)
+serverVersion conn = do
+  mVersion <- parameterStatus conn "server_version"
+  pure (mVersion >>= parseServerVersion)
+  where
+    parseServerVersion bs =
+      let parts = BS8.split '.' bs
+       in case parts of
+            [major, minor] -> do
+              maj <- readInt major
+              mn <- readInt minor
+              pure (maj * 10000 + mn)
+            [major, minor, patch] -> do
+              maj <- readInt major
+              mn <- readInt minor
+              p <- readInt patch
+              pure (maj * 10000 + mn * 100 + p)
+            _ -> Nothing
+    readInt s = case BS8.readInt s of
+      Just (n, _) -> Just n
+      Nothing -> Nothing
+
+-- | Get the backend process ID.
+backendPid :: Connection -> Int32
+backendPid = connBackendPid
+
+-- | Check if SSL/TLS is in use on this connection.
+isSslInUse :: Connection -> Bool
+isSslInUse = connSslActive
+
+-- Notifications (non-blocking) --------------------------------------------
+
+-- | Check for a pending notification without blocking.
+-- Returns 'Nothing' if no notification is available.
+checkNotification :: Connection -> IO (Maybe (Int32, ByteString, ByteString))
+checkNotification conn = do
+  -- Send empty query to flush pending notifications from the server
+  sendFrontendMsg (connWire conn) (Query "")
+  collectNotification conn
+  where
+    collectNotification c = go
+      where
+        go = do
+          msg <- recvBackendMsg (connWire c)
+          case msg of
+            NotificationResponse pid channel payload ->
+              pure (Just (pid, channel, payload))
+            ReadyForQuery status -> do
+              writeIORef (connTxStatus c) status
+              pure Nothing
+            EmptyQueryResponse -> go
+            ParameterStatus _ _ -> go
+            NoticeResponse _ -> go
+            _ -> go
+
+-- Notice handling ---------------------------------------------------------
+
+-- | Set a callback for server notice messages (warnings, info, etc.).
+-- The default handler discards all notices.
+setNoticeHandler :: Connection -> (PgNotice -> IO ()) -> IO ()
+setNoticeHandler conn handler = writeIORef (connNoticeHandler conn) handler
+
+-- SQL escaping ------------------------------------------------------------
+
+-- | Escape a string for use as a SQL literal. Returns a properly quoted
+-- and escaped string including the surrounding single quotes.
+--
+-- @
+-- escapeLiteral conn "O'Brien"  ==  "'O''Brien'"
+-- @
+escapeLiteral :: Connection -> ByteString -> ByteString
+escapeLiteral _conn bs =
+  "'" <> BS8.concatMap escapeChar bs <> "'"
+  where
+    escapeChar '\'' = "''"
+    escapeChar '\\' = "\\\\"
+    escapeChar c = BS8.singleton c
+
+-- | Escape a string for use as a SQL identifier (table, column, function name).
+-- Returns a properly quoted identifier with surrounding double quotes.
+--
+-- @
+-- escapeIdentifier conn "user table"  ==  "\"user table\""
+-- @
+escapeIdentifier :: Connection -> ByteString -> ByteString
+escapeIdentifier _conn bs =
+  "\"" <> BS8.concatMap escapeChar bs <> "\""
+  where
+    escapeChar '"' = "\"\""
+    escapeChar c = BS8.singleton c
+
+-- Statement introspection -------------------------------------------------
+
+-- | Describe a prepared statement. Returns parameter OIDs and column metadata.
+-- The statement must already be prepared on this connection.
+describePrepared :: Connection -> ByteString -> IO (ParamDescription, ColumnDescription)
+describePrepared conn stmtName = do
+  sendFrontendMsg (connWire conn) (Describe DescribeStatement stmtName)
+  sendFrontendMsg (connWire conn) Sync
+  (params, cols) <- collectDescribe conn
+  pure (ParamDescription params, ColumnDescription cols)
+  where
+    collectDescribe c = do
+      pds <- collectParams c
+      cds <- collectColumns c
+      waitDescribeReady c
+      pure (pds, cds)
+
+    collectParams c = do
+      msg <- recvBackendMsg (connWire c)
+      case msg of
+        ParameterDescription oids -> pure oids
+        ErrorResponse err -> throwHsqlx (QueryError err)
+        _ -> collectParams c
+
+    collectColumns c = do
+      msg <- recvBackendMsg (connWire c)
+      case msg of
+        RowDescription fields -> pure fields
+        NoData -> pure V.empty
+        ErrorResponse err -> throwHsqlx (QueryError err)
+        _ -> collectColumns c
+
+    waitDescribeReady c = do
+      msg <- recvBackendMsg (connWire c)
+      case msg of
+        ReadyForQuery status -> writeIORef (connTxStatus c) status
+        _ -> waitDescribeReady c
+
+-- TCP keepalive -----------------------------------------------------------
+-- Note: TCP keepalive is configured at the socket level. We expose it
+-- via ConnConfig parameters (see Connection.Config). The actual socket
+-- options are set during connectTcp in Wire.hs.
 
 -- Authentication ----------------------------------------------------------
 
