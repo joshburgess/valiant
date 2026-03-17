@@ -50,6 +50,10 @@ module Hsqlx.Monad
     -- * Transactions
   , withTransactionM
   , withTransactionLevelM
+
+    -- * Pool management
+  , poolStatsM
+  , resizeM
   ) where
 
 import Control.Monad.IO.Class (liftIO)
@@ -59,7 +63,7 @@ import Hsqlx.Execute (execute, executeBatch, fetchAll, fetchBatchAll, fetchBatch
 import Hsqlx.Statement (Statement)
 import Hsqlx.Transaction (IsolationLevel, Transaction, withTransaction, withTransactionLevel)
 import PgWire.Connection (Connection)
-import PgWire.Pool (Pool, withResource)
+import PgWire.Pool (Pool, PoolStats, poolStats, resize, withResource)
 
 -- | A monad that carries a connection 'Pool' implicitly.
 -- @Hsqlx a = ReaderT Pool IO a@.
@@ -148,3 +152,21 @@ withTransactionLevelM level f = do
   pool <- ask
   liftIO $ withTransactionLevel level pool f
 {-# INLINE withTransactionLevelM #-}
+
+------------------------------------------------------------------------
+-- Pool management
+------------------------------------------------------------------------
+
+-- | Get a snapshot of the pool's statistics.
+poolStatsM :: Hsqlx PoolStats
+poolStatsM = do
+  pool <- ask
+  liftIO $ poolStats pool
+{-# INLINE poolStatsM #-}
+
+-- | Resize the pool at runtime.
+resizeM :: Int -> Hsqlx ()
+resizeM newSize = do
+  pool <- ask
+  liftIO $ resize pool newSize
+{-# INLINE resizeM #-}

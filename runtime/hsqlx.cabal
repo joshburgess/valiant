@@ -142,7 +142,9 @@ test-suite hsqlx-integration
     , hspec        >=2.11 && <2.12
     , hsqlx
     , pg-wire
+    , stm          >=2.5  && <2.6
     , text
+    , time         >=1.12 && <1.15
     , vector
 
   -- Requires DATABASE_URL. Run with:

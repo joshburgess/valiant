@@ -1,20 +1,87 @@
 module PgWire.Pool.Config
   ( PoolConfig (..)
   , defaultPoolConfig
+  , RecyclingMethod (..)
+  , QueueMode (..)
+  , PoolLogger
+  , nullPoolLogger
   ) where
 
 import Data.ByteString (ByteString)
 import Data.Time (NominalDiffTime)
 
+-- | How to validate a connection before handing it to the caller.
+data RecyclingMethod
+  = RecycleFast
+  -- ^ Check @awcAlive@ TVar only — free, no I/O.
+  | RecycleVerified
+  -- ^ Send an empty query if the connection has been idle longer than
+  -- 'poolHealthCheckAge'. Falls back to 'RecycleFast' for recently used
+  -- connections.
+  | RecycleClean
+  -- ^ Send @DISCARD ALL@ before every reuse (resets all session state).
+  deriving stock (Show, Eq)
+
+-- | Which end of the idle queue to draw from.
+data QueueMode
+  = QueueFIFO
+  -- ^ Oldest idle connection first — spreads load across backends.
+  | QueueLIFO
+  -- ^ Newest idle connection first — keeps fewer total connections alive.
+  deriving stock (Show, Eq)
+
+-- | A pool logging callback. The pool calls this with a severity string
+-- (@\"debug\"@, @\"info\"@, @\"warn\"@) and a message.
+type PoolLogger = ByteString -> ByteString -> IO ()
+
+-- | Logger that discards all events.
+nullPoolLogger :: PoolLogger
+nullPoolLogger _ _ = pure ()
+
 -- | Configuration for a connection pool.
 data PoolConfig = PoolConfig
   { poolConnString :: ByteString
-  , poolSize :: Int
-  , poolIdleTime :: NominalDiffTime
-  , poolMaxLife :: NominalDiffTime
-  , poolAcquireTimeout :: NominalDiffTime
+  , poolSize :: !Int
+  , poolIdleTime :: !NominalDiffTime
+  , poolMaxLife :: !NominalDiffTime
+  , poolAcquireTimeout :: !NominalDiffTime
+  , poolMinIdle :: !Int
+  -- ^ Minimum idle connections to maintain. A background warmer thread
+  -- creates connections to fill the deficit. Default: 0 (no warming).
+  , poolReaperInterval :: !NominalDiffTime
+  -- ^ How often the reaper sweeps idle/expired connections. Default: 30s.
+  , poolRecyclingMethod :: !RecyclingMethod
+  -- ^ How to validate connections before reuse. Default: 'RecycleFast'.
+  , poolQueueMode :: !QueueMode
+  -- ^ Which end of the idle queue to draw from. Default: 'QueueLIFO'.
+  , poolHealthCheckAge :: !NominalDiffTime
+  -- ^ Only verify (empty query) if a connection has been idle longer than
+  -- this. Only relevant when 'poolRecyclingMethod' is 'RecycleVerified'.
+  -- Default: 5s.
+  , poolMaxLifeJitter :: !NominalDiffTime
+  -- ^ Randomize 'poolMaxLife' ± this amount to avoid thundering herd
+  -- expiration. Default: 60s.
+  , poolLogger :: PoolLogger
+  -- ^ Logging callback. Default: 'nullPoolLogger' (discards all events).
   }
-  deriving stock (Show)
+
+-- Manual Show instance that omits the function field.
+instance Show PoolConfig where
+  show cfg = unwords
+    [ "PoolConfig"
+    , "{poolConnString=" <> show (poolConnString cfg)
+    , ",poolSize=" <> show (poolSize cfg)
+    , ",poolIdleTime=" <> show (poolIdleTime cfg)
+    , ",poolMaxLife=" <> show (poolMaxLife cfg)
+    , ",poolAcquireTimeout=" <> show (poolAcquireTimeout cfg)
+    , ",poolMinIdle=" <> show (poolMinIdle cfg)
+    , ",poolReaperInterval=" <> show (poolReaperInterval cfg)
+    , ",poolRecyclingMethod=" <> show (poolRecyclingMethod cfg)
+    , ",poolQueueMode=" <> show (poolQueueMode cfg)
+    , ",poolHealthCheckAge=" <> show (poolHealthCheckAge cfg)
+    , ",poolMaxLifeJitter=" <> show (poolMaxLifeJitter cfg)
+    , ",poolLogger=<function>}"
+    ]
 
 defaultPoolConfig :: PoolConfig
 defaultPoolConfig =
@@ -24,4 +91,11 @@ defaultPoolConfig =
     , poolIdleTime = 600
     , poolMaxLife = 3600
     , poolAcquireTimeout = 10
+    , poolMinIdle = 0
+    , poolReaperInterval = 30
+    , poolRecyclingMethod = RecycleFast
+    , poolQueueMode = QueueLIFO
+    , poolHealthCheckAge = 5
+    , poolMaxLifeJitter = 60
+    , poolLogger = nullPoolLogger
     }

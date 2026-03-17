@@ -100,10 +100,21 @@ module Hsqlx
     -- and automatically release connections.
   , Pool
   , PoolConfig (..)
+  , RecyclingMethod (..)
+  , QueueMode (..)
   , defaultPoolConfig
   , newPool
   , closePool
   , withResource
+  , PoolStats (..)
+  , poolStats
+  , resize
+  , retain
+  , setPostCreateHook
+  , setOnAcquireHook
+  , setPreReleaseHook
+  , PoolLogger
+  , nullPoolLogger
 
     -- * Transactions
     -- | Run actions inside a database transaction. If an exception is
@@ -119,6 +130,8 @@ module Hsqlx
     -- Import "Hsqlx.Monad" for the lifted @*M@ functions.
   , Hsqlx
   , runHsqlx
+  , poolStatsM
+  , resizeM
 
     -- * Cancellation
     -- | Cancel in-flight queries. 'cancelQuery' opens a separate TCP
@@ -172,6 +185,7 @@ module Hsqlx
   , Logger
   , nullLogger
   , stderrLogger
+  , poolLoggerFromLogger
 
     -- * Row decoding
     -- | Decode result rows into Haskell types. Instances are provided
@@ -202,8 +216,8 @@ import Hsqlx.Copy (CopyResult (..), copyIn, copyInBinary, copyOut)
 import Hsqlx.Execute (execute, executeBatch, fetchAll, fetchBatchAll, fetchBatchOne, fetchOne, fetchScalar, rawExecute, rawFetchAll, rawFetchOne)
 import Hsqlx.Fold (RowFold (..), executeWithFold)
 import Hsqlx.FromRow (FromRow (..))
-import Hsqlx.Logging (LogEvent (..), LogLevel (..), Logger, nullLogger, stderrLogger)
-import Hsqlx.Monad (Hsqlx, runHsqlx)
+import Hsqlx.Logging (LogEvent (..), LogLevel (..), Logger, nullLogger, poolLoggerFromLogger, stderrLogger)
+import Hsqlx.Monad (Hsqlx, poolStatsM, resizeM, runHsqlx)
 import Hsqlx.NamedParams (NamedStatement, ToNamedParams (..), mkStatementNamed)
 import Hsqlx.Notify (Notification (..), listen, unlisten, waitForNotification, waitForNotificationTimeout)
 import Hsqlx.Pipeline (Pipeline, pipeFetchOne, pipeFetchAll, pipeFetchScalar, pipeExecute, runPipeline)
@@ -214,5 +228,5 @@ import Hsqlx.Transaction (IsolationLevel (..), Transaction (..), withSavepoint, 
 import PgWire.Cancel (cancelQuery, withQueryTimeout)
 import PgWire.Connection (Connection, close, connect, connectString, simpleQuery, withConnection)
 import PgWire.Connection.Config (ConnConfig (..), TlsMode (..), defaultConnConfig)
-import PgWire.Pool (Pool, closePool, newPool, withResource)
-import PgWire.Pool.Config (PoolConfig (..), defaultPoolConfig)
+import PgWire.Pool (Pool, PoolStats (..), closePool, newPool, poolStats, resize, retain, setPostCreateHook, setOnAcquireHook, setPreReleaseHook, withResource)
+import PgWire.Pool.Config (PoolConfig (..), PoolLogger, QueueMode (..), RecyclingMethod (..), defaultPoolConfig, nullPoolLogger)

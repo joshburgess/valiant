@@ -6,11 +6,13 @@ module Hsqlx.Logging
   , nullLogger
   , stderrLogger
   , withQueryLogging
+  , poolLoggerFromLogger
   ) where
 
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.Time (NominalDiffTime, diffUTCTime, getCurrentTime)
+import PgWire.Pool.Config (PoolLogger)
 import System.IO (hPutStrLn, stderr)
 
 -- | Log severity levels.
@@ -31,6 +33,18 @@ data LogEvent
   -- ^ Time waited for a connection
   | PoolRelease
   | PoolTimeout
+  | PoolCreatedConn
+  -- ^ A new connection was created in the pool
+  | PoolDestroyedConn ByteString
+  -- ^ A connection was destroyed. Includes reason.
+  | PoolRecycled
+  -- ^ A connection was recycled (health check passed)
+  | PoolReaperSwept Int
+  -- ^ Reaper swept N idle/expired connections
+  | PoolWarmerCreated Int
+  -- ^ Warmer created N connections to maintain min-idle
+  | PoolResized Int Int
+  -- ^ Pool resized from old size to new size
   deriving stock (Show)
 
 -- | A logging callback.
@@ -57,6 +71,56 @@ withQueryLogging logger sql action = do
   logger Debug (QueryComplete sql elapsed 0)
   pure result
 
+-- | Create a 'PoolLogger' that forwards pool events to a 'Logger' as
+-- structured 'LogEvent's. Pass this as the @poolLogger@ field when
+-- constructing a 'PgWire.Pool.Config.PoolConfig'.
+--
+-- @
+-- let cfg = defaultPoolConfig
+--       { poolLogger = poolLoggerFromLogger (stderrLogger Info)
+--       }
+-- @
+poolLoggerFromLogger :: Logger -> PoolLogger
+poolLoggerFromLogger logger level msg = logger hsqlxLevel event
+  where
+    hsqlxLevel = case level of
+      "debug" -> Debug
+      "info" -> Info
+      "warn" -> Warn
+      _ -> Info
+    event = parsePoolEvent msg
+
+-- | Parse the pool's log message into a structured 'LogEvent'.
+-- Falls back to a generic 'PoolDestroyedConn' with the raw message
+-- if the pattern doesn't match a known event.
+parsePoolEvent :: ByteString -> LogEvent
+parsePoolEvent msg
+  | msg == "created connection" = PoolCreatedConn
+  | msg == "recycled connection" = PoolRecycled
+  | msg == "acquire timeout" = PoolTimeout
+  | "destroyed connection: " `BS8.isPrefixOf` msg =
+      PoolDestroyedConn (BS8.drop 22 msg)
+  | "reaper swept " `BS8.isPrefixOf` msg =
+      case BS8.readInt (BS8.drop 14 msg) of
+        Just (n, _) -> PoolReaperSwept n
+        Nothing -> PoolDestroyedConn msg
+  | "warmer created " `BS8.isPrefixOf` msg =
+      case BS8.readInt (BS8.drop 15 msg) of
+        Just (n, _) -> PoolWarmerCreated n
+        Nothing -> PoolDestroyedConn msg
+  | "resized from " `BS8.isPrefixOf` msg =
+      case parseResized (BS8.drop 13 msg) of
+        Just (old, new') -> PoolResized old new'
+        Nothing -> PoolDestroyedConn msg
+  | otherwise = PoolDestroyedConn msg
+  where
+    parseResized bs = do
+      (old, rest) <- BS8.readInt bs
+      -- rest should be " to N"
+      let rest' = BS8.drop 4 rest -- drop " to "
+      (new', _) <- BS8.readInt rest'
+      pure (old, new')
+
 formatEvent :: LogLevel -> LogEvent -> String
 formatEvent level event =
   "[hsqlx:" <> show level <> "] " <> case event of
@@ -72,6 +136,12 @@ formatEvent level event =
     PoolAcquire dur -> "pool acquire (" <> show dur <> ")"
     PoolRelease -> "pool release"
     PoolTimeout -> "pool timeout"
+    PoolCreatedConn -> "pool created connection"
+    PoolDestroyedConn reason -> "pool destroyed connection: " <> BS8.unpack reason
+    PoolRecycled -> "pool recycled connection"
+    PoolReaperSwept n -> "pool reaper swept " <> show n <> " connections"
+    PoolWarmerCreated n -> "pool warmer created " <> show n <> " connections"
+    PoolResized old new' -> "pool resized from " <> show old <> " to " <> show new'
   where
     trunc n s
       | length s <= n = s
