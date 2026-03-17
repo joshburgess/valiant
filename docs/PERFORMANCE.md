@@ -348,10 +348,10 @@ improvement in the project.
 
 *Result: single-row latency dropped from ~30% slower than hasql to parity.*
 
-### Pass 2: Strictness audit (plugin-assisted)
+### Pass 2: Strictness audit
 
-A comprehensive strictness audit using the `haskell-strictness` plugin
-identified and fixed every lazy accumulation pattern in the codebase.
+A comprehensive strictness audit identified and fixed every lazy
+accumulation pattern in the codebase.
 
 **Lazy `foldl` in Scientific codec.** Two uses of `foldl` (not `foldl'`)
 in the numeric encoder were building chains of `(* 10 + ...)` and
