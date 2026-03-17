@@ -44,6 +44,205 @@ Last updated: 2026-03-17
 
 ---
 
+## libpq Feature Parity
+
+Comprehensive comparison against every libpq feature area from the
+PostgreSQL 16 documentation (Chapter 34). Items marked HAVE are
+implemented. Items marked NEED are required for feature parity.
+Items marked SKIP are intentionally omitted (C-specific, deprecated,
+or not applicable to a pure Haskell driver).
+
+### Connection (34.1)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `PQconnectdb` (connection string) | HAVE | `connectString` |
+| `PQfinish` (close) | HAVE | `close` |
+| URI format parsing | HAVE | `postgres://user:pass@host:port/db` |
+| Key-value format parsing | HAVE | `host=x port=y dbname=z` |
+| `host` parameter | HAVE | |
+| `port` parameter | HAVE | |
+| `dbname` parameter | HAVE | |
+| `user` parameter | HAVE | |
+| `password` parameter | HAVE | |
+| `connect_timeout` parameter | HAVE | `ccConnectTimeout` |
+| `application_name` parameter | HAVE | `ccAppName` |
+| `sslmode` (disable/prefer/require) | HAVE | `TlsMode` |
+| `sslmode` verify-ca | NEED | Requires CA cert path config |
+| `sslmode` verify-full | NEED | Requires hostname verification |
+| `sslcert` (client certificate) | NEED | Client cert authentication |
+| `sslkey` (client key) | NEED | Client key for mutual TLS |
+| `sslrootcert` (CA file) | NEED | Custom CA certificate |
+| `sslcrl` / `sslcrldir` | SKIP | CRL checking, rarely used |
+| `sslsni` (Server Name Indication) | NEED | SNI for TLS routing |
+| `ssl_min_protocol_version` | NEED | TLS version pinning |
+| `channel_binding` parameter | HAVE | `scramAuthWithChannelBinding` |
+| `target_session_attrs` | NEED | primary/standby/read-write/read-only |
+| `load_balance_hosts` | NEED | Random host ordering |
+| Multi-host (`host=a,b,c`) | NEED | Failover across hosts |
+| `keepalives` parameters | NEED | TCP keepalive config |
+| `tcp_user_timeout` | NEED | Unacked data timeout |
+| `client_encoding` | NEED | Auto-detect or set encoding |
+| `options` (startup options) | NEED | Server command-line options |
+| `passfile` (~/.pgpass) | NEED | Password file lookup |
+| `service` (pg_service.conf) | SKIP | Service file lookup |
+| `PQconnectStart` / `PQconnectPoll` | SKIP | Non-blocking connect (GHC green threads handle this) |
+| `PQreset` (reconnect) | NEED | Reset connection without closing |
+| `PQping` (server status check) | NEED | Check if server is alive |
+| `PQconndefaults` | SKIP | C-specific default enumeration |
+| `gssencmode` / `krbsrvname` / `gsslib` | SKIP | GSSAPI (enterprise only) |
+| `replication` parameter | SKIP | Streaming replication |
+
+### Connection Status (34.2)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `PQstatus` (connection status) | NEED | Public API for connection state |
+| `PQtransactionStatus` | HAVE | `connTxStatus` (internal IORef) |
+| `PQparameterStatus` | HAVE | `connParams` (internal IORef) |
+| `PQserverVersion` | NEED | Parse from server_version param |
+| `PQbackendPID` | HAVE | `connBackendPid` |
+| `PQsocket` | SKIP | C-specific (we own the socket) |
+| `PQerrorMessage` | HAVE | Via `PgError` |
+| `PQprotocolVersion` | SKIP | We always use v3 |
+| `PQsslInUse` | NEED | Query whether TLS is active |
+| `PQsslAttribute` | NEED | TLS cipher, protocol version info |
+
+### Command Execution (34.3)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `PQexec` (simple query) | HAVE | `simpleQuery` |
+| `PQexecParams` (parameterized) | HAVE | `fetchOne`/`fetchAll`/`execute` |
+| `PQprepare` | HAVE | `ensurePrepared` (internal) |
+| `PQexecPrepared` | HAVE | All execute functions |
+| `PQdescribePrepared` | NEED | Get param/result types for a prepared stmt |
+| `PQdescribePortal` | SKIP | Rarely used directly |
+| Result status codes | HAVE | `CommandTag`, `ErrorResponse` |
+| `PQresultErrorField` | HAVE | All 17 `PgError` fields |
+| `PQntuples` / `PQnfields` | HAVE | Via `Vector` length |
+| `PQfname` / `PQftype` / etc. | HAVE | `FieldInfo` in `RowDescription` |
+| Binary format results | HAVE | Default for all queries |
+| `PQcmdTuples` (rows affected) | HAVE | `execute` return value |
+| `PQescapeLiteral` | NEED | SQL literal escaping |
+| `PQescapeIdentifier` | NEED | SQL identifier escaping |
+| `PQescapeByteaConn` | SKIP | Only needed for text protocol |
+| `PQunescapeBytea` | SKIP | Only needed for text protocol |
+
+### Asynchronous Command Processing (34.4)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `PQsendQuery` / `PQgetResult` | NEED | Non-blocking query + collect |
+| `PQconsumeInput` | SKIP | C-specific (we use non-blocking IO) |
+| `PQisBusy` | SKIP | C-specific polling |
+| `PQsetnonblocking` | SKIP | GHC handles this natively |
+
+### Pipeline Mode (34.5)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `PQpipelineStatus` | SKIP | Our pipelining is implicit |
+| `PQenterPipelineMode` | HAVE | `executeBatch`, `Pipeline`, `fetchBatchOne` |
+| `PQexitPipelineMode` | HAVE | Automatic after Sync |
+| `PQpipelineSync` | HAVE | Single Sync at end of batch |
+| `PQsendFlushRequest` | SKIP | We always Sync |
+
+### Row-by-Row Processing (34.6)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `PQsetSingleRowMode` | NEED | Process rows as they arrive |
+
+### Query Cancellation (34.7)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `PQcancel` | HAVE | `cancelQuery` |
+| `PQrequestCancel` (deprecated) | SKIP | |
+
+### Fast-Path Interface (34.8)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `PQfn` | SKIP | Deprecated, rarely used |
+
+### Asynchronous Notification (34.9)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `PQnotifies` (non-blocking check) | NEED | Check without blocking |
+| LISTEN/NOTIFY | HAVE | `listen`/`unlisten`/`waitForNotification` |
+
+### COPY (34.10)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `PQputCopyData` | HAVE | `copyIn` |
+| `PQputCopyEnd` | HAVE | `CopyDone` |
+| `PQgetCopyData` | HAVE | `copyOut` |
+| Binary COPY format | NEED | Header + binary tuple data |
+
+### Control Functions (34.11)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `PQsetErrorVerbosity` | SKIP | We always parse all fields |
+| `PQsetErrorContextVisibility` | SKIP | |
+| `PQtrace` / `PQuntrace` | NEED | Protocol tracing |
+
+### Miscellaneous (34.12)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `PQencryptPasswordConn` | NEED | Create encrypted passwords |
+| `PQlibVersion` | SKIP | C-specific |
+
+### Notice Processing (34.13)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Notice handler callback | NEED | User-configurable notice handler |
+
+### SSL Support (34.19)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Server certificate verification | NEED | verify-ca, verify-full |
+| Client certificates | NEED | sslcert + sslkey |
+| TLS 1.2/1.3 | HAVE | Via `tls` library |
+| System cert store | HAVE | `getSystemCertificateStore` |
+
+### Summary: Items needed for feature parity
+
+**Must have (production blockers):**
+1. SSL: verify-ca, verify-full, sslcert, sslkey, sslrootcert
+2. Multi-host failover with target_session_attrs
+3. SQL escaping (escapeLiteral, escapeIdentifier)
+4. Connection reset (PQreset equivalent)
+5. Server version query
+6. Connection status API (public accessors)
+7. Non-blocking notification check
+8. Notice handler callback
+9. TCP keepalive configuration
+10. PQdescribePrepared equivalent
+
+**Should have:**
+11. Single-row mode / RowFold
+12. Binary COPY format
+13. Protocol tracing
+14. Password encryption (PQencryptPasswordConn)
+15. client_encoding parameter
+16. Startup options parameter
+17. Password file (~/.pgpass) support
+18. TLS introspection (sslInUse, sslAttribute)
+19. SNI (Server Name Indication)
+20. TLS version pinning (ssl_min/max_protocol_version)
+21. load_balance_hosts (random ordering)
+22. PQping (server alive check)
+
+---
+
 ## Critical: Architectural
 
 ### Sender/receiver split (automatic pipelining)
