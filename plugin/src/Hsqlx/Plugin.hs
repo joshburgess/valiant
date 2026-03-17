@@ -26,7 +26,7 @@ import Hsqlx.Plugin.Rewrite (rewriteModule)
 import GHC.Utils.Fingerprint (fingerprintFingerprints, fingerprintString)
 import Hsqlx.Plugin.Cache (findCacheFile)
 import Hsqlx.Plugin.Compat (addFileDependency)
-import Hsqlx.Plugin.Config (PluginConfig (..), parseOptions)
+import Hsqlx.Plugin.Config (PluginConfig (..), parseOptions, resolveConfig)
 import Hsqlx.Plugin.Errors (errCacheStaleOrMissing, errSqlFileNotFound)
 import Hsqlx.Plugin.Hash (sha256Hex)
 import Hsqlx.Plugin.Traverse (QueryFileCall (..), findQueryFileCalls)
@@ -60,8 +60,8 @@ hsqlxRewrite opts _modSummary parsedResult = do
 -- | After typechecking, walk the AST and validate queryFile calls.
 hsqlxTypeCheck :: [CommandLineOption] -> ModSummary -> TcGblEnv -> TcM TcGblEnv
 hsqlxTypeCheck opts _modSummary tcEnv = do
-  let config = parseOptions opts
-      calls = findQueryFileCalls tcEnv
+  config <- liftIO $ resolveConfig opts
+  let calls = findQueryFileCalls tcEnv
 
   forM_ calls $ \call -> do
     processQueryFileCall config call
@@ -69,36 +69,47 @@ hsqlxTypeCheck opts _modSummary tcEnv = do
   pure tcEnv
 
 -- | Process a single queryFile call: validate the file, load cache, verify types.
+-- In offline mode, skip all validation (only register file dependencies).
 processQueryFileCall :: PluginConfig -> QueryFileCall -> TcM ()
-processQueryFileCall config call = do
-  let sqlDir = pcSqlDir config
-      cacheDir = pcCacheDir config
-      relPath = qfcFilePath call
-      sqlPath = sqlDir </> relPath
-      srcSpan = qfcSrcSpan call
+processQueryFileCall config call
+  | pcOffline config = do
+      -- Offline mode: skip all validation. The rewrite phase already handles
+      -- missing cache files gracefully. Just register the dependency if the
+      -- file exists so GHC recompiles when it appears.
+      let sqlPath = pcSqlDir config </> qfcFilePath call
+      sqlExists <- liftIO $ doesFileExist sqlPath
+      if sqlExists
+        then addFileDependency sqlPath
+        else pure ()
+  | otherwise = do
+      let sqlDir = pcSqlDir config
+          cacheDir = pcCacheDir config
+          relPath = qfcFilePath call
+          sqlPath = sqlDir </> relPath
+          srcSpan = qfcSrcSpan call
 
-  -- 1. Check that the .sql file exists
-  sqlExists <- liftIO $ doesFileExist sqlPath
-  if not sqlExists
-    then do
-      suggestions <- liftIO $ findSimilarFiles sqlDir relPath
-      errSqlFileNotFound srcSpan relPath suggestions
-    else do
-      -- 2. Register as a file dependency for recompilation
-      addFileDependency sqlPath
+      -- 1. Check that the .sql file exists
+      sqlExists <- liftIO $ doesFileExist sqlPath
+      if not sqlExists
+        then do
+          suggestions <- liftIO $ findSimilarFiles sqlDir relPath
+          errSqlFileNotFound srcSpan relPath suggestions
+        else do
+          -- 2. Register as a file dependency for recompilation
+          addFileDependency sqlPath
 
-      -- 3. Read and hash the SQL content
-      sqlContent <- liftIO $ BS.readFile sqlPath
-      let sqlHash = sha256Hex sqlContent
+          -- 3. Read and hash the SQL content
+          sqlContent <- liftIO $ BS.readFile sqlPath
+          let sqlHash = sha256Hex sqlContent
 
-      -- 4. Find the matching cache file
-      mCacheMeta <- liftIO $ findCacheFile cacheDir relPath sqlHash
-      case mCacheMeta of
-        Nothing ->
-          errCacheStaleOrMissing srcSpan relPath
-        Just entry ->
-          -- 5. Verify types
-          verifyQueryFile call entry
+          -- 4. Find the matching cache file
+          mCacheMeta <- liftIO $ findCacheFile cacheDir relPath sqlHash
+          case mCacheMeta of
+            Nothing ->
+              errCacheStaleOrMissing srcSpan relPath
+            Just entry ->
+              -- 5. Verify types
+              verifyQueryFile call entry
 
 -- | Determine recompilation based on .hsqlx/ cache directory fingerprint.
 hsqlxRecompile :: [CommandLineOption] -> IO PluginRecompile

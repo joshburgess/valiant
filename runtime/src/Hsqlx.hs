@@ -206,8 +206,14 @@ module Hsqlx
   , PgRange (..)
   , RangeBound (..)
   , CompositeField (..)
+
+    -- * Re-exports
+    -- | 'Generic' is re-exported for convenience so that users can derive
+    -- 'FromRow' and 'ToNamedParams' without an extra import.
+  , Generic
   ) where
 
+import GHC.Generics (Generic)
 import Hsqlx.Batch (fetchByIds)
 import Hsqlx.Binary.Composite (CompositeField (..))
 import Hsqlx.Binary.Interval (PgInterval (..))

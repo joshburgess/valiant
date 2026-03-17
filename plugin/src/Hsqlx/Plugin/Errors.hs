@@ -100,7 +100,7 @@ errParamCountMismatch srcSpan path expected actual params =
       | otherwise = text "use a" <+> text (show expected) <<>> text "-tuple for parameters."
 
 -- | HSQLX-003: Result type mismatch (column type mismatch).
-errResultTypeMismatch :: SrcSpan -> FilePath -> [(Text, Text, Text, Bool)] -> TcM ()
+errResultTypeMismatch :: SrcSpan -> FilePath -> [(CacheColumn, Text, Bool)] -> TcM ()
 errResultTypeMismatch srcSpan path mismatches =
   emitPluginError srcSpan $
     vcat $
@@ -112,14 +112,30 @@ errResultTypeMismatch srcSpan path mismatches =
       , text "  ──────       ───────         ─────────        ─────"
       ]
         ++ [formatMismatch m | m <- mismatches]
+        ++ nullabilityHints
         ++ [ text ""
            , text "  Fix: update your type signature to match the expected types."
            ]
   where
-    formatMismatch (colName, pgType, userType, ok) =
-      text "  " <<>> padR 13 colName <<>> padR 16 pgType <<>> padR 17 userType
+    formatMismatch (col, userType, ok) =
+      text "  " <<>> padR 13 (ccName col) <<>> padR 16 (ccPgTypeName col) <<>> padR 17 userType
         <<>> text (if ok then "OK" else "MISMATCH")
     padR n t = text (T.unpack t ++ replicate (max 0 (n - T.length t)) ' ')
+    nullabilityHints =
+      let hints = concatMap nullHint mismatches
+       in if null hints then [] else text "" : hints
+    nullHint (col, userType, False)
+      | ccNullable col && not (T.isPrefixOf "Maybe" (T.strip userType)) =
+          [ text "  Column" <+> text (show (T.unpack (ccName col)))
+              <+> text "can be NULL. Wrap in Maybe:" <+> text ("Maybe " ++ T.unpack (T.strip userType))
+          , text "  Or force non-null in SQL: SELECT ..." <+> text (T.unpack (ccName col))
+              <+> text "AS" <+> text (show (T.unpack (ccName col) ++ "!")) <+> text "..."
+          ]
+      | not (ccNullable col) && T.isPrefixOf "Maybe" (T.strip userType) =
+          [ text "  Column" <+> text (show (T.unpack (ccName col)))
+              <+> text "is NOT NULL. Remove the Maybe wrapper."
+          ]
+    nullHint _ = []
 
 -- | HSQLX-004: Column count mismatch.
 errColumnCountMismatch :: SrcSpan -> FilePath -> Int -> Int -> [CacheColumn] -> TcM ()

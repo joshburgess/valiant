@@ -25,8 +25,15 @@ verifyQueryFile call entry = do
   -- Try to decompose the type as Statement p r
   case decomposeStatementType bindTy of
     Nothing ->
-      -- Type is not Statement — could be a type hole or inference.
-      -- Skip validation for now.
+      -- The binding type is not `Statement p r`. This happens when:
+      --   1. The user wrote a type hole `_` — GHC will infer the type from
+      --      mkStatement's constraints, which is correct behavior.
+      --   2. No type signature was given — GHC infers from the rewritten
+      --      mkStatement call, which already encodes the correct types.
+      --   3. The type is something other than Statement entirely — this will
+      --      be caught by GHC's own typechecker when it tries to unify with
+      --      mkStatement's return type, so we don't need to emit our own error.
+      -- In all cases, skipping plugin validation is the right thing to do.
       pure ()
     Just (paramTy, resultTy) -> do
       -- Verify parameter types
@@ -81,11 +88,11 @@ verifyResult srcSpan path resultTy cols = do
         then errColumnCountMismatch srcSpan path expectedArity actualArity cols
         else do
           let mismatches =
-                [ (ccName c, ccPgTypeName c, actual, matchesTypeText (ccHaskellType c) actual)
+                [ (c, actual, matchesTypeText (ccHaskellType c) actual)
                 | (c, ty) <- zip cols actualTypes
                 , let actual = typeToText ty
                 ]
-          if all (\(_, _, _, ok) -> ok) mismatches
+          if all (\(_, _, ok) -> ok) mismatches
             then pure ()
             else errResultTypeMismatch srcSpan path mismatches
 

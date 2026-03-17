@@ -16,7 +16,6 @@ import Data.ByteString.Char8 qualified as BS8
 import Data.Int (Int32, Int64)
 import Data.Text (Text)
 import Data.Time (UTCTime)
-import GHC.Generics (Generic)
 import Hsqlx
 import Network.HTTP.Types.Status (status201, status404)
 import Queries

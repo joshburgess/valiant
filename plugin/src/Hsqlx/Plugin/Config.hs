@@ -2,7 +2,10 @@ module Hsqlx.Plugin.Config
   ( PluginConfig (..)
   , defaultConfig
   , parseOptions
+  , resolveConfig
   ) where
+
+import System.Environment (lookupEnv)
 
 -- | Plugin configuration parsed from @-fplugin-opt@ flags.
 data PluginConfig = PluginConfig
@@ -31,3 +34,14 @@ parseOptions = foldl applyOpt defaultConfig
       ("offline", '=' : "true") -> cfg {pcOffline = True}
       ("offline", '=' : "false") -> cfg {pcOffline = False}
       _ -> cfg -- ignore unknown options
+
+-- | Parse plugin options and resolve environment variable overrides.
+-- If @HSQLX_OFFLINE@ is set to @\"true\"@ or @\"1\"@, forces offline mode.
+resolveConfig :: [String] -> IO PluginConfig
+resolveConfig opts = do
+  let cfg = parseOptions opts
+  mOffline <- lookupEnv "HSQLX_OFFLINE"
+  pure $ case mOffline of
+    Just "true" -> cfg {pcOffline = True}
+    Just "1" -> cfg {pcOffline = True}
+    _ -> cfg

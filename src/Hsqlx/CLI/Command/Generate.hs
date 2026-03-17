@@ -17,7 +17,7 @@ import Hsqlx.CLI.Output
 import Hsqlx.CLI.SqlMetadata (SqlMetadata (..), parseSqlMetadata)
 import System.Directory (createDirectoryIfMissing)
 import System.Exit (ExitCode (..))
-import System.FilePath (dropExtension, splitDirectories, takeDirectory, (</>))
+import System.FilePath (dropExtension, splitDirectories, takeBaseName, takeDirectory, (</>))
 
 data GenerateOpts = GenerateOpts
   { genModulePrefix :: String
@@ -154,9 +154,9 @@ renderBinding (sf, entry) =
       paramType = formatParamType (ceParams entry)
       resultType = case smResult meta of
         Just typeName ->
-          let wrap = resultWrapper (smSingle meta) (ceStatementType entry) (ceColumns entry)
+          let wrap = resultWrapper (sqlRelPath sf) (smSingle meta) (ceStatementType entry) (ceColumns entry)
            in wrap (T.unpack typeName)
-        Nothing -> formatResultType (smSingle meta) (ceStatementType entry) (ceColumns entry)
+        Nothing -> formatResultType (sqlRelPath sf) (smSingle meta) (ceStatementType entry) (ceColumns entry)
       queryFn = case smResult meta of
         Just typeName -> "queryFileAs @" <> T.unpack typeName
         Nothing -> "queryFile"
@@ -198,20 +198,57 @@ formatParamType [] = "()"
 formatParamType [p] = parensIfNeeded (T.unpack (cpHaskellType p))
 formatParamType ps = "(" <> intercalate ", " (map (T.unpack . cpHaskellType) ps) <> ")"
 
-formatResultType :: Bool -> StatementType -> [CacheColumn] -> String
-formatResultType single _stmtType cols = case cols of
+formatResultType :: FilePath -> Bool -> StatementType -> [CacheColumn] -> String
+formatResultType sqlPath single stmtType cols = case cols of
   [] -> "()"
   _ ->
     let inner = case cols of
           [c] -> parensIfNeeded (T.unpack (ccHaskellType c))
           cs -> "(" <> intercalate ", " (map (T.unpack . ccHaskellType) cs) <> ")"
-     in if single then inner else inner
+     in if single
+          then inner
+          else inferReturnWrapper sqlPath stmtType cols inner
 
 -- | Determine the wrapper for a named result type based on SQL conventions and metadata.
-resultWrapper :: Bool -> StatementType -> [CacheColumn] -> String -> String
-resultWrapper single _stmtType _cols typeName
+resultWrapper :: FilePath -> Bool -> StatementType -> [CacheColumn] -> String -> String
+resultWrapper sqlPath single stmtType cols typeName
   | single = typeName
-  | otherwise = "(Maybe " <> typeName <> ")"
+  | otherwise = inferReturnWrapper sqlPath stmtType cols typeName
+
+-- | Infer the return type wrapper from the SQL file name prefix.
+-- The naming convention follows the roadmap:
+--
+--   * @find_*@ → @Maybe r@ (zero or one row)
+--   * @get_*@  → @r@ (exactly one row, no wrapper)
+--   * @list_*@ → @[r]@ (multiple rows)
+--   * @count_*@ → scalar type directly (no tuple, no wrapper)
+--   * @exists_*@ → @Bool@
+--   * @insert*@/@update_*@/@delete_*@/@upsert_*@ → @()@ when no columns
+--   * default  → no wrapper (raw type)
+inferReturnWrapper :: FilePath -> StatementType -> [CacheColumn] -> String -> String
+inferReturnWrapper sqlPath _stmtType cols inner
+  | "find_" `isPrefixOfBase` base = "(Maybe " <> inner <> ")"
+  | "list_" `isPrefixOfBase` base = "[" <> inner <> "]"
+  | "count_" `isPrefixOfBase` base = case cols of
+      [c] -> parensIfNeeded (T.unpack (ccHaskellType c))
+      _ -> inner
+  | "exists_" `isPrefixOfBase` base = "Bool"
+  | "get_" `isPrefixOfBase` base = inner
+  | isCommandPrefix base, null cols = "()"
+  | isCommandPrefix base = inner
+  | otherwise = inner
+  where
+    base = takeBaseName sqlPath
+
+    isPrefixOfBase :: String -> String -> Bool
+    isPrefixOfBase prefix str = take (length prefix) str == prefix
+
+    isCommandPrefix :: String -> Bool
+    isCommandPrefix b =
+      "insert" `isPrefixOfBase` b
+        || "update_" `isPrefixOfBase` b
+        || "delete_" `isPrefixOfBase` b
+        || "upsert_" `isPrefixOfBase` b
 
 -- | Wrap in parens if the type contains spaces (e.g. "Maybe Text" → "(Maybe Text)")
 parensIfNeeded :: String -> String

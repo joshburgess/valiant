@@ -1,5 +1,7 @@
 module Hsqlx.Binary.PropertySpec (spec) where
 
+import Data.Aeson (Value (..), object, (.=))
+import Data.Aeson.Key qualified as Key
 import Data.ByteString qualified as BS
 import Data.Int (Int16, Int32, Int64)
 import Data.Scientific (Scientific, scientific)
@@ -12,13 +14,18 @@ import Data.Time
   , fromGregorian
   , picosecondsToDiffTime
   )
+import Data.UUID.Types (UUID)
+import Data.UUID.Types qualified as UUID
 import Data.Vector qualified as V
-import Data.Word (Word8)
+import Data.Word (Word8, Word32)
 import Hsqlx.Binary.Array (pgDecodeArray, pgEncodeArray)
 import Hsqlx.Binary.Decode ()
 import Hsqlx.Binary.Encode ()
 import Hsqlx.Binary.Interval (PgInterval (..))
+import Hsqlx.Binary.JSON ()
+import Hsqlx.Binary.Range (PgRange (..), RangeBound (..), pgDecodeRange, pgEncodeRange)
 import Hsqlx.Binary.Scientific ()
+import Hsqlx.Binary.UUID ()
 import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
 import PgWire.Protocol.Oid
 import Test.Hspec
@@ -103,6 +110,29 @@ spec = do
       let v = V.fromList xs
        in pgDecodeArray (pgEncodeArray oidBool v) === Right v
 
+  describe "Int64 array round-trip property" $
+    prop "encode/decode is identity" $ \(xs :: [Int64]) ->
+      let v = V.fromList xs
+       in pgDecodeArray (pgEncodeArray oidInt8 v) === Right v
+
+  describe "Double array round-trip property" $
+    prop "encode/decode is identity (non-NaN)" $ \(xs :: [Double]) ->
+      not (any isNaN xs)
+        ==> let v = V.fromList xs
+             in pgDecodeArray (pgEncodeArray oidFloat8 v) === Right v
+
+  describe "UUID round-trip property" $
+    prop "encode/decode is identity" $ forAll genUUID $ \u ->
+      pgDecode (pgEncode u) === Right u
+
+  describe "PgRange Int32 round-trip property" $
+    prop "encode/decode is identity" $ forAll genInt32Range $ \r ->
+      pgDecodeRange pgDecode (pgEncodeRange pgEncode r) === Right r
+
+  describe "JSON Value round-trip property" $
+    prop "encode/decode is identity" $ forAll genJsonValue $ \v ->
+      pgDecode (pgEncode v) === Right v
+
   describe "encode output size" $ do
     prop "Bool encodes to 1 byte" $ \(b :: Bool) ->
       BS.length (pgEncode b) === 1
@@ -124,6 +154,12 @@ spec = do
 
     prop "PgInterval encodes to 16 bytes" $ forAll genInterval $ \iv ->
       BS.length (pgEncode iv) === 16
+
+    prop "UUID encodes to 16 bytes" $ forAll genUUID $ \u ->
+      BS.length (pgEncode u) === 16
+
+    prop "Empty range encodes to 1 byte" $
+      BS.length (pgEncodeRange (pgEncode @Int32) EmptyRange) === 1
 
 -- Generators ----------------------------------------------------------------
 
@@ -163,3 +199,52 @@ genScientific = do
   coeff <- choose (-999999999, 999999999 :: Integer)
   expo <- choose (-8, 8 :: Int)
   pure (scientific coeff expo)
+
+genUUID :: Gen UUID
+genUUID = do
+  w1 <- arbitrary @Word32
+  w2 <- arbitrary @Word32
+  w3 <- arbitrary @Word32
+  w4 <- arbitrary @Word32
+  pure (UUID.fromWords w1 w2 w3 w4)
+
+genRangeBound :: Gen a -> Gen (Maybe (RangeBound a))
+genRangeBound gen =
+  oneof
+    [ pure Nothing
+    , Just . Inclusive <$> gen
+    , Just . Exclusive <$> gen
+    ]
+
+genInt32Range :: Gen (PgRange Int32)
+genInt32Range =
+  frequency
+    [ (1, pure EmptyRange)
+    , (9, PgRange <$> genRangeBound arbitrary <*> genRangeBound arbitrary)
+    ]
+
+genJsonValue :: Gen Value
+genJsonValue = sized go
+  where
+    go 0 = genLeaf
+    go n =
+      oneof
+        [ genLeaf
+        , Array . V.fromList <$> resize (n `div` 4) (listOf (go (n `div` 4)))
+        , do
+            pairs <- resize (n `div` 4) (listOf genPair)
+            pure (object pairs)
+        ]
+      where
+        genPair = do
+          k <- Key.fromText . T.pack <$> listOf (elements ['a' .. 'z'])
+          v <- go (n `div` 4)
+          pure (k .= v)
+
+    genLeaf =
+      oneof
+        [ pure Null
+        , Bool <$> arbitrary
+        , Number . fromIntegral <$> choose (-1000, 1000 :: Int)
+        , String . T.pack <$> listOf (elements (['a' .. 'z'] ++ ['0' .. '9'] ++ " "))
+        ]

@@ -1,5 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
@@ -14,6 +15,7 @@ import Data.ByteString (ByteString)
 import Data.Kind (Type)
 import Data.Vector (Vector)
 import Data.Vector qualified as V
+import GHC.Generics
 import Hsqlx.Binary.Decode ()
 import PgWire.Binary.Types (PgDecode (..))
 
@@ -67,8 +69,73 @@ colOutOfRange idx len =
 {-# INLINE colOutOfRange #-}
 
 -- | Decode a result row into a Haskell value.
+--
+-- For custom record types, derive via @Generic@:
+--
+-- @
+-- data User = User
+--   { userId    :: Int32
+--   , userName  :: Text
+--   , userEmail :: Maybe Text
+--   } deriving stock (Generic)
+--     deriving anyclass (FromRow)
+-- @
+--
+-- Fields are decoded positionally (column 0 → first field, etc.).
 class FromRow a where
   fromRow :: Vector (Maybe ByteString) -> Either String a
+  default fromRow :: (Generic a, GFromRow (Rep a)) => Vector (Maybe ByteString) -> Either String a
+  fromRow row = to <$> gFromRow row 0
+
+-- | Generic helper for positional row decoding. Internal — not exported.
+class GFromRow f where
+  gFromRow :: Vector (Maybe ByteString) -> Int -> Either String (f p)
+  gFieldCount :: proxy f -> Int
+
+-- Datatype metadata — delegate
+instance (GFromRow f) => GFromRow (M1 D c f) where
+  gFromRow row idx = M1 <$> gFromRow row idx
+  gFieldCount _ = gFieldCount (undefined :: proxy f)
+  {-# INLINE gFromRow #-}
+  {-# INLINE gFieldCount #-}
+
+-- Constructor metadata — delegate
+instance (GFromRow f) => GFromRow (M1 C c f) where
+  gFromRow row idx = M1 <$> gFromRow row idx
+  gFieldCount _ = gFieldCount (undefined :: proxy f)
+  {-# INLINE gFromRow #-}
+  {-# INLINE gFieldCount #-}
+
+-- Selector metadata — delegate
+instance (GFromRow f) => GFromRow (M1 S c f) where
+  gFromRow row idx = M1 <$> gFromRow row idx
+  gFieldCount _ = gFieldCount (undefined :: proxy f)
+  {-# INLINE gFromRow #-}
+  {-# INLINE gFieldCount #-}
+
+-- Leaf field — decode one column at the current index
+instance (DecodeColumn a) => GFromRow (K1 R a) where
+  gFromRow row idx = K1 <$> decodeColumn row idx
+  gFieldCount _ = 1
+  {-# INLINE gFromRow #-}
+  {-# INLINE gFieldCount #-}
+
+-- Product — decode left fields, then right fields
+instance (GFromRow f, GFromRow g) => GFromRow (f :*: g) where
+  gFromRow row idx = do
+    l <- gFromRow row idx
+    r <- gFromRow row (idx + gFieldCount (undefined :: proxy f))
+    Right (l :*: r)
+  gFieldCount _ = gFieldCount (undefined :: proxy f) + gFieldCount (undefined :: proxy g)
+  {-# INLINE gFromRow #-}
+  {-# INLINE gFieldCount #-}
+
+-- Unit — no fields
+instance GFromRow U1 where
+  gFromRow _ _ = Right U1
+  gFieldCount _ = 0
+  {-# INLINE gFromRow #-}
+  {-# INLINE gFieldCount #-}
 
 -- Unit instance for commands (INSERT/UPDATE/DELETE) that return no rows
 instance {-# OVERLAPPING #-} FromRow () where
