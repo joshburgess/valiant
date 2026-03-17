@@ -41,6 +41,8 @@ data StatementType = Select | Insert | Update | Delete | Other
 
 data CacheParam = CacheParam
   { cpIndex :: Int
+  , cpName :: Maybe Text
+  -- ^ Named parameter name from @:name@ syntax. 'Nothing' for positional @$N@.
   , cpPgOid :: Word32
   , cpPgTypeName :: Text
   , cpHaskellType :: Text
@@ -117,6 +119,7 @@ instance ToJSON CacheParam where
   toJSON CacheParam {..} =
     object
       [ "index" .= cpIndex
+      , "name" .= cpName
       , "pg_oid" .= cpPgOid
       , "pg_type_name" .= cpPgTypeName
       , "haskell_type" .= cpHaskellType
@@ -129,6 +132,7 @@ instance FromJSON CacheParam where
   parseJSON = withObject "CacheParam" $ \o ->
     CacheParam
       <$> o .: "index"
+      <*> o .:? "name"
       <*> o .: "pg_oid"
       <*> o .: "pg_type_name"
       <*> o .: "haskell_type"

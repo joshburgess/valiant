@@ -5,6 +5,7 @@ import Hsqlx.CLI.CustomTypesSpec qualified as CustomTypesSpec
 import Hsqlx.CLI.DiscoverSpec qualified as DiscoverSpec
 import Hsqlx.CLI.ErrorSpec qualified as ErrorSpec
 import Hsqlx.CLI.HashSpec qualified as HashSpec
+import Hsqlx.CLI.NamedParamsSpec qualified as NamedParamsSpec
 import Hsqlx.CLI.SqlMetadataSpec qualified as SqlMetadataSpec
 import Hsqlx.CLI.TypeMapSpec qualified as TypeMapSpec
 import Test.Hspec
@@ -17,4 +18,5 @@ main = hspec $ do
   describe "Hsqlx.CLI.Discover" DiscoverSpec.spec
   describe "Hsqlx.CLI.Error" ErrorSpec.spec
   describe "Hsqlx.CLI.SqlMetadata" SqlMetadataSpec.spec
+  describe "Hsqlx.CLI.NamedParams" NamedParamsSpec.spec
   describe "Hsqlx.CLI.CustomTypes" CustomTypesSpec.spec

@@ -39,6 +39,7 @@ library
     Hsqlx.CLI.Discover
     Hsqlx.CLI.Error
     Hsqlx.CLI.Hash
+    Hsqlx.CLI.NamedParams
     Hsqlx.CLI.Nullability
     Hsqlx.CLI.Output
     Hsqlx.CLI.SqlMetadata
@@ -87,6 +88,7 @@ test-suite hsqlx-cli-test
     Hsqlx.CLI.DiscoverSpec
     Hsqlx.CLI.ErrorSpec
     Hsqlx.CLI.HashSpec
+    Hsqlx.CLI.NamedParamsSpec
     Hsqlx.CLI.SqlMetadataSpec
     Hsqlx.CLI.TypeMapSpec
 

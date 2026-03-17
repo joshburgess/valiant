@@ -11,6 +11,7 @@ import Hsqlx.Binary.RangeSpec qualified as RangeSpec
 import Hsqlx.Binary.ScientificSpec qualified as ScientificSpec
 import Hsqlx.Binary.UUIDSpec qualified as UUIDSpec
 import Hsqlx.FromRowSpec qualified as FromRowSpec
+import Hsqlx.NamedParamsSpec qualified as NamedParamsSpec
 import Test.Hspec
 
 main :: IO ()
@@ -26,3 +27,4 @@ main = hspec $ do
   describe "Hsqlx.Binary.JSON" JSONSpec.spec
   describe "Hsqlx.Binary.Property" PropertySpec.spec
   describe "Hsqlx.FromRow" FromRowSpec.spec
+  describe "Hsqlx.NamedParams" NamedParamsSpec.spec

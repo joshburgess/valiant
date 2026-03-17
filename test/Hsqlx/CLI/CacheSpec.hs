@@ -64,6 +64,7 @@ sampleEntry now =
     , ceParams =
         [ CacheParam
             { cpIndex = 1
+            , cpName = Nothing
             , cpPgOid = 23
             , cpPgTypeName = "int4"
             , cpHaskellType = "Int32"

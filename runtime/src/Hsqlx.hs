@@ -66,6 +66,14 @@ module Hsqlx
   , rawFetchOne
   , rawExecute
 
+    -- * Named parameters
+    -- | Optional record-based parameter passing for queries using
+    -- @:name@ syntax in SQL files. Derive 'ToNamedParams' via 'Generic'
+    -- to pass a record whose field names match the SQL parameter names.
+  , ToNamedParams (..)
+  , NamedStatement
+  , mkStatementNamed
+
     -- * UNNEST batch fetch
     -- | Fetch multiple entities by ID in a single query using
     -- @WHERE id = ANY($1::type[])@. Faster than pipelining for
@@ -189,6 +197,7 @@ import Hsqlx.Execute (execute, executeBatch, fetchAll, fetchBatchAll, fetchBatch
 import Hsqlx.Fold (RowFold (..), executeWithFold)
 import Hsqlx.FromRow (FromRow (..))
 import Hsqlx.Logging (LogEvent (..), LogLevel (..), Logger, nullLogger, stderrLogger)
+import Hsqlx.NamedParams (NamedStatement, ToNamedParams (..), mkStatementNamed)
 import Hsqlx.Notify (Notification (..), listen, unlisten, waitForNotification, waitForNotificationTimeout)
 import Hsqlx.Pipeline (Pipeline, pipeFetchOne, pipeFetchAll, pipeFetchScalar, pipeExecute, runPipeline)
 import Hsqlx.Statement (Statement (..), mkStatement, queryFile, queryFileAs)

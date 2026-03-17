@@ -2,6 +2,7 @@ module Hsqlx.CLI.Command.Prepare
   ( runPrepare
   ) where
 
+import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -18,6 +19,7 @@ import Hsqlx.CLI.Hash (sha256Hex)
 import Hsqlx.CLI.Nullability (resolveNullability)
 import Hsqlx.CLI.Output
 import Hsqlx.CLI.CustomTypes (CustomTypeMap, customTypesFile, loadCustomTypes)
+import Hsqlx.CLI.NamedParams (NamedParamMapping, preprocessNamedParams)
 import Hsqlx.CLI.TypeMap (HaskellType (..), ResolvedType (..), oidToHaskellTypeWith, oidToTypeNameWith, resolveType, resolveUnknownOid)
 import System.Exit (ExitCode (..))
 
@@ -61,7 +63,10 @@ processFile env customs conn total (idx, sqlFile) = do
       printOk
       pure True
     Nothing -> do
-      result <- describeQuery conn sqlFile
+      -- Preprocess :name → $N before sending to Postgres
+      let (rewrittenSql, nameMapping) = preprocessNamedParams (sqlContent sqlFile)
+          prepFile = sqlFile {sqlContent = rewrittenSql}
+      result <- describeQuery conn prepFile
       case result of
         Left err -> do
           printFailed (deMessage err)
@@ -69,7 +74,7 @@ processFile env customs conn total (idx, sqlFile) = do
         Right meta -> do
           nullabilities <- resolveNullability conn (qmColumns meta)
           now <- getCurrentTime
-          buildResult <- buildCacheEntry env customs conn sqlFile meta nullabilities now
+          buildResult <- buildCacheEntry env customs conn sqlFile meta nullabilities nameMapping now
           case buildResult of
             Left errMsg -> do
               printFailed errMsg
@@ -86,10 +91,12 @@ buildCacheEntry
   -> SqlFile
   -> QueryMeta
   -> [Bool]
+  -> NamedParamMapping
   -> UTCTime
   -> IO (Either Text CacheEntry)
-buildCacheEntry env customs conn sqlFile meta nullabilities now = do
-  eParams <- resolveParams customs conn (qmParams meta)
+buildCacheEntry env customs conn sqlFile meta nullabilities nameMapping now = do
+  let nameMap = Map.fromList [(idx, name) | (name, idx) <- nameMapping]
+  eParams <- resolveParams customs conn nameMap (qmParams meta)
   case eParams of
     Left err -> pure (Left err)
     Right params -> do
@@ -111,24 +118,29 @@ buildCacheEntry env customs conn sqlFile meta nullabilities now = do
               , ceColumns = columns
               }
 
-resolveParams :: CustomTypeMap -> PQ.Connection -> [ParamMeta] -> IO (Either Text [CacheParam])
-resolveParams customs conn = go []
+resolveParams :: CustomTypeMap -> PQ.Connection -> Map.Map Int Text -> [ParamMeta] -> IO (Either Text [CacheParam])
+resolveParams customs conn nameMap = go []
   where
     go !acc [] = pure (Right (reverse acc))
     go !acc (pm : pms) = do
-      result <- resolveParam customs conn pm
+      result <- resolveParam customs conn nameMap pm
       case result of
         Left err -> pure (Left err)
         Right cp -> go (cp : acc) pms
 
-resolveParam :: CustomTypeMap -> PQ.Connection -> ParamMeta -> IO (Either Text CacheParam)
-resolveParam customs conn ParamMeta {..} =
+resolveParam :: CustomTypeMap -> PQ.Connection -> Map.Map Int Text -> ParamMeta -> IO (Either Text CacheParam)
+resolveParam customs conn nameMap ParamMeta {..} =
   let Oid oid = pmOid
+      paramName = Map.lookup pmIndex nameMap
+      paramLabel = case paramName of
+        Just n -> ":" <> n
+        Nothing -> "$" <> T.pack (show pmIndex)
    in case oidToHaskellTypeWith customs pmOid of
         Just ht ->
           pure . Right $
             CacheParam
               { cpIndex = pmIndex
+              , cpName = paramName
               , cpPgOid = fromIntegral oid
               , cpPgTypeName = maybe "unknown" id (oidToTypeNameWith mempty pmOid)
               , cpHaskellType = htType ht
@@ -141,11 +153,12 @@ resolveParam customs conn ParamMeta {..} =
           resolved <- resolveUnknownOid conn customs pmOid
           case resolved of
             Left err ->
-              pure . Left $ err <> " for parameter $" <> T.pack (show pmIndex)
+              pure . Left $ err <> " for parameter " <> paramLabel
             Right rt ->
               pure . Right $
                 CacheParam
                   { cpIndex = pmIndex
+                  , cpName = paramName
                   , cpPgOid = fromIntegral oid
                   , cpPgTypeName = rtPgTypeName rt
                   , cpHaskellType = htType (rtHaskellType rt)
