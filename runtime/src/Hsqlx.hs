@@ -57,6 +57,15 @@ module Hsqlx
   , fetchBatchOne
   , fetchBatchAll
 
+    -- * Raw (unchecked) queries
+    -- | Escape hatch for dynamic SQL or queries that don't fit the
+    -- 'Statement' model. Uses the extended query protocol with
+    -- binary-encoded parameters but no compile-time type checking.
+    -- Parameters are pre-encoded 'ByteString' values with explicit OIDs.
+  , rawFetchAll
+  , rawFetchOne
+  , rawExecute
+
     -- * UNNEST batch fetch
     -- | Fetch multiple entities by ID in a single query using
     -- @WHERE id = ANY($1::type[])@. Faster than pipelining for
@@ -176,7 +185,7 @@ import Hsqlx.Binary.Composite (CompositeField (..))
 import Hsqlx.Binary.Interval (PgInterval (..))
 import Hsqlx.Binary.Range (PgRange (..), RangeBound (..))
 import Hsqlx.Copy (CopyResult (..), copyIn, copyInBinary, copyOut)
-import Hsqlx.Execute (execute, executeBatch, fetchAll, fetchBatchAll, fetchBatchOne, fetchOne, fetchScalar)
+import Hsqlx.Execute (execute, executeBatch, fetchAll, fetchBatchAll, fetchBatchOne, fetchOne, fetchScalar, rawExecute, rawFetchAll, rawFetchOne)
 import Hsqlx.Fold (RowFold (..), executeWithFold)
 import Hsqlx.FromRow (FromRow (..))
 import Hsqlx.Logging (LogEvent (..), LogLevel (..), Logger, nullLogger, stderrLogger)

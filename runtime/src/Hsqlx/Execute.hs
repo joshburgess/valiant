@@ -17,6 +17,10 @@ module Hsqlx.Execute
   , fetchScalar
     -- * Commands
   , execute
+    -- * Raw (unchecked) queries
+  , rawFetchAll
+  , rawFetchOne
+  , rawExecute
     -- * Pipelined batch execution
   , executeBatch
     -- * Pipelined batch reads
@@ -35,6 +39,7 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Vector (Vector)
 import Data.Vector qualified as V
+import Data.Word (Word32)
 import PgWire.Async (Request (..), Response (..), ResponseCollector (..), submitRequest, submitExclusive)
 import PgWire.Connection (Connection (..))
 import PgWire.Protocol.Oid qualified as Oid
@@ -111,6 +116,113 @@ execute conn stmt params = do
       when needsParse $ cacheStmt conn (stmtSQL stmt) name
       pure (tagRows tag)
     _ -> throwHsqlx (ProtocolError "execute: unexpected response type")
+
+------------------------------------------------------------------------
+-- Raw (unchecked) queries
+------------------------------------------------------------------------
+
+-- | Execute a raw SQL query and return all rows as untyped vectors.
+-- Uses the extended query protocol with binary-encoded parameters but
+-- no compile-time type checking. This is the escape hatch for dynamic
+-- SQL, admin commands, or queries that don't fit the 'Statement' model.
+--
+-- Parameters are passed as pre-encoded binary 'ByteString' values (or
+-- 'Nothing' for NULL). Parameter OIDs tell Postgres how to interpret them.
+-- Use OID 0 to let Postgres infer the type.
+--
+-- @
+-- rows <- rawFetchAll conn
+--   "SELECT id, name FROM users WHERE role = $1"
+--   [25]                -- OID 25 = text
+--   [Just "admin"]      -- $1 value
+-- @
+rawFetchAll
+  :: Connection
+  -> ByteString
+  -- ^ SQL query text
+  -> [Word32]
+  -- ^ Parameter OIDs (use 0 for Postgres to infer)
+  -> [Maybe ByteString]
+  -- ^ Parameter values (binary-encoded, or Nothing for NULL)
+  -> IO [Vector (Maybe ByteString)]
+rawFetchAll conn sql oids params = do
+  (name, needsParse) <- lookupOrAllocRaw conn sql
+  let paramVec = V.fromList params
+      msgs =
+        (if needsParse
+          then [Parse name sql (V.fromList oids)]
+          else [])
+          ++ [ Bind "" name binaryFmtVec paramVec binaryFmtVec
+             , Execute "" 0
+             , Sync
+             ]
+  resp <- submitRequest (connAsync conn) $ ReqExtendedQuery msgs CollectRows
+  case resp of
+    RespRows rows -> do
+      when needsParse $ cacheStmt conn sql name
+      pure rows
+    _ -> throwHsqlx (ProtocolError "rawFetchAll: unexpected response type")
+
+-- | Execute a raw SQL query and return zero or one row.
+rawFetchOne
+  :: Connection
+  -> ByteString
+  -- ^ SQL query text
+  -> [Word32]
+  -- ^ Parameter OIDs (use 0 for Postgres to infer)
+  -> [Maybe ByteString]
+  -- ^ Parameter values (binary-encoded, or Nothing for NULL)
+  -> IO (Maybe (Vector (Maybe ByteString)))
+rawFetchOne conn sql oids params = do
+  rows <- rawFetchAll conn sql oids params
+  case rows of
+    [] -> pure Nothing
+    (row : _) -> pure (Just row)
+
+-- | Execute a raw SQL command (INSERT\/UPDATE\/DELETE) and return
+-- the number of rows affected.
+rawExecute
+  :: Connection
+  -> ByteString
+  -- ^ SQL command text
+  -> [Word32]
+  -- ^ Parameter OIDs (use 0 for Postgres to infer)
+  -> [Maybe ByteString]
+  -- ^ Parameter values (binary-encoded, or Nothing for NULL)
+  -> IO Int64
+rawExecute conn sql oids params = do
+  (name, needsParse) <- lookupOrAllocRaw conn sql
+  let paramVec = V.fromList params
+      msgs =
+        (if needsParse
+          then [Parse name sql (V.fromList oids)]
+          else [])
+          ++ [ Bind "" name binaryFmtVec paramVec V.empty
+             , Execute "" 0
+             , Sync
+             ]
+  resp <- submitRequest (connAsync conn) $ ReqExtendedQuery msgs CollectCommand
+  case resp of
+    RespCommand tag -> do
+      when needsParse $ cacheStmt conn sql name
+      pure (tagRows tag)
+    _ -> throwHsqlx (ProtocolError "rawExecute: unexpected response type")
+
+-- | Look up or allocate a statement name for raw SQL (same cache as typed).
+lookupOrAllocRaw :: Connection -> ByteString -> IO (ByteString, Bool)
+lookupOrAllocRaw conn sql = do
+  cache <- readIORef (connStmtCache conn)
+  case Map.lookup sql cache of
+    Just name -> pure (name, False)
+    Nothing -> do
+      evictIfNeeded conn cache
+      counter <- atomicModifyIORef' (connStmtCounter conn) (\n -> (n + 1, n))
+      let name = "s" <> BS8.pack (show counter)
+      pure (name, True)
+
+------------------------------------------------------------------------
+-- Pipelined batch execution
+------------------------------------------------------------------------
 
 -- | Execute a batch of commands using pipeline mode.
 --
