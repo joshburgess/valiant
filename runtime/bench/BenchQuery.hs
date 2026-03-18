@@ -106,6 +106,26 @@ benchmarks =
               ]
             pure ()
 
+    , bench "executeBatch 1000 inserts (pipelined)" $
+        whnfIO $ do
+          p <- getPool
+          withTransaction p $ \tx -> do
+            _ <- executeBatch (txConn tx) stmtInsertUser
+              [ ("bench_" <> T.pack (show i), Just ("b@t.com" :: Text))
+              | i <- [1 :: Int .. 1000]
+              ]
+            pure ()
+
+    , bench "executeBatch 5000 inserts (pipelined)" $
+        whnfIO $ do
+          p <- getPool
+          withTransaction p $ \tx -> do
+            _ <- executeBatch (txConn tx) stmtInsertUser
+              [ ("bench_" <> T.pack (show i), Just ("b@t.com" :: Text))
+              | i <- [1 :: Int .. 5000]
+              ]
+            pure ()
+
     , bench "transaction overhead (BEGIN+COMMIT)" $
         whnfIO $ do
           p <- getPool

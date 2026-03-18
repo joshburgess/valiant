@@ -73,13 +73,26 @@ round-trip regardless of query count.
 | transaction overhead (BEGIN+COMMIT) | 4.72 ms |
 
 **Observations:**
-- `fetchAll` (list) is faster than `fetchAllVec` (Vector) for 1K rows
-  because list construction avoids the intermediate freeze step. For larger
-  result sets or indexed access, Vector wins on subsequent operations.
-- `executeWithFold` and `forEach` are within 10% of `fetchAll` — the
+- `fetchAll` (list) is faster than `fetchAllVec` (Vector) because the
+  wire-level collector produces a list of raw rows regardless. `fetchAllVec`
+  pays an extra list→Vector conversion. Use `fetchAllVec` when you need
+  indexed access to results, not for raw speed.
+- `executeWithFold` and `forEach` are within 15% of `fetchAll` — the
   per-row decode cost dominates, not the collection strategy.
 - Pool acquire/release adds <1ms overhead.
 - Transaction overhead (BEGIN+COMMIT) adds ~2.7ms over a bare scalar query.
+
+## Pipelined Insert Scaling (hsqlx executeBatch)
+
+| Rows | Time | Per-row | Notes |
+|------|------|---------|-------|
+| 100 | 4.2 ms | 42 μs | Single round-trip, all Bind+Execute coalesced |
+| 1,000 | 11.1 ms | 11 μs | Round-trip cost amortized over more rows |
+| 5,000 | 37.7 ms | 7.5 μs | Streams in 256-item chunks in exclusive mode |
+
+Per-row cost decreases with batch size due to round-trip amortization.
+At 5,000 rows the overhead is 7.5 μs/row — dominated by Postgres
+server-side INSERT execution, not client overhead.
 
 ## Concurrent Throughput (Async Split)
 

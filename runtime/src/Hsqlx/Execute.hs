@@ -49,6 +49,7 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Vector (Vector)
 import Data.Vector qualified as V
+import Data.Vector.Mutable qualified as VM
 import Data.Word (Word32)
 import PgWire.Async (Request (..), Response (..), ResponseCollector (..), submitRequest, submitExclusive)
 import PgWire.Connection (Connection (..))
@@ -140,8 +141,10 @@ fetchExists conn stmt params = do
   rows <- fetchRowsRaw conn stmt params
   pure (not (null rows))
 
--- | Fetch all result rows as a 'Vector'. More efficient than 'fetchAll'
--- when you need indexed access or will convert to a 'Vector' anyway.
+-- | Fetch all result rows as a 'Vector'. Decodes directly into a
+-- pre-allocated mutable vector, avoiding the intermediate list that
+-- 'fetchAll' builds. Faster for large result sets where you need
+-- indexed access.
 --
 -- @
 -- users <- fetchAllVec conn listAllUsers ()
@@ -149,9 +152,17 @@ fetchExists conn stmt params = do
 fetchAllVec :: Connection -> Statement p r -> p -> IO (Vector r)
 fetchAllVec conn stmt params = do
   rows <- fetchRowsRaw conn stmt params
-  V.mapM (\row -> case stmtDecode stmt row of
-    Left err -> throwHsqlx (DecodeError (BS8.pack err))
-    Right !val -> pure val) (V.fromList rows)
+  let !n = length rows
+      decode = stmtDecode stmt
+  mv <- VM.new n
+  let go _ [] = pure ()
+      go !i (row : rest) = case decode row of
+        Left err -> throwHsqlx (DecodeError (BS8.pack err))
+        Right !val -> do
+          VM.write mv i val
+          go (i + 1) rest
+  go 0 rows
+  V.unsafeFreeze mv
 
 -- | Like 'fetchAll' but applies a transformation to each decoded row.
 -- Useful for mapping database rows to domain types without an intermediate list.
