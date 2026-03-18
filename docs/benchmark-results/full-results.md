@@ -107,6 +107,41 @@ networking overhead, Apple Silicon vs the original benchmark machine).
 The **relative scaling** (single-conn: 2.1x at 32 threads; pool: 4.3x at
 32 threads) is consistent with the architecture's automatic pipelining.
 
+## Connection Pool
+
+### Acquire/Release (cold start, includes connection creation)
+
+| Pool Size | Time |
+|-----------|------|
+| 1 | 27.0 ms |
+| 4 | 28.8 ms |
+| 16 | 33.1 ms |
+
+Warm pool acquire/release is sub-millisecond (979 μs with SELECT 1).
+
+### Contention (32 threads × 10 queries each)
+
+| Pool Size | Time | Throughput |
+|-----------|------|-----------|
+| 4 | 164 ms | 1,951 q/s |
+| 8 | 116 ms | 2,759 q/s |
+| 16 | 136 ms | 2,353 q/s |
+| 32 | 186 ms | 1,720 q/s |
+
+Sweet spot: pool size 8 for 32 threads. Larger pools have diminishing
+returns from connection overhead and context switching.
+
+### Recycling Methods (10 acquire/release cycles, pool-size-4)
+
+| Method | Time | Description |
+|--------|------|-------------|
+| RecycleFast | 34.9 ms | TVar check only, no I/O |
+| RecycleVerified | 45.9 ms | Empty query health check |
+| RecycleClean | 46.7 ms | DISCARD ALL before reuse |
+
+RecycleFast is ~25% faster. Use RecycleVerified for production
+environments where connections may be killed by infrastructure.
+
 ## Codec Benchmarks
 
 See [codec-results.md](codec-results.md) for full encode/decode timings

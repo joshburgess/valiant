@@ -188,8 +188,9 @@ single thread via automatic pipelining.
 | Build requirements | Needs `libpq-dev` | No system dependencies |
 
 See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the full deep-dive:
-codec benchmarks, architecture comparison, optimization techniques, and
-the complete optimization journey.
+codec benchmarks, pool benchmarks, architecture comparison, optimization
+techniques, and the complete optimization journey. Recorded results with
+CSV data are in [docs/benchmark-results/](docs/benchmark-results/).
 
 ## Project structure
 
