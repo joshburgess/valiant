@@ -113,3 +113,12 @@ spec = do
     it "returns empty for no .hs files" $ do
       files <- discoverInlineSql []
       length files `shouldBe` 0
+
+    it "extracts SQL with named params" $ do
+      withSystemTempDirectory "hsqlx-test" $ \tmpDir -> do
+        let hsFile = tmpDir </> "Q.hs"
+        writeFile hsFile "q = query \"SELECT id FROM users WHERE name = :name AND active = :active\""
+        files <- discoverInlineSql [hsFile]
+        case files of
+          [f] -> sqlContent f `shouldBe` "SELECT id FROM users WHERE name = :name AND active = :active"
+          _ -> expectationFailure $ "expected 1 file, got " <> show (length files)

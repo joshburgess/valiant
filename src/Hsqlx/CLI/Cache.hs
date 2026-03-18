@@ -221,6 +221,7 @@ cacheFileName sqlRelPath hashShort =
       T.replace "/" "-" . T.replace "\\" "-" . T.pack $
         dropSqlExt sqlRelPath
 
+    dropSqlExt "<inline>" = "inline"
     dropSqlExt p
       | ".sql" `isSuffixOf` p = take (length p - 4) p
       | otherwise = p
