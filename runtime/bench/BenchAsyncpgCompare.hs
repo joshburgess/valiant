@@ -10,8 +10,7 @@ module BenchAsyncpgCompare (benchmarks) where
 
 import Control.Concurrent.Async (mapConcurrently)
 import Criterion.Main
-import Data.ByteString.Char8 qualified as BS8
-import Data.Int (Int32, Int64)
+import Data.Int (Int32)
 import Data.IORef
 import Data.Text (Text)
 import Data.Text qualified as T
