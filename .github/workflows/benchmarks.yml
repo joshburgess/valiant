@@ -28,7 +28,7 @@ jobs:
   # ── Build (shared by all benchmark jobs) ──────────────────────────
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
@@ -62,7 +62,7 @@ jobs:
     needs: build
     if: contains(fromJSON('["all", "codec", "quick"]'), github.event.inputs.mode || 'all')
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
@@ -92,7 +92,7 @@ jobs:
     needs: build
     if: contains(fromJSON('["all", "query", "quick"]'), github.event.inputs.mode || 'all')
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
@@ -136,7 +136,7 @@ jobs:
     needs: build
     if: contains(fromJSON('["all", "concurrent"]'), github.event.inputs.mode || 'all')
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
@@ -181,7 +181,7 @@ jobs:
     needs: build
     if: contains(fromJSON('["all", "pool"]'), github.event.inputs.mode || 'all')
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
@@ -226,7 +226,7 @@ jobs:
     needs: build
     if: contains(fromJSON('["all", "asyncpg"]'), github.event.inputs.mode || 'all')
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
@@ -271,7 +271,7 @@ jobs:
     needs: build
     if: contains(fromJSON('["all", "comparative"]'), github.event.inputs.mode || 'all')
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
@@ -315,7 +315,7 @@ jobs:
     needs: [codec, query, concurrent, pool, asyncpg, comparative]
     if: always()
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 60
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
