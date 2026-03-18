@@ -210,27 +210,53 @@ mkTlsWireConn ctx bufRef = do
       }
 
 -- | Receive exactly n bytes from a TLS context, buffering leftovers.
+-- Same optimization as 'recvExact': fast path for buffered data, Builder
+-- accumulation for multi-chunk reads.
 tlsRecvExact :: TLS.Context -> IORef ByteString -> Int -> IO ByteString
 tlsRecvExact ctx bufRef n = do
   buf <- readIORef bufRef
-  go buf n []
-  where
-    go buf remaining acc
-      | BS.length buf >= remaining = do
-          let (taken, rest) = BS.splitAt remaining buf
-          writeIORef bufRef rest
-          pure (BS.concat (reverse (taken : acc)))
-      | BS.null buf = do
-          chunk <- TLS.recvData ctx
-          if BS.null chunk
-            then throwHsqlx (ConnectionError "TLS connection closed")
-            else go chunk remaining acc
-      | otherwise = do
-          let remaining' = remaining - BS.length buf
-          chunk <- TLS.recvData ctx
-          if BS.null chunk
-            then throwHsqlx (ConnectionError "TLS connection closed")
-            else go chunk remaining' (buf : acc)
+  if BS.length buf >= n
+    then do
+      let (!taken, !rest) = BS.splitAt n buf
+      writeIORef bufRef rest
+      pure taken
+    else if BS.null buf
+      then do
+        chunk <- TLS.recvData ctx
+        if BS.null chunk
+          then throwHsqlx (ConnectionError "TLS connection closed")
+          else if BS.length chunk >= n
+            then do
+              let (!taken, !rest) = BS.splitAt n chunk
+              writeIORef bufRef rest
+              pure taken
+            else tlsAccumulate ctx bufRef chunk (n - BS.length chunk) (B.byteString chunk)
+      else do
+        let !remaining = n - BS.length buf
+            !builder0 = B.byteString buf
+        chunk <- TLS.recvData ctx
+        if BS.null chunk
+          then throwHsqlx (ConnectionError "TLS connection closed")
+          else if BS.length chunk >= remaining
+            then do
+              let (!taken, !rest) = BS.splitAt remaining chunk
+              writeIORef bufRef rest
+              pure (LBS.toStrict (B.toLazyByteString (builder0 <> B.byteString taken)))
+            else tlsAccumulate ctx bufRef chunk (remaining - BS.length chunk) (builder0 <> B.byteString chunk)
+
+tlsAccumulate :: TLS.Context -> IORef ByteString -> ByteString -> Int -> B.Builder -> IO ByteString
+tlsAccumulate ctx bufRef chunk remaining !builder
+  | BS.length chunk >= remaining = do
+      let (!taken, !rest) = BS.splitAt remaining chunk
+      writeIORef bufRef rest
+      pure (LBS.toStrict (B.toLazyByteString (builder <> B.byteString taken)))
+  | otherwise = do
+      let !remaining' = remaining - BS.length chunk
+          !builder' = builder <> B.byteString chunk
+      next <- TLS.recvData ctx
+      if BS.null next
+        then throwHsqlx (ConnectionError "TLS connection closed")
+        else tlsAccumulate ctx bufRef next remaining' builder'
 
 -- | Send a frontend message over the wire.
 sendFrontendMsg :: WireConn -> FrontendMsg -> IO ()
@@ -301,26 +327,61 @@ sendAll sock bs
       sent <- NSB.send sock bs
       sendAll sock (BS.drop sent bs)
 
+-- | Socket recv buffer size. Larger values reduce syscalls for big result sets.
+recvChunkSize :: Int
+recvChunkSize = 32768
+{-# INLINE recvChunkSize #-}
+
 -- | Receive exactly @n@ bytes, using the buffer for leftovers.
+-- Fast path: if the buffer already has enough data, just splitAt (zero allocation
+-- beyond the two slices). Slow path: accumulate chunks via Builder to avoid
+-- the O(n) reverse + concat of a list accumulator.
 recvExact :: Socket -> IORef ByteString -> Int -> IO ByteString
 recvExact sock bufRef n = do
   buf <- readIORef bufRef
-  go buf n []
+  if BS.length buf >= n
+    then do
+      -- Fast path: buffer has enough data, no syscall needed.
+      let (!taken, !rest) = BS.splitAt n buf
+      writeIORef bufRef rest
+      pure taken
+    else if BS.null buf
+      then do
+        -- Buffer empty: read fresh chunk from socket.
+        chunk <- NSB.recv sock (max recvChunkSize n)
+        if BS.null chunk
+          then throwHsqlx (ConnectionError "Connection closed by server")
+          else if BS.length chunk >= n
+            then do
+              let (!taken, !rest) = BS.splitAt n chunk
+              writeIORef bufRef rest
+              pure taken
+            else accumulate chunk (n - BS.length chunk) (B.byteString chunk)
+      else do
+        -- Buffer has partial data: use it and read more.
+        let !remaining = n - BS.length buf
+            !builder0 = B.byteString buf
+        chunk <- NSB.recv sock (max recvChunkSize remaining)
+        if BS.null chunk
+          then throwHsqlx (ConnectionError "Connection closed by server")
+          else if BS.length chunk >= remaining
+            then do
+              let (!taken, !rest) = BS.splitAt remaining chunk
+              writeIORef bufRef rest
+              pure (LBS.toStrict (B.toLazyByteString (builder0 <> B.byteString taken)))
+            else accumulate chunk (remaining - BS.length chunk) (builder0 <> B.byteString chunk)
   where
-    go buf remaining acc
-      | BS.length buf >= remaining = do
-          let (taken, rest) = BS.splitAt remaining buf
+    -- Slow path: need multiple recv calls. Uses Builder for O(1) append.
+    accumulate :: ByteString -> Int -> B.Builder -> IO ByteString
+    accumulate chunk remaining !builder
+      | BS.length chunk >= remaining = do
+          let (!taken, !rest) = BS.splitAt remaining chunk
           writeIORef bufRef rest
-          pure (BS.concat (reverse (taken : acc)))
-      | BS.null buf = do
-          chunk <- NSB.recv sock 8192
-          if BS.null chunk
-            then throwHsqlx (ConnectionError "Connection closed by server")
-            else go chunk remaining acc
+          pure (LBS.toStrict (B.toLazyByteString (builder <> B.byteString taken)))
       | otherwise = do
-          -- Use what we have in the buffer, then read more
-          let remaining' = remaining - BS.length buf
-          chunk <- NSB.recv sock 8192
-          if BS.null chunk
+          let !remaining' = remaining - BS.length chunk
+              !builder' = builder <> B.byteString chunk
+          next <- NSB.recv sock (max recvChunkSize remaining')
+          if BS.null next
             then throwHsqlx (ConnectionError "Connection closed by server")
-            else go chunk remaining' (buf : acc)
+            else accumulate next remaining' builder'

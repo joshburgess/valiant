@@ -5,6 +5,7 @@ import PgWire.Auth.ScramFieldsSpec qualified as ScramFieldsSpec
 import PgWire.CancelSpec qualified as CancelSpec
 import PgWire.Connection.ConfigSpec qualified as ConfigSpec
 import PgWire.ErrorSpec qualified as ErrorSpec
+import PgWire.MockServerSpec qualified as MockServerSpec
 import PgWire.Pool.ConfigSpec qualified as PoolConfigSpec
 import PgWire.Protocol.BuildersSpec qualified as BuildersSpec
 import PgWire.Protocol.OidSpec qualified as OidSpec
@@ -26,3 +27,4 @@ main = hspec $ do
   describe "PgWire.Cancel" CancelSpec.spec
   describe "PgWire.Connection.Features" FeaturesSpec.spec
   describe "PgWire.Connection.Escaping" EscapingSpec.spec
+  describe "PgWire.MockServer" MockServerSpec.spec

@@ -36,6 +36,7 @@ library
     PgWire.Connection
     PgWire.Connection.Config
     PgWire.Error
+    PgWire.MockServer
     PgWire.Pool
     PgWire.Pool.Config
     PgWire.Protocol.Backend
@@ -96,6 +97,7 @@ test-suite pg-wire-test
     PgWire.Connection.EscapingSpec
     PgWire.Connection.FeaturesSpec
     PgWire.ErrorSpec
+    PgWire.MockServerSpec
     PgWire.Pool.ConfigSpec
     PgWire.Protocol.BuildersSpec
     PgWire.Protocol.OidSpec
