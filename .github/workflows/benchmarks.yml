@@ -50,11 +50,9 @@ jobs:
           sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
           sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
 
-          # Allow password auth for Unix socket connections (default is peer)
+          # Allow trust auth for Unix socket connections (prepend to override default peer rules)
           PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" | xargs)
-          echo "local all hsqlx_test md5" | sudo tee -a "$PG_HBA" > /dev/null
-          # Also allow trust for the runner user
-          echo "local all all trust" | sudo tee -a "$PG_HBA" > /dev/null
+          sudo sed -i '1s/^/local all all trust\n/' "$PG_HBA"
 
           # Tune for throughput (same settings as docker-compose.yml)
           sudo -u postgres psql -c "ALTER SYSTEM SET shared_buffers = '256MB';"
