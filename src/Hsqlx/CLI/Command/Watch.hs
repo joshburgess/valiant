@@ -34,7 +34,7 @@ runWatch env = do
 
   -- Initial prepare
   printLn "  Running initial prepare..."
-  _ <- runPrepare env
+  _ <- runPrepare env []
   printLn ""
 
   -- Track known file hashes
@@ -61,7 +61,7 @@ scanAndPrepare env hashRef = do
   when (not (null changes)) $ do
     mapM_ reportChange changes
     printLn "  Re-preparing..."
-    exitCode <- runPrepare env
+    exitCode <- runPrepare env []
     case exitCode of
       ExitSuccess -> printLn ""
       ExitFailure _ -> printLn "  (Some queries failed. Fix the SQL and save again.)\n"

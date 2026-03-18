@@ -13,7 +13,8 @@ import Database.PostgreSQL.LibPQ qualified as PQ
 import Hsqlx.CLI.Cache
 import Hsqlx.CLI.Config (AppEnv (..))
 import Hsqlx.CLI.Describe (ColumnMeta (..), DescribeError (..), ParamMeta (..), QueryMeta (..), describeQuery, withPgConnection)
-import Hsqlx.CLI.Discover (SqlFile (..), discoverSqlFiles)
+import Hsqlx.CLI.Discover (SqlFile (..), discoverSqlFiles, discoverInlineSql)
+import System.FilePath.Glob qualified as Glob
 import Hsqlx.CLI.Error (HsqlxCliError (..), dieWithError)
 import Hsqlx.CLI.Hash (sha256Hex)
 import Hsqlx.CLI.Nullability (resolveNullability)
@@ -23,8 +24,8 @@ import Hsqlx.CLI.NamedParams (NamedParamMapping, preprocessNamedParams)
 import Hsqlx.CLI.TypeMap (HaskellType (..), ResolvedType (..), oidToHaskellTypeWith, oidToTypeNameWith, resolveType, resolveUnknownOid)
 import System.Exit (ExitCode (..))
 
-runPrepare :: AppEnv -> IO ExitCode
-runPrepare env = do
+runPrepare :: AppEnv -> [FilePath] -> IO ExitCode
+runPrepare env inlineDirs = do
   dbUrl <- case appDatabaseUrl env of
     Nothing -> dieWithError ErrNoDatabaseUrl
     Just url -> pure url
@@ -32,10 +33,24 @@ runPrepare env = do
   printHeader $ "Using database " <> maskPassword (TE.decodeUtf8 dbUrl)
   printHeader $ "Scanning " <> T.pack (appSqlDir env) <> " for .sql files..."
 
-  files <- discoverSqlFiles (appSqlDir env)
+  sqlFiles <- discoverSqlFiles (appSqlDir env)
+
+  -- Discover inline SQL from Haskell source if --inline dirs provided
+  inlineFiles <- case inlineDirs of
+    [] -> pure []
+    dirs -> do
+      hsPaths <- concat <$> mapM discoverHsFiles dirs
+      inlines <- discoverInlineSql hsPaths
+      case inlines of
+        [] -> pure []
+        _ -> do
+          printLn $ "  Found " <> T.pack (show (length inlines)) <> " inline queries in .hs files"
+          pure inlines
+
+  let files = sqlFiles <> inlineFiles
   case files of
     [] -> dieWithError (ErrNoSqlFiles (appSqlDir env))
-    _ -> printLn $ "  Found " <> T.pack (show (length files)) <> " queries"
+    _ -> printLn $ "  Found " <> T.pack (show (length files)) <> " queries total"
 
   printLn ""
 
@@ -51,6 +66,13 @@ runPrepare env = do
       if okCount == total
         then ExitSuccess
         else ExitFailure 1
+
+-- | Discover all .hs files in a directory tree.
+discoverHsFiles :: FilePath -> IO [FilePath]
+discoverHsFiles dir = do
+  let pat = Glob.compile "**/*.hs"
+  matched <- Glob.globDir [pat] dir
+  pure (concat matched)
 
 processFile :: AppEnv -> CustomTypeMap -> PQ.Connection -> Int -> (Int, SqlFile) -> IO Bool
 processFile env customs conn total (idx, sqlFile) = do

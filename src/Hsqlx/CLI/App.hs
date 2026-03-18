@@ -29,8 +29,13 @@ data Opts = Opts
   , optCommand :: Command
   }
 
+data PrepareOpts = PrepareOpts
+  { prepInlineDirs :: [FilePath]
+  -- ^ Directories to scan for inline @query "..."@ calls in @.hs@ files.
+  }
+
 data Command
-  = CmdPrepare
+  = CmdPrepare PrepareOpts
   | CmdCheck
   | CmdTypes (Maybe FilePath)
   | CmdGenerate GenerateOpts
@@ -40,7 +45,7 @@ data Command
 
 dispatch :: AppEnv -> Command -> IO ExitCode
 dispatch env = \case
-  CmdPrepare -> runPrepare env
+  CmdPrepare opts -> runPrepare env (prepInlineDirs opts)
   CmdCheck -> runCheck env
   CmdTypes mFile -> runTypes env mFile
   CmdGenerate opts -> runGenerate env opts
@@ -91,7 +96,21 @@ optsParser =
 commandParser :: Parser Command
 commandParser =
   subparser
-    ( command "prepare" (info (pure CmdPrepare) (progDesc "Prepare all .sql files against the database"))
+    ( command "prepare"
+        ( info
+            ( CmdPrepare
+                <$> ( PrepareOpts
+                        <$> many
+                          ( strOption
+                              ( long "inline"
+                                  <> metavar "DIR"
+                                  <> help "Scan .hs files in DIR for inline query \"...\" calls"
+                              )
+                          )
+                    )
+            )
+            (progDesc "Prepare all .sql files (and inline queries) against the database")
+        )
         <> command "check" (info (pure CmdCheck) (progDesc "Check that all cache files are current"))
         <> command
           "types"
