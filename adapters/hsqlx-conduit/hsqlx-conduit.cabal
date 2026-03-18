@@ -12,7 +12,7 @@ license-file:    ../../LICENSE
 build-type:      Simple
 
 common warnings
-  ghc-options: -Wall -Wcompat -Werror -Wno-unticked-promoted-constructors -funbox-strict-fields
+  ghc-options: -Wall -Wcompat -Werror -Wno-unticked-promoted-constructors -funbox-strict-fields -fspecialise-aggressively
 
 library
   import:           warnings
