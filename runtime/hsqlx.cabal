@@ -32,6 +32,7 @@ library
     Hsqlx.Binary.Decode
     Hsqlx.Binary.Encode
     Hsqlx.Binary.Enum
+    Hsqlx.Binary.HStore
     Hsqlx.Binary.Inet
     Hsqlx.Binary.MacAddr
     Hsqlx.Binary.Interval
@@ -96,7 +97,9 @@ test-suite hsqlx-test
     Hsqlx.Binary.CompositeSpec
     Hsqlx.Binary.DecodeSpec
     Hsqlx.Binary.EncodeSpec
+    Hsqlx.Binary.HStoreSpec
     Hsqlx.Binary.InetSpec
+    Hsqlx.Binary.MacAddrSpec
     Hsqlx.Binary.IntervalSpec
     Hsqlx.Binary.JSONSpec
     Hsqlx.Binary.NewtypeSpec
@@ -111,6 +114,7 @@ test-suite hsqlx-test
     , aeson
     , base           >=4.17 && <5
     , bytestring
+    , containers
     , hspec          >=2.11 && <2.12
     , hsqlx
     , pg-wire

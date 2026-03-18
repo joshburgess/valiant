@@ -38,13 +38,17 @@ module Hsqlx.Monad
     -- * Queries
   , fetchOneM
   , fetchAllM
+  , fetchAllVecM
   , fetchScalarM
   , fetchOneOrThrowM
+  , fetchOneOrM
   , fetchExistsM
+  , forEachM
 
     -- * Commands
   , executeM
   , executeReturningM
+  , executeReturningManyM
   , executeBatchM
   , executeManyM
 
@@ -56,7 +60,10 @@ module Hsqlx.Monad
   , withTransactionM
   , withTransaction_M
   , withTransactionLevelM
+  , withTransactionModeM
   , withReadOnlyTransactionM
+  , withDeferrableTransactionM
+  , withTransactionRetryM
 
     -- * Pool management
   , poolStatsM
@@ -66,9 +73,10 @@ module Hsqlx.Monad
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Reader (ReaderT (..), ask)
 import Data.Int (Int64)
-import Hsqlx.Execute (execute, executeBatch, executeMany, executeReturning, fetchAll, fetchBatchAll, fetchBatchOne, fetchExists, fetchOne, fetchOneOrThrow, fetchScalar)
+import Data.Vector (Vector)
+import Hsqlx.Execute (execute, executeBatch, executeMany, executeReturning, executeReturningMany, fetchAll, fetchAllVec, fetchBatchAll, fetchBatchOne, fetchExists, fetchOne, fetchOneOr, fetchOneOrThrow, fetchScalar, forEach)
 import Hsqlx.Statement (Statement)
-import Hsqlx.Transaction (IsolationLevel, Transaction, withReadOnlyTransaction, withTransaction, withTransactionLevel, withTransaction_)
+import Hsqlx.Transaction (IsolationLevel, Transaction, TransactionMode, withDeferrableTransaction, withReadOnlyTransaction, withTransaction, withTransactionLevel, withTransactionMode, withTransactionRetry, withTransaction_)
 import PgWire.Connection (Connection)
 import Data.Time (NominalDiffTime)
 import PgWire.Pool (Pool, PoolStats, poolStats, resize, withResource, withResourceTimeout)
@@ -131,10 +139,25 @@ fetchOneOrThrowM :: Statement p r -> p -> Hsqlx r
 fetchOneOrThrowM stmt params = withConnectionM $ \conn -> fetchOneOrThrow conn stmt params
 {-# INLINE fetchOneOrThrowM #-}
 
+-- | Fetch all result rows as a 'Vector'.
+fetchAllVecM :: Statement p r -> p -> Hsqlx (Vector r)
+fetchAllVecM stmt params = withConnectionM $ \conn -> fetchAllVec conn stmt params
+{-# INLINE fetchAllVecM #-}
+
+-- | Like 'fetchOneM' but returns a default value on no rows.
+fetchOneOrM :: Statement p r -> p -> r -> Hsqlx r
+fetchOneOrM stmt params def = withConnectionM $ \conn -> fetchOneOr conn stmt params def
+{-# INLINE fetchOneOrM #-}
+
 -- | Check whether a query returns any rows.
 fetchExistsM :: Statement p r -> p -> Hsqlx Bool
 fetchExistsM stmt params = withConnectionM $ \conn -> fetchExists conn stmt params
 {-# INLINE fetchExistsM #-}
+
+-- | Execute a callback for each result row.
+forEachM :: Statement p r -> p -> (r -> IO ()) -> Hsqlx ()
+forEachM stmt params action = withConnectionM $ \conn -> forEach conn stmt params action
+{-# INLINE forEachM #-}
 
 ------------------------------------------------------------------------
 -- Commands
@@ -160,6 +183,11 @@ executeBatchM stmt paramsList = withConnectionM $ \conn -> executeBatch conn stm
 executeManyM :: Statement p () -> [p] -> Hsqlx Int64
 executeManyM stmt paramsList = withConnectionM $ \conn -> executeMany conn stmt paramsList
 {-# INLINE executeManyM #-}
+
+-- | Execute a batch with RETURNING. Returns total rows and all decoded rows.
+executeReturningManyM :: Statement p r -> [p] -> Hsqlx (Int64, [r])
+executeReturningManyM stmt paramsList = withConnectionM $ \conn -> executeReturningMany conn stmt paramsList
+{-# INLINE executeReturningManyM #-}
 
 ------------------------------------------------------------------------
 -- Pipelined batch reads
@@ -200,12 +228,33 @@ withTransactionLevelM level f = do
   liftIO $ withTransactionLevel level pool f
 {-# INLINE withTransactionLevelM #-}
 
+-- | Run an action inside a transaction with a full 'TransactionMode'.
+withTransactionModeM :: TransactionMode -> (Transaction -> IO a) -> Hsqlx a
+withTransactionModeM mode f = do
+  pool <- ask
+  liftIO $ withTransactionMode mode pool f
+{-# INLINE withTransactionModeM #-}
+
 -- | Run an action inside a READ ONLY transaction.
 withReadOnlyTransactionM :: (Transaction -> IO a) -> Hsqlx a
 withReadOnlyTransactionM f = do
   pool <- ask
   liftIO $ withReadOnlyTransaction pool f
 {-# INLINE withReadOnlyTransactionM #-}
+
+-- | Run an action inside a SERIALIZABLE READ ONLY DEFERRABLE transaction.
+withDeferrableTransactionM :: (Transaction -> IO a) -> Hsqlx a
+withDeferrableTransactionM f = do
+  pool <- ask
+  liftIO $ withDeferrableTransaction pool f
+{-# INLINE withDeferrableTransactionM #-}
+
+-- | Run a SERIALIZABLE transaction with automatic retry on serialization failure.
+withTransactionRetryM :: Int -> (Transaction -> IO a) -> Hsqlx a
+withTransactionRetryM maxRetries f = do
+  pool <- ask
+  liftIO $ withTransactionRetry maxRetries pool f
+{-# INLINE withTransactionRetryM #-}
 
 ------------------------------------------------------------------------
 -- Pool management

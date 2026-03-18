@@ -262,6 +262,9 @@ module Hsqlx
   , PgMacAddr (..)
   , macAddr
   , macAddrToText
+  , PgHStore (..)
+  , hstoreFromList
+  , hstoreToList
   , PgInterval (..)
   , PgRange (..)
   , RangeBound (..)
@@ -276,6 +279,7 @@ module Hsqlx
 import GHC.Generics (Generic)
 import Hsqlx.Batch (fetchByIds)
 import Hsqlx.Binary.Composite (CompositeField (..))
+import Hsqlx.Binary.HStore (PgHStore (..), hstoreFromList, hstoreToList)
 import Hsqlx.Binary.Inet (PgInet (..), ipv4, ipv4Host, ipv6, ipv6Host, inetToText)
 import Hsqlx.Binary.MacAddr (PgMacAddr (..), macAddr, macAddrToText)
 import Hsqlx.Binary.Interval (PgInterval (..))
