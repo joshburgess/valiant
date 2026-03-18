@@ -1,6 +1,7 @@
 with-compiler: ghc-9.10.3
 packages: . runtime bench-compare wire example deps/entropy plugin
           adapters/hsqlx-conduit
+          adapters/hsqlx-effectful
           adapters/hsqlx-streaming
           adapters/hsqlx-streamly
 tests: True
