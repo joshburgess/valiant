@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 -- | Walk the typechecked AST to find queryFile/queryFileAs/mkStatement call sites.
 module Hsqlx.Plugin.Traverse
   ( QueryFileCall (..)
@@ -74,12 +76,20 @@ findCallsInExpr sp expr =
       OpApp _ l op r ->
         findCallsInLExpr l ++ findCallsInLExpr op ++ findCallsInLExpr r
       NegApp _ e _ -> findCallsInLExpr e
+#if MIN_VERSION_ghc(9, 10, 0)
       HsPar _ e -> findCallsInLExpr e
+#else
+      HsPar _ _ e _ -> findCallsInLExpr e
+#endif
       SectionL _ e1 e2 -> findCallsInLExpr e1 ++ findCallsInLExpr e2
       SectionR _ e1 e2 -> findCallsInLExpr e1 ++ findCallsInLExpr e2
       ExplicitTuple _ args _ ->
         concatMap (\case Present _ e -> findCallsInLExpr e; _ -> []) args
+#if MIN_VERSION_ghc(9, 10, 0)
       HsLet _ _ e -> findCallsInLExpr e
+#else
+      HsLet _ _ _ _ e -> findCallsInLExpr e
+#endif
       HsCase _ scrut mg ->
         findCallsInLExpr scrut ++ findCallsInMG mg
       HsIf _ c t f ->
@@ -87,7 +97,9 @@ findCallsInExpr sp expr =
       HsDo _ _ (L _ stmts) -> concatMap (\(L _ s) -> findCallsInStmt s) stmts
       ExplicitList _ exprs -> concatMap findCallsInLExpr exprs
       XExpr (WrapExpr (HsWrap _ inner)) -> findCallsInExpr sp inner
+#if MIN_VERSION_ghc(9, 10, 0)
       XExpr (ExpandedThingTc _ inner) -> findCallsInExpr sp inner
+#endif
       _ -> []
 
 -- | Try to extract the file path from a mkStatement call.

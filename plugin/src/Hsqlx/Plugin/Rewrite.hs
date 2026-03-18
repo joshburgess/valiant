@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 -- | Parsed-AST rewrite: replace @queryFile "path.sql"@ with @mkStatement ...@.
 module Hsqlx.Plugin.Rewrite
   ( rewriteModule
