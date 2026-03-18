@@ -12,6 +12,7 @@ module PgWire.Protocol.Oid
   , oidVarchar
   , oidDate
   , oidTime
+  , oidTimetz
   , oidTimestamp
   , oidTimestamptz
   , oidNumeric
@@ -62,10 +63,11 @@ oidJson = Oid 114
 oidFloat4 = Oid 700
 oidFloat8 = Oid 701
 
-oidVarchar, oidDate, oidTime, oidTimestamp, oidTimestamptz :: Oid
+oidVarchar, oidDate, oidTime, oidTimetz, oidTimestamp, oidTimestamptz :: Oid
 oidVarchar = Oid 1043
 oidDate = Oid 1082
 oidTime = Oid 1083
+oidTimetz = Oid 1266
 oidTimestamp = Oid 1114
 oidTimestamptz = Oid 1184
 

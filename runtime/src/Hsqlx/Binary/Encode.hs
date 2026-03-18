@@ -14,11 +14,14 @@ import Data.Time
   ( Day
   , LocalTime (..)
   , TimeOfDay (..)
+  , TimeZone (..)
   , UTCTime (..)
+  , ZonedTime (..)
   , diffTimeToPicoseconds
   , fromGregorian
   , timeOfDayToTime
   , toModifiedJulianDay
+  , zonedTimeToUTC
   )
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import Data.Word (Word8, Word32, Word64)
@@ -195,4 +198,24 @@ instance PgEncode LocalTime where
      in int64BE totalMicros
   {-# INLINE pgEncode #-}
   pgOid _ = oidTimestamp
+  {-# INLINE pgOid #-}
+
+instance PgEncode ZonedTime where
+  pgEncode = pgEncode . zonedTimeToUTC
+  {-# INLINE pgEncode #-}
+  pgOid _ = oidTimestamptz
+  {-# INLINE pgOid #-}
+
+-- | @timetz@ binary format: 8 bytes (microseconds) + 4 bytes (UTC offset in seconds, negated).
+-- PostgreSQL stores the offset as seconds *west* of UTC (negated from the usual convention).
+instance PgEncode (TimeOfDay, TimeZone) where
+  pgEncode (tod, tz) =
+    let !picos = diffTimeToPicoseconds (timeOfDayToTime tod)
+        !micros = picos `div` 1000000
+        !offsetSecs = fromIntegral (negate (timeZoneMinutes tz * 60)) :: Int32
+     in unsafeCreate 12 $ \p -> do
+          pokeInt64BE p 0 (fromIntegral micros)
+          pokeInt32BE p 8 offsetSecs
+  {-# INLINE pgEncode #-}
+  pgOid _ = oidTimetz
   {-# INLINE pgOid #-}

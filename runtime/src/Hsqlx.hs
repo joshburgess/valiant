@@ -84,6 +84,14 @@ module Hsqlx
   , NamedStatement
   , mkStatementNamed
 
+    -- * Dynamic SQL
+    -- | Build SQL at runtime for queries with dynamic WHERE clauses,
+    -- optional filters, or variable structure.
+    --
+    -- Import "Hsqlx.Dynamic" directly for the full API (@sql@, @param@,
+    -- @runSnippet@, etc.). The names are intentionally not re-exported
+    -- here to avoid shadowing common local variable names.
+
     -- * UNNEST batch fetch
     -- | Fetch multiple entities by ID in a single query using
     -- @WHERE id = ANY($1::type[])@. Faster than pipelining for
@@ -321,6 +329,7 @@ import Hsqlx.Binary.Unbounded (Unbounded (..), finite, fromFinite)
 import Hsqlx.Binary.Interval (PgInterval (..))
 import Hsqlx.Binary.Range (PgRange (..), RangeBound (..))
 import Hsqlx.Copy (CopyResult (..), copyIn, copyInBinary, copyOut)
+import Hsqlx.Dynamic ()
 import Hsqlx.Error (ConstraintViolation (..), catchConstraintViolation, constraintViolation, isDeadlockError, isForeignKeyViolation, isSerializationError, isUniqueViolation, pgErrorOf, sqlState)
 import Hsqlx.Execute (execute, executeBatch, executeMany, executeReturning, executeReturningMany, fetchAll, fetchAllVec, fetchAllWith, fetchBatchAll, fetchBatchOne, fetchExists, fetchFirst, fetchOne, fetchOneOr, fetchOneOrThrow, fetchScalar, forEach, rawExecute, rawFetchAll, rawFetchOne)
 import Hsqlx.Fold (RowFold (..), executeWithFold)

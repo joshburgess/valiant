@@ -14,10 +14,14 @@ import Data.Time
   ( Day
   , LocalTime (..)
   , TimeOfDay
+  , TimeZone (..)
   , UTCTime (..)
+  , ZonedTime (..)
   , fromGregorian
+  , minutesToTimeZone
   , picosecondsToDiffTime
   , timeToTimeOfDay
+  , utcToZonedTime
   )
 import Data.Time.Calendar (addDays)
 import Data.Word (Word32, Word64)
@@ -149,4 +153,29 @@ instance PgDecode LocalTime where
         picos = fromIntegral remainMicros * 1000000
         tod = timeToTimeOfDay (picosecondsToDiffTime picos)
     Right (LocalTime day tod)
+  {-# INLINE pgDecode #-}
+
+-- | Decode @timestamptz@ as 'ZonedTime'. PostgreSQL stores timestamptz
+-- as UTC microseconds (same as UTCTime). We decode to UTC and tag with
+-- the UTC timezone. To get the original timezone, use application-level
+-- conversion.
+instance PgDecode ZonedTime where
+  pgDecode bs = do
+    utc <- pgDecode bs
+    Right (utcToZonedTime (minutesToTimeZone 0) utc)
+  {-# INLINE pgDecode #-}
+
+-- | Decode @timetz@ as @(TimeOfDay, TimeZone)@. Binary format:
+-- 8 bytes (microseconds) + 4 bytes (UTC offset in seconds, negated).
+instance PgDecode (TimeOfDay, TimeZone) where
+  pgDecode bs
+    | BS.length bs /= 12 = Left $ "timetz: expected 12 bytes, got " <> show (BS.length bs)
+    | otherwise = do
+        micros <- decodeInt64BE (BS.take 8 bs)
+        offsetRaw <- decodeInt32BE (BS.drop 8 bs)
+        let picos = fromIntegral micros * 1000000
+            tod = timeToTimeOfDay (picosecondsToDiffTime picos)
+            -- PG stores offset as seconds west of UTC (negated)
+            tzMins = negate (fromIntegral offsetRaw) `div` 60 :: Int
+        Right (tod, minutesToTimeZone tzMins)
   {-# INLINE pgDecode #-}
