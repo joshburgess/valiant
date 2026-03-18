@@ -1,5 +1,6 @@
 module Main where
 
+import Hsqlx.ErrorSpec qualified as ErrorSpec
 import Hsqlx.Binary.ArraySpec qualified as ArraySpec
 import Hsqlx.Binary.CompositeSpec qualified as CompositeSpec
 import Hsqlx.Binary.DecodeSpec qualified as DecodeSpec
@@ -36,3 +37,4 @@ main = hspec $ do
   describe "Hsqlx.Binary.Property" PropertySpec.spec
   describe "Hsqlx.FromRow" FromRowSpec.spec
   describe "Hsqlx.NamedParams" NamedParamsSpec.spec
+  describe "Hsqlx.Error" ErrorSpec.spec

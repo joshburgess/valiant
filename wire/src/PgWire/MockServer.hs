@@ -18,7 +18,8 @@ module PgWire.MockServer
     -- * Query handlers
   , QueryHandler
   , simpleHandler
-  , extendedHandler
+  , errorHandler
+  , failNTimes
     -- * Response builders
   , sendBackendMsg
   , buildBackendMsg
@@ -26,6 +27,7 @@ module PgWire.MockServer
 
 import Control.Concurrent (forkIO, killThread)
 import Control.Exception (SomeException, catch, finally)
+import Data.IORef
 import Data.Bits (shiftL, (.|.))
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
@@ -79,10 +81,29 @@ simpleHandler table sql send = case lookup sql table of
         mapM_ (\row -> send $ buildDataRow (map snd row)) rows
         send $ buildCommandComplete ("SELECT " <> BS8.pack (show (length rows)))
 
--- | A handler for extended query protocol (Parse/Bind/Execute sequences).
--- For the mock server, this is handled internally.
-extendedHandler :: QueryHandler
-extendedHandler = \_ send -> send $ buildCommandComplete "SELECT 0"
+-- | A handler that returns a PG error with the given SQLSTATE and message.
+--
+-- @
+-- errorHandler \"23505\" \"duplicate key value violates unique constraint \\\"users_email_key\\\"\"
+-- @
+errorHandler :: ByteString -> ByteString -> QueryHandler
+errorHandler sqlstate msg _ send =
+  send $ buildErrorResponse sqlstate msg
+
+-- | A handler backed by an IORef counter. Returns an error for the first
+-- @n@ calls, then delegates to the fallback handler. Useful for testing
+-- retry logic.
+--
+-- @
+-- ref <- newIORef 0
+-- let handler = failNTimes ref 2 \"40001\" \"serialization failure\" defaultHandler
+-- @
+failNTimes :: IORef Int -> Int -> ByteString -> ByteString -> QueryHandler -> QueryHandler
+failNTimes ref n sqlstate msg fallback sql send = do
+  count <- atomicModifyIORef' ref (\c -> (c + 1, c))
+  if count < n
+    then send $ buildErrorResponse sqlstate msg
+    else fallback sql send
 
 -- | Start a mock server on a random port, run an action with the port,
 -- then shut down.
