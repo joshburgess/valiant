@@ -23,6 +23,11 @@ module PgWire.MockServer
     -- * Response builders
   , sendBackendMsg
   , buildBackendMsg
+  , buildErrorResponse
+  , buildCommandComplete
+  , buildRowDescription
+  , buildDataRow
+  , buildReadyForQuery
   ) where
 
 import Control.Concurrent (forkIO, killThread)
