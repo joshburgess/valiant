@@ -49,7 +49,7 @@ class DecodeColumnImpl (flag :: Bool) a where
 instance (PgDecode a) => DecodeColumnImpl 'False a where
   decodeColumnImpl row idx
     | idx >= V.length row = Left $ colOutOfRange idx (V.length row)
-    | otherwise = case row V.! idx of
+    | otherwise = case V.unsafeIndex row idx of
         Nothing -> Left $ "Column " <> show idx <> " is NULL but expected a non-nullable value"
         Just bs -> pgDecode bs
   {-# INLINE decodeColumnImpl #-}
@@ -58,7 +58,7 @@ instance (PgDecode a) => DecodeColumnImpl 'False a where
 instance (PgDecode a) => DecodeColumnImpl 'True (Maybe a) where
   decodeColumnImpl row idx
     | idx >= V.length row = Left $ colOutOfRange idx (V.length row)
-    | otherwise = case row V.! idx of
+    | otherwise = case V.unsafeIndex row idx of
         Nothing -> Right Nothing
         Just bs -> Just <$> pgDecode bs
   {-# INLINE decodeColumnImpl #-}
