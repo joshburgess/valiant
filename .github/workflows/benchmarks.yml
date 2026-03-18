@@ -221,8 +221,8 @@ jobs:
             pool.csv
             pool-output.txt
 
-  # ── asyncpg-style benchmarks (hsqlx, same query patterns) ────────
-  asyncpg-style:
+  # ── asyncpg-hsqlx benchmarks (hsqlx, same query patterns) ────────
+  asyncpg-hsqlx:
     needs: build
     if: contains(fromJSON('["all", "asyncpg"]'), github.event.inputs.mode || 'all')
     runs-on: ubuntu-24.04
@@ -253,7 +253,7 @@ jobs:
           sudo -u postgres psql -c "ALTER SYSTEM SET fsync = 'off';"
           sudo -u postgres psql -c "ALTER SYSTEM SET max_connections = '200';"
           sudo systemctl restart postgresql
-      - name: Run asyncpg-style benchmarks (hsqlx)
+      - name: Run asyncpg-hsqlx benchmarks (hsqlx)
         env:
           DATABASE_URL: postgres://hsqlx_test:hsqlx_test@/hsqlx_test?host=/var/run/postgresql
         run: |
@@ -261,7 +261,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: bench-asyncpg-style
+          name: bench-asyncpg-hsqlx
           path: |
             asyncpg-compare.csv
             asyncpg-compare-output.txt
@@ -311,7 +311,7 @@ jobs:
             comparative-output.txt
 
   # ── asyncpg (Python) head-to-head on same machine ────────────────
-  asyncpg-python:
+  asyncpg-baseline:
     needs: build
     if: contains(fromJSON('["all", "asyncpg"]'), github.event.inputs.mode || 'all')
     runs-on: ubuntu-24.04
@@ -339,16 +339,16 @@ jobs:
         env:
           DATABASE_URL: postgres://hsqlx_test@/hsqlx_test?host=/var/run/postgresql
         run: |
-          python3 bench-compare/asyncpg-bench.py "$DATABASE_URL" 2>&1 | tee asyncpg-python-output.txt
+          python3 bench-compare/asyncpg-bench.py "$DATABASE_URL" 2>&1 | tee asyncpg-baseline-output.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: bench-asyncpg-python
-          path: asyncpg-python-output.txt
+          name: bench-asyncpg-baseline
+          path: asyncpg-baseline-output.txt
 
   # ── Summary ──────────────────────────────────────────────────────
   summary:
-    needs: [codec, query, concurrent, pool, asyncpg-style, asyncpg-python, comparative]
+    needs: [codec, query, concurrent, pool, asyncpg-hsqlx, asyncpg-baseline, comparative]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 60
