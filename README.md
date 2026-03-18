@@ -201,6 +201,9 @@ hsqlx is a multi-package Cabal project:
 | `hsqlx` | Runtime library: binary codecs, query execution, transactions, streaming, COPY |
 | `hsqlx-cli` | CLI tool (`hsqlx prepare`, `check`, `types`, `generate`, `watch`) |
 | `hsqlx-plugin` | GHC source plugin for compile-time query validation |
+| `hsqlx-conduit` | Conduit streaming adapter |
+| `hsqlx-streaming` | `streaming` library adapter |
+| `hsqlx-streamly` | Streamly streaming adapter |
 | `hsqlx-example` | Example REST API using hsqlx + scotty |
 | `bench-compare` | Comparative benchmarks against hasql and postgresql-simple |
 
@@ -218,6 +221,10 @@ hsqlx/
 │   └── Hsqlx/CLI/        # Commands, cache, type map, discovery, nullability
 ├── plugin/               # GHC source plugin
 │   └── src/Hsqlx/Plugin/ # AST traversal, verification, error messages
+├── adapters/             # Streaming library adapters
+│   ├── hsqlx-conduit/    # Conduit adapter
+│   ├── hsqlx-streaming/  # streaming library adapter
+│   └── hsqlx-streamly/   # Streamly adapter
 ├── example/              # Example REST API (scotty)
 ├── bench-compare/        # Comparative benchmarks vs hasql, pg-simple
 ├── scripts/              # pg-setup.sh, pg-teardown.sh

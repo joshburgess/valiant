@@ -1,0 +1,34 @@
+cabal-version:   3.0
+name:            hsqlx-streamly
+version:         0.1.0.0
+synopsis:        Streamly streaming adapter for hsqlx
+description:
+  Stream PostgreSQL query results using the @streamly@ library.
+  Provides cursor-based and fold-based producers as @Stream IO r@
+  values, enabling high-performance composable stream processing.
+license:         BSD-3-Clause
+license-file:    ../../LICENSE
+build-type:      Simple
+
+common warnings
+  ghc-options: -Wall -Wcompat -Werror -Wno-unticked-promoted-constructors -funbox-strict-fields
+
+library
+  import:           warnings
+  hs-source-dirs:   src
+  default-language: GHC2021
+  default-extensions:
+    DerivingStrategies
+    OverloadedStrings
+    StrictData
+
+  exposed-modules:
+    Hsqlx.Streamly
+
+  build-depends:
+    , base            >=4.17 && <5
+    , bytestring      >=0.11 && <0.13
+    , hsqlx
+    , pg-wire
+    , streamly-core   >=0.2  && <0.4
+    , vector          >=0.12 && <0.14
