@@ -221,8 +221,8 @@ jobs:
             pool.csv
             pool-output.txt
 
-  # ── asyncpg comparison benchmarks ────────────────────────────────
-  asyncpg:
+  # ── asyncpg-style benchmarks (hsqlx, same query patterns) ────────
+  asyncpg-style:
     needs: build
     if: contains(fromJSON('["all", "asyncpg"]'), github.event.inputs.mode || 'all')
     runs-on: ubuntu-24.04
@@ -253,7 +253,7 @@ jobs:
           sudo -u postgres psql -c "ALTER SYSTEM SET fsync = 'off';"
           sudo -u postgres psql -c "ALTER SYSTEM SET max_connections = '200';"
           sudo systemctl restart postgresql
-      - name: Run asyncpg comparison benchmarks
+      - name: Run asyncpg-style benchmarks (hsqlx)
         env:
           DATABASE_URL: postgres://hsqlx_test:hsqlx_test@/hsqlx_test?host=/var/run/postgresql
         run: |
@@ -261,7 +261,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: bench-asyncpg
+          name: bench-asyncpg-style
           path: |
             asyncpg-compare.csv
             asyncpg-compare-output.txt
@@ -348,7 +348,7 @@ jobs:
 
   # ── Summary ──────────────────────────────────────────────────────
   summary:
-    needs: [codec, query, concurrent, pool, asyncpg, asyncpg-python, comparative]
+    needs: [codec, query, concurrent, pool, asyncpg-style, asyncpg-python, comparative]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 60
