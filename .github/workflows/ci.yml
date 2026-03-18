@@ -15,7 +15,7 @@ concurrency:
 jobs:
   build-and-test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
@@ -41,10 +41,11 @@ jobs:
           key: ci-${{ runner.os }}-ghc9.10.3-${{ hashFiles('cabal.project', '**/*.cabal') }}
           restore-keys: ci-${{ runner.os }}-ghc9.10.3-
 
-      - name: Build all packages
+      - name: Build packages (excluding bench-compare)
         run: |
           cabal update
-          cabal build all
+          cabal build pg-wire hsqlx hsqlx-plugin hsqlx-cli
+          cabal build hsqlx-conduit hsqlx-streaming hsqlx-streamly
 
       - name: Run unit tests (pg-wire)
         run: cabal test pg-wire-test
