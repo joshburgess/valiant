@@ -1,0 +1,157 @@
+# Benchmark suite on Linux with native Postgres (Unix socket).
+#
+# Runs on ubuntu-24.04 with Postgres 16 installed via apt — no Docker,
+# no TCP overhead, no NAT bridge. Unix socket at /var/run/postgresql/.
+#
+# Triggered manually or on pushes that touch performance-sensitive code.
+# Results are uploaded as artifacts and printed to the job summary.
+
+name: Benchmarks
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Benchmark mode: all | reads | inserts | codec | concurrent | pool | quick'
+        required: false
+        default: 'all'
+  push:
+    branches: [main]
+    paths:
+      - 'wire/src/**'
+      - 'runtime/src/**'
+      - 'runtime/bench/**'
+      - 'bench-compare/**'
+
+concurrency:
+  group: benchmarks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    services: {}  # No Docker — we install Postgres natively
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Install Postgres 16 natively ──────────────────────────────
+      - name: Install PostgreSQL 16
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-16
+          sudo systemctl start postgresql
+
+      - name: Configure Postgres for benchmarks
+        run: |
+          # Tune for throughput (same settings as docker-compose.yml)
+          sudo -u postgres psql -c "ALTER SYSTEM SET shared_buffers = '256MB';"
+          sudo -u postgres psql -c "ALTER SYSTEM SET work_mem = '64MB';"
+          sudo -u postgres psql -c "ALTER SYSTEM SET synchronous_commit = 'off';"
+          sudo -u postgres psql -c "ALTER SYSTEM SET fsync = 'off';"
+          sudo -u postgres psql -c "ALTER SYSTEM SET full_page_writes = 'off';"
+          sudo -u postgres psql -c "ALTER SYSTEM SET max_connections = '200';"
+          sudo systemctl restart postgresql
+
+          # Create test user and database
+          sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
+
+          # Verify Unix socket works
+          sudo -u postgres psql -h /var/run/postgresql -U hsqlx_test -d hsqlx_test -c "SELECT 'ok';"
+
+      # ── Install GHC ──────────────────────────────────────────────
+      - name: Setup GHC 9.10.3
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.10.3'
+          cabal-version: '3.12'
+
+      - name: Cache cabal store
+        uses: actions/cache@v4
+        with:
+          path: ~/.cabal/store
+          key: bench-${{ runner.os }}-ghc9.10.3-${{ hashFiles('cabal.project', '**/*.cabal') }}
+          restore-keys: bench-${{ runner.os }}-ghc9.10.3-
+
+      - name: Build benchmarks
+        run: |
+          cabal update
+          cabal build hsqlx-bench bench-compare -O2
+
+      # ── Run benchmarks ───────────────────────────────────────────
+      # Unix socket connection string — no TCP overhead
+      - name: Set DATABASE_URL (Unix socket)
+        run: |
+          echo "DATABASE_URL=postgres://hsqlx_test:hsqlx_test@/hsqlx_test?host=/var/run/postgresql" >> $GITHUB_ENV
+
+      - name: Run codec benchmarks
+        if: contains(fromJSON('["all", "codec"]'), github.event.inputs.mode || 'all')
+        run: |
+          cabal bench hsqlx-bench \
+            --benchmark-options='--match prefix codec --time-limit 3 --csv codec.csv' \
+            2>&1 | tee codec-output.txt
+
+      - name: Run query benchmarks
+        if: contains(fromJSON('["all", "reads", "quick"]'), github.event.inputs.mode || 'all')
+        run: |
+          cabal bench hsqlx-bench \
+            --benchmark-options='--match prefix query --time-limit 3 --csv query.csv' \
+            2>&1 | tee query-output.txt
+
+      - name: Run concurrent benchmarks
+        if: contains(fromJSON('["all", "concurrent"]'), github.event.inputs.mode || 'all')
+        run: |
+          cabal bench hsqlx-bench \
+            --benchmark-options='+RTS -N -RTS --match prefix concurrent --time-limit 3 --csv concurrent.csv' \
+            2>&1 | tee concurrent-output.txt
+
+      - name: Run pool benchmarks
+        if: contains(fromJSON('["all", "pool"]'), github.event.inputs.mode || 'all')
+        run: |
+          cabal bench hsqlx-bench \
+            --benchmark-options='+RTS -N -RTS --match prefix pool --time-limit 3 --csv pool.csv' \
+            2>&1 | tee pool-output.txt
+
+      - name: Run comparative benchmarks
+        if: contains(fromJSON('["all", "reads", "inserts", "quick"]'), github.event.inputs.mode || 'all')
+        run: |
+          BENCH_MODE="${{ github.event.inputs.mode || 'quick' }}" \
+          cabal run bench-compare -- \
+            --time-limit 3 --csv comparative.csv \
+            2>&1 | tee comparative-output.txt
+
+      # ── Collect results ──────────────────────────────────────────
+      - name: Generate summary
+        if: always()
+        run: |
+          echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Runner:** $(uname -srm)" >> $GITHUB_STEP_SUMMARY
+          echo "**CPU:** $(lscpu | grep 'Model name' | sed 's/.*: *//')" >> $GITHUB_STEP_SUMMARY
+          echo "**GHC:** $(ghc --version)" >> $GITHUB_STEP_SUMMARY
+          echo "**Postgres:** $(psql --version | head -1)" >> $GITHUB_STEP_SUMMARY
+          echo "**Connection:** Unix socket (/var/run/postgresql)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          for f in *-output.txt; do
+            if [ -f "$f" ]; then
+              echo "### $(basename "$f" -output.txt)" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              grep -E "^benchmarking|^time" "$f" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: |
+            *.csv
+            *-output.txt
+          retention-days: 90

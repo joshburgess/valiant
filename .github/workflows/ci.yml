@@ -1,0 +1,58 @@
+# CI: build, unit tests, and integration tests.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL 16
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-16
+          sudo systemctl start postgresql
+          sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
+
+      - name: Setup GHC 9.10.3
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.10.3'
+          cabal-version: '3.12'
+
+      - name: Cache cabal store
+        uses: actions/cache@v4
+        with:
+          path: ~/.cabal/store
+          key: ci-${{ runner.os }}-ghc9.10.3-${{ hashFiles('cabal.project', '**/*.cabal') }}
+          restore-keys: ci-${{ runner.os }}-ghc9.10.3-
+
+      - name: Build all packages
+        run: |
+          cabal update
+          cabal build all
+
+      - name: Run unit tests (pg-wire)
+        run: cabal test pg-wire-test
+
+      - name: Run unit tests (hsqlx)
+        run: cabal test hsqlx-test
+
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgres://hsqlx_test:hsqlx_test@/hsqlx_test?host=/var/run/postgresql
+        run: cabal test hsqlx-integration
