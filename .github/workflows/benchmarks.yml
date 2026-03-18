@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Benchmark mode: all | codec | query | concurrent | pool | asyncpg-compare | asyncpg | comparative | quick'
+        description: 'Benchmark mode: all | codec | query | concurrent | pool | asyncpg-compare | asyncpg-hsqlx | asyncpg-baseline | comparative | quick'
         required: false
         default: 'all'
 
@@ -224,7 +224,7 @@ jobs:
   # ── asyncpg-hsqlx benchmarks (hsqlx, same query patterns) ────────
   asyncpg-hsqlx:
     needs: build
-    if: contains(fromJSON('["all", "asyncpg", "asyncpg-compare"]'), github.event.inputs.mode || 'all')
+    if: contains(fromJSON('["all", "asyncpg-compare", "asyncpg-hsqlx"]'), github.event.inputs.mode || 'all')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -313,7 +313,7 @@ jobs:
   # ── asyncpg (Python) head-to-head on same machine ────────────────
   asyncpg-baseline:
     needs: build
-    if: contains(fromJSON('["all", "asyncpg", "asyncpg-compare"]'), github.event.inputs.mode || 'all')
+    if: contains(fromJSON('["all", "asyncpg-compare", "asyncpg-baseline"]'), github.event.inputs.mode || 'all')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
