@@ -42,6 +42,7 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Vector (Vector)
 import Data.Vector qualified as V
+import Data.Vector.Mutable qualified as VM
 import PgWire.Error (HsqlxError (..), throwHsqlx)
 import PgWire.Protocol.Backend
 import PgWire.Protocol.Frontend (FrontendMsg (..))
@@ -80,6 +81,8 @@ data Response
     RespBatchCommand !Int64
   | -- | Rows collected from DataRow messages AND the command tag.
     RespRowsAndCommand ![Vector (Maybe ByteString)] !CommandTag
+  | -- | Rows collected as a Vector (not a list). Used by fetchAllVec.
+    RespRowsVec !(Vector (Vector (Maybe ByteString)))
 
 -- | Tells the reader thread how to interpret backend messages for a request.
 data ResponseCollector
@@ -97,6 +100,8 @@ data ResponseCollector
     CollectBatchCommand !Int
   | -- | Collect DataRow until CommandComplete, returning both rows and the command tag.
     CollectRowsAndCommand
+  | -- | Like CollectRows but collects into a Vector instead of a list.
+    CollectRowsVec
   | -- | Simple query protocol: text rows + optional tag + ReadyForQuery.
     CollectSimple
 
@@ -367,6 +372,10 @@ readerThread ac = go `catch` onDeath
       (rows, tag) <- collectRowsAndCommandLoop
       waitReadyForQuery
       pure (RespRowsAndCommand rows tag)
+    collectResponse CollectRowsVec = do
+      vec <- collectRowsVecLoop
+      waitReadyForQuery
+      pure (RespRowsVec vec)
     collectResponse (CollectBatch n) = do
       results <- collectBatchLoop n
       waitReadyForQuery
@@ -394,6 +403,30 @@ readerThread ac = go `catch` onDeath
             EmptyQueryResponse -> pure (acc [])
             ErrorResponse err -> throwIO (QueryError err)
             other -> throwIO (ProtocolError ("Unexpected in rows: " <> BS8.pack (show other)))
+
+    -- | Collect rows into a growable mutable vector. Starts at capacity 64,
+    -- doubles when full. Final freeze+slice produces an exact-size immutable Vector.
+    collectRowsVecLoop :: IO (Vector (Vector (Maybe ByteString)))
+    collectRowsVecLoop = do
+      mv <- VM.new 64
+      (finalMv, !n) <- loop mv 0
+      V.unsafeFreeze (VM.slice 0 n finalMv)
+      where
+        loop !mv !i = do
+          msg <- recvAndDispatch
+          case msg of
+            ParseComplete -> loop mv i
+            BindComplete -> loop mv i
+            DataRow vals -> do
+              mv' <- if i >= VM.length mv
+                then VM.grow mv (VM.length mv) -- double capacity
+                else pure mv
+              VM.write mv' i vals
+              loop mv' (i + 1)
+            CommandComplete _ -> pure (mv, i)
+            EmptyQueryResponse -> pure (mv, i)
+            ErrorResponse err -> throwIO (QueryError err)
+            other -> throwIO (ProtocolError ("Unexpected in rows vec: " <> BS8.pack (show other)))
 
     collectRowsAndCommandLoop :: IO ([Vector (Maybe ByteString)], CommandTag)
     collectRowsAndCommandLoop = loop id

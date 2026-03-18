@@ -49,7 +49,6 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Vector (Vector)
 import Data.Vector qualified as V
-import Data.Vector.Mutable qualified as VM
 import Data.Word (Word32)
 import PgWire.Async (Request (..), Response (..), ResponseCollector (..), submitRequest, submitExclusive)
 import PgWire.Connection (Connection (..))
@@ -141,28 +140,33 @@ fetchExists conn stmt params = do
   rows <- fetchRowsRaw conn stmt params
   pure (not (null rows))
 
--- | Fetch all result rows as a 'Vector'. Decodes directly into a
--- pre-allocated mutable vector, avoiding the intermediate list that
--- 'fetchAll' builds. Faster for large result sets where you need
--- indexed access.
+-- | Fetch all result rows as a 'Vector'. Uses a dedicated wire-level
+-- collector that builds a 'Vector' directly via a growable mutable
+-- buffer, avoiding the intermediate list that 'fetchAll' builds.
 --
 -- @
 -- users <- fetchAllVec conn listAllUsers ()
 -- @
 fetchAllVec :: Connection -> Statement p r -> p -> IO (Vector r)
 fetchAllVec conn stmt params = do
-  rows <- fetchRowsRaw conn stmt params
-  let !n = length rows
-      decode = stmtDecode stmt
-  mv <- VM.new n
-  let go _ [] = pure ()
-      go !i (row : rest) = case decode row of
+  (name, needsParse) <- lookupOrAllocStmt conn stmt
+  let encodedParams = stmtEncode stmt params
+      bindExec =
+        [ Bind "" name binaryFmtVec encodedParams binaryFmtVec
+        , Execute "" 0
+        , Sync
+        ]
+      msgs = if needsParse
+        then Parse name (stmtSQL stmt) (V.map Oid.unOid (stmtParamOids stmt)) : bindExec
+        else bindExec
+  resp <- submitRequest (connAsync conn) $ ReqExtendedQuery msgs CollectRowsVec
+  case resp of
+    RespRowsVec rawVec -> do
+      when needsParse $ cacheStmt conn (stmtSQL stmt) name
+      V.mapM (\row -> case stmtDecode stmt row of
         Left err -> throwHsqlx (DecodeError (BS8.pack err))
-        Right !val -> do
-          VM.write mv i val
-          go (i + 1) rest
-  go 0 rows
-  V.unsafeFreeze mv
+        Right !val -> pure val) rawVec
+    _ -> throwHsqlx (ProtocolError "fetchAllVec: unexpected response type")
 
 -- | Like 'fetchAll' but applies a transformation to each decoded row.
 -- Useful for mapping database rows to domain types without an intermediate list.
