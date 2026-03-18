@@ -185,6 +185,7 @@ benchmark hsqlx-bench
     , async        >=2.2  && <2.3
     , base         >=4.17 && <5
     , bytestring
+    , containers
     , criterion    >=1.6  && <1.7
     , hsqlx
     , pg-wire

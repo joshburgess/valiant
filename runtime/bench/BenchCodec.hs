@@ -18,7 +18,6 @@ import Data.Vector qualified as V
 import Hsqlx.Binary.Array (pgDecodeArray, pgEncodeArray)
 import Hsqlx.Binary.Decode ()
 import Hsqlx.Binary.Encode ()
-import Data.Map.Strict qualified as Map
 import Data.Time (TimeZone, minutesToTimeZone, ZonedTime (..), utcToZonedTime)
 import Hsqlx.Binary.HStore (PgHStore (..), hstoreFromList)
 import Hsqlx.Binary.Inet (PgInet, ipv4, ipv6Host)
