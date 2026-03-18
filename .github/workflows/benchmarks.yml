@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Benchmark mode: all | reads | inserts | codec | concurrent | pool | quick'
+        description: 'Benchmark mode: all | reads | inserts | codec | concurrent | pool | asyncpg | quick'
         required: false
         default: 'all'
   push:
