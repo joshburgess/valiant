@@ -350,7 +350,9 @@ serverVersion conn = do
   pure (mVersion >>= parseServerVersion)
   where
     parseServerVersion bs =
-      let parts = BS8.split '.' bs
+      -- Strip distribution suffix: "16.6 (Ubuntu 16.6-0ubuntu0.24.04.1)" → "16.6"
+      let versionOnly = BS8.takeWhile (\c -> c == '.' || (c >= '0' && c <= '9')) bs
+          parts = BS8.split '.' versionOnly
        in case parts of
             [major, minor] -> do
               maj <- readInt major
