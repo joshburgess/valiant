@@ -12,6 +12,8 @@ import Data.ByteString (ByteString)
 import Data.Int (Int16, Int32, Int64)
 import Data.Vector (Vector)
 import Data.Word (Word32)
+import GHC.Generics (Generic)
+import NoThunks.Class (NoThunks)
 
 -- | Transaction status indicator.
 data TxStatus
@@ -72,7 +74,9 @@ data PgError = PgError
   , pgLine :: !(Maybe Int32)
   , pgRoutine :: Maybe ByteString
   }
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+
+instance NoThunks PgError
 
 -- | Structured notice from NoticeResponse.
 newtype PgNotice = PgNotice {unPgNotice :: PgError}

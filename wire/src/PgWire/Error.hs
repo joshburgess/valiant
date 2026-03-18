@@ -9,6 +9,8 @@ module PgWire.Error
 
 import Control.Exception (Exception, throwIO)
 import Data.ByteString (ByteString)
+import GHC.Generics (Generic)
+import NoThunks.Class (NoThunks)
 import PgWire.Protocol.Backend (PgError)
 
 -- | All runtime errors thrown by hsqlx.
@@ -32,8 +34,9 @@ data HsqlxError
   -- ^ Attempted to use a pool after 'PgWire.Pool.closePool' was called.
   | ConnectionDead
   -- ^ The connection's reader thread has died (network failure, server crash).
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
 
+instance NoThunks HsqlxError
 instance Exception HsqlxError
 
 -- | Throw an 'HsqlxError' as an exception.

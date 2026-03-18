@@ -28,6 +28,8 @@ module PgWire.Pool
   , withResourceTimeout
   ) where
 
+import GHC.Generics (Generic)
+import NoThunks.Class (NoThunks)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (Async, async, cancel, race)
 import Control.Concurrent.STM
@@ -82,6 +84,9 @@ data ConnMeta = ConnMeta
   , cmDeadline :: !UTCTime
   -- ^ Creation time + jittered max-life. Connection is expired after this.
   }
+  deriving stock (Generic)
+
+instance NoThunks ConnMeta
 
 data PoolEntry = PoolEntry
   { peConn :: Connection
@@ -106,7 +111,9 @@ data PoolStats = PoolStats
   , psTotalTimeouts :: !Int
   -- ^ Cumulative count of acquire attempts that timed out.
   }
-  deriving stock (Show, Eq)
+  deriving stock (Show, Eq, Generic)
+
+instance NoThunks PoolStats
 
 -- | Create a new connection pool from the given configuration.
 --

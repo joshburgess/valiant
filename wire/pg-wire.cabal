@@ -74,6 +74,7 @@ library
     -- Misc
     , directory             >=1.3     && <1.4
     , hashable              >=1.4     && <1.6
+    , nothunks              >=0.1     && <0.3
     , random                >=1.2     && <1.4
 
     -- Concurrency / pool
@@ -99,16 +100,18 @@ test-suite pg-wire-test
     PgWire.ErrorSpec
     PgWire.MockServerSpec
     PgWire.Pool.ConfigSpec
+    PgWire.Pool.NoThunksSpec
     PgWire.Protocol.BuildersSpec
     PgWire.Protocol.OidSpec
     PgWire.Protocol.ParsersSpec
 
-  ghc-options: -rtsopts "-with-rtsopts=-K8K"
+  ghc-options: -rtsopts "-with-rtsopts=-K8K" -finfo-table-map -fdistinct-constructor-tables
   build-depends:
     , base         >=4.17 && <5
     , bytestring
     , crypton
     , hspec        >=2.11 && <2.12
     , memory
+    , nothunks
     , pg-wire
     , vector
