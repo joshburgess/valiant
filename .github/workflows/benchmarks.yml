@@ -115,6 +115,13 @@ jobs:
             --benchmark-options='+RTS -N -RTS --match prefix pool --time-limit 3 --csv pool.csv' \
             2>&1 | tee pool-output.txt
 
+      - name: Run asyncpg-compare benchmarks
+        if: contains(fromJSON('["all", "asyncpg"]'), github.event.inputs.mode || 'all')
+        run: |
+          cabal bench hsqlx-bench \
+            --benchmark-options='+RTS -N -RTS --match prefix asyncpg-compare --time-limit 5 --csv asyncpg-compare.csv' \
+            2>&1 | tee asyncpg-compare-output.txt
+
       - name: Run comparative benchmarks
         if: contains(fromJSON('["all", "reads", "inserts", "quick"]'), github.event.inputs.mode || 'all')
         run: |

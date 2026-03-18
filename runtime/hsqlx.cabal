@@ -176,6 +176,7 @@ benchmark hsqlx-bench
     OverloadedStrings
 
   other-modules:
+    BenchAsyncpgCompare
     BenchCodec
     BenchConcurrent
     BenchPool
