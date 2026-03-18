@@ -10,7 +10,7 @@ module BenchAsyncpgCompare (benchmarks) where
 
 import Control.Concurrent.Async (mapConcurrently)
 import Criterion.Main
-import Data.Int (Int32)
+import Data.Int (Int16, Int32)
 import Data.IORef
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -106,6 +106,19 @@ stmtGenerateSeries = mkStatement
   "SELECT i::int4 FROM generate_series(1, $1) AS i"
   [23] ["i"] "<bench>"
 
+-- pg_type query: 12 columns matching asyncpg's benchmark #1
+-- typname(text), typnamespace(oid), typowner(oid), typlen(int2), typbyval(bool),
+-- typcategory(text), typispreferred(bool), typisdefined(bool), typdelim(text),
+-- typrelid(oid), typelem(oid), typarray(oid)
+stmtPgType :: Statement () (Text, Int32, Int32, Int16, Bool, Text, Bool, Bool, Text, Int32, Int32, Int32)
+stmtPgType = mkStatement
+  "SELECT typname, typnamespace::int4, typowner::int4, typlen, typbyval, \
+  \typcategory::text, typispreferred, typisdefined, typdelim::text, typrelid::int4, \
+  \typelem::int4, typarray::int4 FROM pg_type WHERE typtypmod = -1 AND typisdefined = true"
+  [] ["typname","typnamespace","typowner","typlen","typbyval",
+      "typcategory","typispreferred","typisdefined","typdelim",
+      "typrelid","typelem","typarray"] "<bench>"
+
 stmtInsertBench :: Statement (Int32, Int32, Int32, Int32, Text, Text, Text) ()
 stmtInsertBench = mkStatement
   "INSERT INTO _bench_insert (a, b, c, d, e, f, g) VALUES ($1, $2, $3, $4, $5, $6, $7)"
@@ -125,12 +138,9 @@ queryGenerateSeries conn = do
 
 queryPgType :: Connection -> IO ()
 queryPgType conn = do
-  -- Match asyncpg's pg_type query: wide rows from system catalog
-  (rows, _) <- simpleQuery conn
-    "SELECT typname, typnamespace, typowner, typlen, typbyval, \
-    \typcategory, typispreferred, typisdefined, typdelim, typrelid, \
-    \typelem, typarray FROM pg_type WHERE typtypmod = -1 AND typisdefined = true"
-  seq (length rows) (pure ())
+  -- Match asyncpg's pg_type query: wide rows from system catalog, binary format
+  !_ <- fetchAll conn stmtPgType ()
+  pure ()
 
 queryBatchInsert :: Connection -> IO ()
 queryBatchInsert conn = do
