@@ -32,3 +32,25 @@ library
     , pg-wire
     , streamly-core   >=0.2  && <0.4
     , vector          >=0.12 && <0.14
+
+test-suite hsqlx-streamly-test
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Main.hs
+  default-language: GHC2021
+  default-extensions:
+    OverloadedStrings
+
+  other-modules:
+    TestSupport
+
+  build-depends:
+    , base            >=4.17 && <5
+    , bytestring      >=0.11 && <0.13
+    , hspec           >=2.11 && <2.12
+    , hsqlx
+    , hsqlx-streamly
+    , pg-wire
+    , streamly-core   >=0.2  && <0.4
+    , text            >=2.0  && <2.2
