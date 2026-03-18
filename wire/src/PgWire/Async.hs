@@ -215,12 +215,18 @@ shutdownAsyncWireConn awc = do
 -- Throws 'ConnectionDead' if the async threads have died.
 submitRequest :: AsyncWireConn -> Request -> IO Response
 submitRequest awc req = do
-  alive <- readTVarIO (awcAlive awc)
-  if not alive
+  respVar <- newEmptyMVar
+  -- Combine the alive check with the enqueue in a single STM transaction.
+  -- Previously this was two separate operations (readTVarIO + writeTBQueue),
+  -- meaning the connection could die between the check and the write.
+  enqueued <- atomically $ do
+    a <- readTVar (awcAlive awc)
+    if a
+      then writeTBQueue (awcSendQueue awc) (req, respVar) >> pure True
+      else pure False
+  if not enqueued
     then throwHsqlx ConnectionDead
     else do
-      respVar <- newEmptyMVar
-      atomically $ writeTBQueue (awcSendQueue awc) (req, respVar)
       result <- takeMVar respVar
       case result of
         Left err -> throwIO err
@@ -235,13 +241,16 @@ submitRequest awc req = do
 -- Used for COPY, cursors, folds — operations that need direct socket access.
 submitExclusive :: AsyncWireConn -> (WireConn -> IORef TxStatus -> IO a) -> IO a
 submitExclusive awc action = do
-  alive <- readTVarIO (awcAlive awc)
-  if not alive
+  respVar <- newEmptyMVar
+  -- Combine alive check with exclusive signal in one STM transaction.
+  signaled <- atomically $ do
+    a <- readTVar (awcAlive awc)
+    if a
+      then putTMVar (awcExclusive awc) respVar >> pure True
+      else pure False
+  if not signaled
     then throwHsqlx ConnectionDead
     else do
-      -- Signal exclusive mode to the writer thread
-      respVar <- newEmptyMVar
-      atomically $ putTMVar (awcExclusive awc) respVar
 
       -- Wait for writer to drain pending and hand us control
       result <- takeMVar respVar
