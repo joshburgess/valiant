@@ -40,9 +40,10 @@ oidToHaskellType oid = Map.lookup oid oidMap
 -- | Look up the Haskell type for a Postgres OID, falling back to a custom map.
 oidToHaskellTypeWith :: Map Oid HaskellType -> Oid -> Maybe HaskellType
 oidToHaskellTypeWith customs oid =
-  case Map.lookup oid oidMap of
+  -- Custom types take priority over built-in mappings
+  case Map.lookup oid customs of
     Just ht -> Just ht
-    Nothing -> case Map.lookup oid customs of
+    Nothing -> case Map.lookup oid oidMap of
       Just ht -> Just ht
       Nothing -> arrayHaskellType oid customs
 

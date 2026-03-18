@@ -91,10 +91,10 @@ spec = do
       htType ht `shouldBe` "MyPoint"
       htModule ht `shouldBe` "MyApp.Types"
 
-    it "built-in types take precedence over custom" $ do
+    it "custom types override built-in types" $ do
       let customs = Map.singleton (Oid 23) (HaskellType "CustomInt" "Custom")
           Just ht = oidToHaskellTypeWith customs (Oid 23)
-      htType ht `shouldBe` "Int32"
+      htType ht `shouldBe` "CustomInt"
 
   describe "oidToTypeName (array names)" $ do
     it "maps int4[] OID to _int4" $ do
