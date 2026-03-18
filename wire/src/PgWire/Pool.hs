@@ -46,6 +46,7 @@ import PgWire.Async (AsyncWireConn (..))
 import PgWire.Connection (Connection (..), close, connectString, simpleQuery)
 import PgWire.Error (HsqlxError (..), throwHsqlx)
 import PgWire.Pool.Config (PoolConfig (..), QueueMode (..), RecyclingMethod (..))
+import PgWire.Pool.Observation (PoolEvent (ConnectionCreated, ConnectionDestroyed, ConnectionRecycled, HealthCheckFailed, AcquireTimeout, ReaperSwept, WarmerCreated, PoolResized, PoolShutdown))
 import PgWire.TypeCache (TypeCache, newTypeCache)
 import System.Random (randomRIO)
 
@@ -192,6 +193,7 @@ closePool pool = do
   mapM_ (\w -> atomically $ tryPutTMVar w (Left PoolClosed)) blockedWaiters
   -- Close all idle connections (properly tracked)
   mapM_ (destroyEntry pool "pool closed") entries
+  observe pool PoolShutdown
 
 -- | Acquire a connection from the pool, run an action, and return the connection.
 --
@@ -280,6 +282,7 @@ resize pool newSize = do
         pure (old, seqToList toDrop)
       else pure (old, [])
   logPool pool "info" ("resized from " <> BS8.pack (show oldSize) <> " to " <> BS8.pack (show newSize))
+  observe pool (PoolResized oldSize newSize)
   mapM_ (destroyEntry pool "resize") excess
 
 -- | Filter idle connections, keeping only those that satisfy the predicate.
@@ -397,10 +400,12 @@ tryRecycle pool entry = do
       if ok
         then do
           logPool pool "debug" "recycled connection"
+          observe pool ConnectionRecycled
           writeIORef (peLastUsed entry) now
           runHook (pOnAcquire pool) (peConn entry)
           pure (peConn entry)
         else do
+          observe pool HealthCheckFailed
           destroyEntry pool "unhealthy" entry
           acquire pool
 
@@ -439,6 +444,7 @@ createConnection pool = do
     modifyTVar' (pTotalCreated pool) (+ 1)
     modifyTVar' (pConnMeta pool) (Map.insert (connBackendPid conn) (ConnMeta now deadline))
   logPool pool "debug" "created connection"
+  observe pool ConnectionCreated
   runHook (pOnCreate pool) conn
   runHook (pOnAcquire pool) conn
   pure conn
@@ -466,6 +472,7 @@ waitForConnectionWith pool waiter timeout = do
     Left () -> do
       atomically $ modifyTVar' (pTotalTimeouts pool) (+ 1)
       logPool pool "warn" "acquire timeout"
+      observe pool AcquireTimeout
       throwHsqlx PoolTimeout
     Right (Left err) -> throwHsqlx err
     Right (Right conn) -> do
@@ -531,6 +538,7 @@ destroyConn pool conn reason = do
     modifyTVar' (pTotalDestroyed pool) (+ 1)
     modifyTVar' (pConnMeta pool) (Map.delete (connBackendPid conn))
   logPool pool "debug" ("destroyed connection: " <> reason)
+  observe pool (ConnectionDestroyed reason)
 
 destroyEntry :: Pool -> BS8.ByteString -> PoolEntry -> IO ()
 destroyEntry pool reason entry = destroyConn pool (peConn entry) reason
@@ -565,6 +573,11 @@ runHook ref conn = do
 logPool :: Pool -> BS8.ByteString -> BS8.ByteString -> IO ()
 logPool pool level msg = poolLogger (pConfig pool) level msg
 
+-- | Emit a structured observation event, catching and ignoring exceptions.
+observe :: Pool -> PoolEvent -> IO ()
+observe pool event =
+  poolObserver (pConfig pool) event `catch` \(_ :: SomeException) -> pure ()
+
 -- | Background thread that periodically reaps idle/expired connections.
 --
 -- Atomically drains the idle queue, filters in IO (reading IORefs),
@@ -589,8 +602,9 @@ reaperThread pool = go
       atomically $ modifyTVar' (pIdle pool) (Seq.fromList keep Seq.><)
       let reapCount = length reap
       mapM_ (destroyEntry pool "reaped") reap
-      when (reapCount > 0) $
+      when (reapCount > 0) $ do
         logPool pool "info" ("reaper swept " <> BS8.pack (show reapCount) <> " connections")
+        observe pool (ReaperSwept reapCount)
       go
 
     shouldKeep now entry = do
@@ -622,8 +636,9 @@ warmerThread pool = go
                 need = max 0 (minIdle - idle)
             pure (min need canCreate)
       created <- warmN 0 deficit
-      when (created > 0) $
+      when (created > 0) $ do
         logPool pool "info" ("warmer created " <> BS8.pack (show created) <> " connections")
+        observe pool (WarmerCreated created)
       go
 
     warmN :: Int -> Int -> IO Int

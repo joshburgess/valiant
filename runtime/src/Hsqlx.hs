@@ -136,6 +136,9 @@ module Hsqlx
   , setPreReleaseHook
   , PoolLogger
   , nullPoolLogger
+    -- | For structured pool event observations, import
+    -- "PgWire.Pool.Observation" directly. Events include
+    -- 'ConnectionCreated', 'ConnectionDestroyed', 'AcquireTimeout', etc.
 
     -- * Transactions
     -- | Run actions inside a database transaction. If an exception is
@@ -350,6 +353,7 @@ import PgWire.Connection (Connection, close, connect, connectString, simpleQuery
 import PgWire.Connection.Config (ConnConfig (..), TlsMode (..), defaultConnConfig)
 import PgWire.Pool (Pool, PoolStats (..), closePool, newPool, poolIsAlive, poolStats, resize, retain, setPostCreateHook, setOnAcquireHook, setPreReleaseHook, withResource, withResourceTimeout)
 import PgWire.Pool.Config (PoolConfig (..), PoolLogger, QueueMode (..), RecyclingMethod (..), defaultPoolConfig, nullPoolLogger)
+import PgWire.Pool.Observation ()
 
 import Data.ByteString (ByteString)
 

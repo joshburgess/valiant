@@ -20,6 +20,7 @@ module PgWire.Pool.Config
 
 import Data.ByteString (ByteString)
 import Data.Time (NominalDiffTime)
+import PgWire.Pool.Observation (PoolObserver, nullObserver)
 
 -- | How to validate a connection before handing it to the caller.
 data RecyclingMethod
@@ -88,6 +89,11 @@ data PoolConfig = PoolConfig
   -- expiration. Default: 60s.
   , poolLogger :: PoolLogger
   -- ^ Logging callback. Default: 'nullPoolLogger' (discards all events).
+  , poolObserver :: PoolObserver
+  -- ^ Structured event callback for metrics and monitoring.
+  -- Called for every significant pool state transition.
+  -- Default: 'nullObserver' (discards all events).
+  -- See "PgWire.Pool.Observation" for the event types.
   }
 
 -- Manual Show instance that omits the function field.
@@ -105,7 +111,8 @@ instance Show PoolConfig where
     , ",poolQueueMode=" <> show (poolQueueMode cfg)
     , ",poolHealthCheckAge=" <> show (poolHealthCheckAge cfg)
     , ",poolMaxLifeJitter=" <> show (poolMaxLifeJitter cfg)
-    , ",poolLogger=<function>}"
+    , ",poolLogger=<function>"
+    , ",poolObserver=<function>}"
     ]
 
 -- | Sensible defaults: 10 connections, 10-minute idle timeout, 1-hour max life,
@@ -125,4 +132,5 @@ defaultPoolConfig =
     , poolHealthCheckAge = 5
     , poolMaxLifeJitter = 60
     , poolLogger = nullPoolLogger
+    , poolObserver = nullObserver
     }

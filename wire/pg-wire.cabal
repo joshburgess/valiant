@@ -39,6 +39,7 @@ library
     PgWire.MockServer
     PgWire.Pool
     PgWire.Pool.Config
+    PgWire.Pool.Observation
     PgWire.Protocol.Backend
     PgWire.Protocol.Builders
     PgWire.Protocol.Frontend
