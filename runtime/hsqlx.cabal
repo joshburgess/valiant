@@ -178,6 +178,7 @@ benchmark hsqlx-bench
   other-modules:
     BenchCodec
     BenchConcurrent
+    BenchPool
     BenchQuery
     TestSupport
 

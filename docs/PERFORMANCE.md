@@ -69,6 +69,42 @@ updates due to its per-query monad stack cost.
 | UUID | — | — |
 | Int32 array (1000 elems) | 66 μs | 46 μs |
 
+### Pool performance
+
+| Benchmark | Time |
+|-----------|------|
+| Acquire/release (pool-size-1) | 27.0 ms |
+| Acquire/release (pool-size-4) | 28.8 ms |
+| Acquire/release (pool-size-16) | 33.1 ms |
+
+Acquire/release overhead includes connection creation on cold start.
+Once warm, pool acquire is sub-millisecond (see "pool acquire/release"
+in single-connection benchmarks: 979 μs).
+
+**Contention scaling (32 threads × 10 queries each):**
+
+| Pool Size | Time | Notes |
+|-----------|------|-------|
+| 4 | 164 ms | Threads wait for connections |
+| 8 | 116 ms | Less contention |
+| 16 | 136 ms | More connections, more context switching |
+| 32 | 186 ms | 1 connection per thread, no sharing benefit |
+
+Sweet spot is pool-size = 8 for 32 threads. Smaller pools force waiting;
+larger pools have diminishing returns from connection overhead.
+
+**Recycling methods (10 acquire/release cycles, pool-size-4):**
+
+| Method | Time | Description |
+|--------|------|-------------|
+| RecycleFast | 34.9 ms | Check alive TVar only (no I/O) |
+| RecycleVerified | 45.9 ms | Empty query if idle > threshold |
+| RecycleClean | 46.7 ms | DISCARD ALL before reuse |
+
+RecycleFast is ~25% faster. RecycleVerified and RecycleClean are
+equivalent because the health-check query and DISCARD ALL have
+similar round-trip cost.
+
 ### Libraries not benchmarked
 
 We considered benchmarking additional libraries but concluded the results
@@ -322,6 +358,9 @@ cabal bench hsqlx-bench --benchmark-options='--match prefix query'
 
 # Concurrent benchmarks (the async split showcase — use -N for capabilities)
 cabal bench hsqlx-bench --benchmark-options='+RTS -N -RTS --match prefix concurrent'
+
+# Pool benchmarks (contention, recycling methods)
+cabal bench hsqlx-bench --benchmark-options='+RTS -N -RTS --match prefix pool'
 
 # All benchmarks
 cabal bench hsqlx-bench --benchmark-options='+RTS -N -RTS'
