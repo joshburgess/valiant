@@ -26,6 +26,7 @@ library
 
   exposed-modules:
     Hsqlx
+    Hsqlx.Advisory
     Hsqlx.Batch
     Hsqlx.Binary.Array
     Hsqlx.Binary.Composite
@@ -36,6 +37,7 @@ library
     Hsqlx.Binary.Inet
     Hsqlx.Binary.MacAddr
     Hsqlx.Binary.Interval
+    Hsqlx.Binary.Unbounded
     Hsqlx.Binary.JSON
     Hsqlx.Binary.Range
     Hsqlx.Binary.Scientific

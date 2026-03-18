@@ -158,6 +158,18 @@ module Hsqlx
   , resizeM
   , withResourceTimeoutM
 
+    -- * Advisory locks
+    -- | PostgreSQL advisory locks for distributed coordination.
+    -- Session-scoped locks require explicit release; transaction-scoped
+    -- locks are released automatically on COMMIT\/ROLLBACK.
+  , withAdvisoryLock
+  , withAdvisoryLockTry
+  , advisoryLock
+  , advisoryUnlock
+  , withAdvisoryLockTx
+  , withAdvisoryLockTxTry
+  , advisoryLockTx
+
     -- * Cancellation
     -- | Cancel in-flight queries. 'cancelQuery' opens a separate TCP
     -- connection and sends a CancelRequest to the server.
@@ -265,6 +277,9 @@ module Hsqlx
   , PgHStore (..)
   , hstoreFromList
   , hstoreToList
+  , Unbounded (..)
+  , finite
+  , fromFinite
   , PgInterval (..)
   , PgRange (..)
   , RangeBound (..)
@@ -277,11 +292,13 @@ module Hsqlx
   ) where
 
 import GHC.Generics (Generic)
+import Hsqlx.Advisory (advisoryLock, advisoryLockTx, advisoryUnlock, withAdvisoryLock, withAdvisoryLockTry, withAdvisoryLockTx, withAdvisoryLockTxTry)
 import Hsqlx.Batch (fetchByIds)
 import Hsqlx.Binary.Composite (CompositeField (..))
 import Hsqlx.Binary.HStore (PgHStore (..), hstoreFromList, hstoreToList)
 import Hsqlx.Binary.Inet (PgInet (..), ipv4, ipv4Host, ipv6, ipv6Host, inetToText)
 import Hsqlx.Binary.MacAddr (PgMacAddr (..), macAddr, macAddrToText)
+import Hsqlx.Binary.Unbounded (Unbounded (..), finite, fromFinite)
 import Hsqlx.Binary.Interval (PgInterval (..))
 import Hsqlx.Binary.Range (PgRange (..), RangeBound (..))
 import Hsqlx.Copy (CopyResult (..), copyIn, copyInBinary, copyOut)
