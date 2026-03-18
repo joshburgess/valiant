@@ -13,16 +13,16 @@ is the database driver.
 - **asyncpg:** Python 3.12 + asyncpg + uvloop, 10 connections, 10s per benchmark
 - **hsqlx:** GHC 9.10.3, -O2, criterion (5s time-limit), 10 connections via pool
 
-## Results
+## Results (Run 2 — March 2026, with binary pg_type + STM optimization)
 
 ### SELECT 1+1 (minimal overhead — measures driver/protocol cost)
 
 | Driver | Queries/sec |
 |--------|------------|
-| asyncpg (uvloop) | **31,157/s** |
-| hsqlx | 24,331/s |
+| **asyncpg** | **30,660/s** |
+| **hsqlx** | **24,631/s** |
 
-asyncpg is **28% faster** on trivial queries. This gap is due to uvloop
+asyncpg is 24% faster on trivial queries. This gap is due to uvloop
 (libuv-based event loop, implemented in C) and asyncpg's Cython-compiled
 protocol layer. hsqlx uses GHC's green thread scheduler and pure Haskell
 protocol code. Both are far above what any application query needs.
@@ -31,34 +31,35 @@ protocol code. Both are far above what any application query needs.
 
 | Driver | Queries/sec | Rows/sec |
 |--------|------------|----------|
-| asyncpg | **2,756/s** | **2.76M/s** |
-| hsqlx | 2,632/s | 2.63M/s |
+| **asyncpg** | **2,831/s** | **2.83M/s** |
+| **hsqlx** | **2,770/s** | **2.77M/s** |
 
-**Within 5%.** Row decoding throughput is nearly identical — hsqlx's pure
+**Within 2%.** Row decoding throughput is nearly identical — hsqlx's pure
 Haskell binary decoders match asyncpg's Cython decoders on integer data.
 
 ### pg_type wide rows (~350 rows × 12 columns, mixed types)
 
 | Driver | Queries/sec |
 |--------|------------|
-| asyncpg | **1,528/s** |
-| hsqlx | ~963/s |
+| **asyncpg** | **1,491/s** |
+| **hsqlx** | **~928/s** |
 
-asyncpg is **59% faster** on wide text-heavy rows. Note: hsqlx was using
-the simple query protocol (text format) for this benchmark. After
-switching to binary format via the extended query protocol, we expect
-this gap to narrow significantly.
+asyncpg is 61% faster on wide text-heavy rows. This gap is due to
+asyncpg's Cython-compiled text decoders and the overhead of decoding
+12 columns per row in pure Haskell. The pg_type columns include OIDs,
+booleans, and text — a mixed-type workload that exercises the full
+codec stack.
 
 ### Batch insert 1000 rows (sequential — one INSERT per round-trip)
 
 | Driver | Batches/sec | Inserts/sec |
 |--------|------------|-------------|
-| asyncpg | **22.6/s** | **22,594/s** |
-| hsqlx (sequential) | 16.2/s | 16,200/s |
-| **hsqlx (pipelined)** | **169.5/s** | **169,500/s** |
+| asyncpg | **21.9/s** | **21,867/s** |
+| hsqlx (sequential) | 16.6/s | 16,600/s |
+| **hsqlx (pipelined)** | **168.9/s** | **168,900/s** |
 
-Sequential: asyncpg is 40% faster (uvloop's tighter event loop).
-**Pipelined: hsqlx is 7.5x faster than asyncpg** — asyncpg has no
+Sequential: asyncpg is 32% faster (uvloop's tighter event loop).
+**Pipelined: hsqlx is 7.7x faster than asyncpg** — asyncpg has no
 equivalent to `executeBatch`, which sends all 1000 Bind+Execute pairs
 in a single network round-trip.
 
@@ -66,18 +67,18 @@ in a single network round-trip.
 
 | Benchmark | asyncpg | hsqlx |
 |-----------|---------|-------|
-| SELECT 1+1 (sustained 10s) | 31,157/s | 24,331/s |
-| fetch 1000 rows (sustained 10s) | 2,756/s | ~3,000/s |
+| SELECT 1+1 (sustained 10s) | 30,660/s | 24,631/s |
+| fetch 1000 rows (sustained) | 2,831/s | 2,913/s |
 
 ## Summary
 
 | Benchmark | asyncpg | hsqlx | Winner |
 |-----------|---------|-------|--------|
-| SELECT 1+1 | 31,157/s | 24,331/s | asyncpg (1.28x) |
-| fetch 1000 rows | 2,756/s | 2,632/s | asyncpg (1.05x) |
-| pg_type wide rows | 1,528/s | ~963/s | asyncpg (1.59x) |
-| batch insert (sequential) | 22.6/s | 16.2/s | asyncpg (1.40x) |
-| **batch insert (pipelined)** | N/A | **169.5/s** | **hsqlx (7.5x)** |
+| SELECT 1+1 | 30,660/s | 24,631/s | asyncpg (1.24x) |
+| fetch 1000 rows | 2,831/s | 2,770/s | asyncpg (1.02x) |
+| pg_type wide rows | 1,491/s | ~928/s | asyncpg (1.61x) |
+| batch insert (sequential) | 21.9/s | 16.6/s | asyncpg (1.32x) |
+| **batch insert (pipelined)** | N/A | **168.9/s** | **hsqlx (7.7x)** |
 
 ## Analysis
 

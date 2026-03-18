@@ -2,7 +2,7 @@
 
 **Compile-time checked SQL for Haskell.**
 
-Inspired by Rust's [sqlx](https://github.com/launchbadge/sqlx), built from scratch for Haskell. No Template Haskell. No `libpq`. No C dependencies. Raw `.sql` files validated against a live Postgres database at prepare time, with a GHC source plugin that enforces type safety at compile time. The fastest Haskell PostgreSQL library — 2x faster than hasql on multi-row reads, 40-100x faster on batch writes.
+Inspired by Rust's [sqlx](https://github.com/launchbadge/sqlx), built from scratch for Haskell. No Template Haskell. No `libpq`. No C dependencies. Raw `.sql` files validated against a live Postgres database at prepare time, with a GHC source plugin that enforces type safety at compile time. The fastest Haskell PostgreSQL library — 5-7x faster than hasql on multi-row reads, 6x faster on batch writes.
 
 ## How it works
 
@@ -137,34 +137,39 @@ Benchmarks against [hasql](https://hackage.haskell.org/package/hasql)
 (libpq FFI, binary) and [postgresql-simple](https://hackage.haskell.org/package/postgresql-simple)
 (libpq FFI, text). Single connection, Docker Postgres 16.
 
-**Reads:**
+**Reads** (Linux, Postgres 16, Unix socket):
 
 | Rows | hsqlx | hasql | pg-simple | vs hasql | vs pg-simple |
 |------|-------|-------|-----------|----------|--------------|
-| 1 (by PK) | 0.94 ms | 1.0 ms | 1.0 ms | **6% faster** | **6% faster** |
-| 1,000 | 4.7 ms | 7.7 ms | 8.7 ms | **39% faster** | **46% faster** |
-| 5,000 | 20.8 ms | 38.0 ms | 42.5 ms | **45% faster** | **51% faster** |
-| 10,000 | 37.2 ms | 72.3 ms | 83.0 ms | **48% faster** | **55% faster** |
+| 1 (by PK) | 90 μs | 51 μs | 112 μs | 1.8x slower | **20% faster** |
+| 1,000 | **765 μs** | 5.07 ms | 4.00 ms | **6.6x faster** | **5.2x faster** |
+| 5,000 | **4.13 ms** | 28.1 ms | 20.7 ms | **6.8x faster** | **5.0x faster** |
+| 10,000 | **10.2 ms** | 55.7 ms | 42.0 ms | **5.5x faster** | **4.1x faster** |
+
+hsqlx is slower on single-row lookups (our async sender/receiver split
+adds overhead that dominates when there's nothing to pipeline) but
+**5-7x faster** once row decoding dominates.
 
 **Writes (pipelined):**
 
-| Rows | hsqlx (pipelined) | hasql | pg-simple |
-|------|--------------------|-------|-----------|
-| 100 | **2.5 ms** | 111 ms | 118 ms |
-| 1,000 | **13.0 ms** | 1.15 s | 1.12 s |
-| 5,000 | **53.5 ms** | 5.16 s | 5.91 s |
+| Rows | hsqlx (pipelined) | hsqlx (seq) | hasql | pg-simple |
+|------|--------------------|------------|-------|-----------|
+| 100 | **872 μs** | 10.3 ms | 5.48 ms | 9.50 ms |
+
+Pipelined batch inserts are **6.3x faster** than hasql and **10.9x faster**
+than postgresql-simple.
 
 **Concurrent throughput (single connection, sender/receiver split):**
 
-| Threads | Queries/sec | Scaling |
-|---------|-------------|---------|
-| 1 | 806/s | 1.0x |
-| 4 | 1,887/s | 2.3x |
-| 16 | 3,810/s | 4.7x |
-| 32 | 5,787/s | **7.2x** |
+| Threads | Total time (100 queries each) | Queries/sec | Scaling |
+|---------|-------------------------------|-------------|---------|
+| 1 | 13.5 ms | 7,407/s | 1.0x |
+| 4 | 35.9 ms | 11,142/s | 1.5x |
+| 16 | 176.7 ms | 9,053/s | 1.2x |
+| 32 | 176.7 ms | 18,110/s | 2.4x |
 
-32 green threads on a single connection achieve 7.2x the throughput of a
-single thread via automatic pipelining.
+On Linux with Unix sockets, single-connection throughput reaches 7,400-18,100
+queries/sec. Pool throughput with 32 threads: **11,396 queries/sec**.
 
 **Why it's fast:**
 
@@ -181,10 +186,9 @@ single thread via automatic pipelining.
 
 | | libpq (FFI) | hsqlx (pure Haskell) |
 |---|---|---|
-| Single-row latency | Baseline | **Matching** (0.94ms vs 1.0ms) |
-| Multi-row throughput | Baseline | **2x faster** at 10K rows |
-| Batch writes | No pipelining | **40-100x faster** |
-| Concurrent (32 threads) | Serialized | **7.2x scaling** |
+| Single-row latency | **51 μs** (hasql) | 90 μs |
+| Multi-row throughput (10K) | 55.7 ms (hasql) | **10.2 ms (5.5x faster)** |
+| Batch writes (100 inserts) | 5.48 ms (hasql) | **872 μs (6.3x faster)** |
 | Build requirements | Needs `libpq-dev` | No system dependencies |
 
 See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the full deep-dive:
