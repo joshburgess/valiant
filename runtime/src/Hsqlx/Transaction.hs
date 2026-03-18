@@ -14,6 +14,8 @@ module Hsqlx.Transaction
   , withTransaction
   , withTransaction_
   , withTransactionLevel
+  , withTransactionConn
+  , withTransactionLevelConn
   , withReadOnlyTransaction
   , withSavepoint
   ) where
@@ -87,6 +89,27 @@ withTransactionLevel level pool action =
     result <- restore (action (Transaction conn)) `onException` rollback conn
     _ <- simpleQuery conn "COMMIT"
     pure result
+
+-- | Run an action inside a transaction on an existing connection.
+-- Unlike 'withTransaction' which acquires a connection from a pool, this
+-- function operates on a connection you already hold (e.g., from 'withResource').
+--
+-- @
+-- withResource pool $ \\conn -> do
+--   -- some setup work on conn ...
+--   withTransactionConn conn $ \\tx ->
+--     execute (txConn tx) insertStmt params
+-- @
+withTransactionConn :: Connection -> (Transaction -> IO a) -> IO a
+withTransactionConn = withTransactionLevelConn ReadCommitted
+
+-- | Like 'withTransactionConn' but with a specific isolation level.
+withTransactionLevelConn :: IsolationLevel -> Connection -> (Transaction -> IO a) -> IO a
+withTransactionLevelConn level conn action = mask $ \restore -> do
+  _ <- simpleQuery conn (beginStatement level)
+  result <- restore (action (Transaction conn)) `onException` rollback conn
+  _ <- simpleQuery conn "COMMIT"
+  pure result
 
 -- | Run an action inside a @READ ONLY@ transaction. Postgres guarantees
 -- no writes can occur, which enables use of standby replicas.

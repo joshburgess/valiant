@@ -14,13 +14,18 @@ module Hsqlx.Execute
   ( -- * Queries
     fetchOne
   , fetchAll
+  , fetchAllVec
   , fetchAllWith
   , fetchScalar
   , fetchOneOrThrow
+  , fetchOneOr
+  , fetchFirst
   , fetchExists
+  , forEach
     -- * Commands
   , execute
   , executeReturning
+  , executeReturningMany
   , executeMany
     -- * Raw (unchecked) queries
   , rawFetchAll
@@ -135,6 +140,19 @@ fetchExists conn stmt params = do
   rows <- fetchRowsRaw conn stmt params
   pure (not (null rows))
 
+-- | Fetch all result rows as a 'Vector'. More efficient than 'fetchAll'
+-- when you need indexed access or will convert to a 'Vector' anyway.
+--
+-- @
+-- users <- fetchAllVec conn listAllUsers ()
+-- @
+fetchAllVec :: Connection -> Statement p r -> p -> IO (Vector r)
+fetchAllVec conn stmt params = do
+  rows <- fetchRowsRaw conn stmt params
+  V.mapM (\row -> case stmtDecode stmt row of
+    Left err -> throwHsqlx (DecodeError (BS8.pack err))
+    Right !val -> pure val) (V.fromList rows)
+
 -- | Like 'fetchAll' but applies a transformation to each decoded row.
 -- Useful for mapping database rows to domain types without an intermediate list.
 --
@@ -145,6 +163,41 @@ fetchAllWith :: Connection -> Statement p r -> p -> (r -> a) -> IO [a]
 fetchAllWith conn stmt params f = do
   rows <- fetchAll conn stmt params
   pure (map f rows)
+
+-- | Like 'fetchOne' but returns a default value instead of 'Nothing'
+-- when no rows are returned.
+--
+-- @
+-- count <- fetchOneOr conn countByStatus "active" 0
+-- @
+fetchOneOr :: Connection -> Statement p r -> p -> r -> IO r
+fetchOneOr conn stmt params def = do
+  mResult <- fetchOne conn stmt params
+  pure (maybe def id mResult)
+
+-- | Fetch the first row from a query that may return multiple rows.
+-- Equivalent to 'fetchOne' but communicates intent more clearly when the
+-- query is known to return multiple rows and you want only the first.
+--
+-- @
+-- newest <- fetchFirst conn listRecentUsers ()
+-- @
+fetchFirst :: Connection -> Statement p r -> p -> IO (Maybe r)
+fetchFirst = fetchOne
+
+-- | Execute a callback for each result row. Rows are decoded one at a time
+-- in constant memory (no intermediate list is built).
+--
+-- @
+-- forEach conn listAllUsers () $ \\user ->
+--   putStrLn (userName user)
+-- @
+forEach :: Connection -> Statement p r -> p -> (r -> IO ()) -> IO ()
+forEach conn stmt params action = do
+  rows <- fetchRowsRaw conn stmt params
+  mapM_ (\row -> case stmtDecode stmt row of
+    Left err -> throwHsqlx (DecodeError (BS8.pack err))
+    Right !val -> action val) rows
 
 ------------------------------------------------------------------------
 -- Commands
@@ -214,6 +267,35 @@ executeReturning conn stmt params = do
 -- @
 executeMany :: Connection -> Statement p () -> [p] -> IO Int64
 executeMany = executeBatch
+
+-- | Execute a statement with RETURNING for each parameter set, pipelined
+-- into a single round-trip. Returns the total rows affected and all
+-- decoded RETURNING rows concatenated.
+--
+-- @
+-- (total, ids) <- executeReturningMany conn insertUserReturningId
+--   [(\"Alice\", Nothing), (\"Bob\", Just \"b\@x.com\")]
+-- @
+executeReturningMany :: Connection -> Statement p r -> [p] -> IO (Int64, [r])
+executeReturningMany _ _ [] = pure (0, [])
+executeReturningMany conn stmt paramsList = do
+  (name, needsParse) <- lookupOrAllocStmt conn stmt
+  let encode = stmtEncode stmt
+      bindExecs = concatMap (\p ->
+        [ Bind "" name binaryFmtVec (encode p) binaryFmtVec
+        , Execute "" 0
+        ]) paramsList ++ [Sync]
+      msgs = if needsParse
+        then Parse name (stmtSQL stmt) (V.map Oid.unOid (stmtParamOids stmt)) : bindExecs
+        else bindExecs
+  resp <- submitRequest (connAsync conn) $ ReqExtendedQuery msgs (CollectBatch (length paramsList))
+  case resp of
+    RespBatchRows results -> do
+      when needsParse $ cacheStmt conn (stmtSQL stmt) name
+      allRows <- concat <$> mapM (decodeRows (stmtDecode stmt)) results
+      let total = fromIntegral (length allRows)
+      pure (total, allRows)
+    _ -> throwHsqlx (ProtocolError "executeReturningMany: unexpected response type")
 
 ------------------------------------------------------------------------
 -- Raw (unchecked) queries

@@ -39,6 +39,7 @@ library
     Hsqlx.Binary.Scientific
     Hsqlx.Binary.UUID
     Hsqlx.Copy
+    Hsqlx.Error
     Hsqlx.Execute
     Hsqlx.Fold
     Hsqlx.FromRow

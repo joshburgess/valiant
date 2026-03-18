@@ -51,12 +51,17 @@ module Hsqlx
     -- PostgreSQL extended query protocol with binary format encoding.
   , fetchOne
   , fetchAll
+  , fetchAllVec
   , fetchAllWith
   , fetchScalar
   , fetchOneOrThrow
+  , fetchOneOr
+  , fetchFirst
   , fetchExists
+  , forEach
   , execute
   , executeReturning
+  , executeReturningMany
   , executeMany
   , executeBatch
   , fetchBatchOne
@@ -131,6 +136,8 @@ module Hsqlx
   , withTransaction
   , withTransaction_
   , withTransactionLevel
+  , withTransactionConn
+  , withTransactionLevelConn
   , withReadOnlyTransaction
   , withSavepoint
 
@@ -211,6 +218,19 @@ module Hsqlx
   , ToParams (..)
   , EncodeField (..)
 
+    -- * Error inspection
+    -- | Structured error inspection, SQLSTATE access, and constraint
+    -- violation helpers. See "Hsqlx.Error" for the full API.
+  , ConstraintViolation (..)
+  , constraintViolation
+  , catchConstraintViolation
+  , sqlState
+  , pgErrorOf
+  , isUniqueViolation
+  , isForeignKeyViolation
+  , isSerializationError
+  , isDeadlockError
+
     -- * Binary codec type classes
     -- | Low-level encode\/decode classes for individual PostgreSQL types.
     -- Derive these for newtypes using @GeneralizedNewtypeDeriving@ or
@@ -249,7 +269,8 @@ import Hsqlx.Binary.Inet (PgInet (..), ipv4, ipv4Host, ipv6, ipv6Host, inetToTex
 import Hsqlx.Binary.Interval (PgInterval (..))
 import Hsqlx.Binary.Range (PgRange (..), RangeBound (..))
 import Hsqlx.Copy (CopyResult (..), copyIn, copyInBinary, copyOut)
-import Hsqlx.Execute (execute, executeBatch, executeMany, executeReturning, fetchAll, fetchAllWith, fetchBatchAll, fetchBatchOne, fetchExists, fetchOne, fetchOneOrThrow, fetchScalar, rawExecute, rawFetchAll, rawFetchOne)
+import Hsqlx.Error (ConstraintViolation (..), catchConstraintViolation, constraintViolation, isDeadlockError, isForeignKeyViolation, isSerializationError, isUniqueViolation, pgErrorOf, sqlState)
+import Hsqlx.Execute (execute, executeBatch, executeMany, executeReturning, executeReturningMany, fetchAll, fetchAllVec, fetchAllWith, fetchBatchAll, fetchBatchOne, fetchExists, fetchFirst, fetchOne, fetchOneOr, fetchOneOrThrow, fetchScalar, forEach, rawExecute, rawFetchAll, rawFetchOne)
 import Hsqlx.Fold (RowFold (..), executeWithFold)
 import Hsqlx.FromRow (DecodeColumn (..), FromRow (..))
 import Hsqlx.Logging (LogEvent (..), LogLevel (..), Logger, nullLogger, poolLoggerFromLogger, stderrLogger)
@@ -261,7 +282,7 @@ import Hsqlx.Statement (Statement (..), mkStatement, queryFile, queryFileAs)
 import Hsqlx.Streaming (CursorState (..), fetchBatch, withCursor)
 import Hsqlx.ToParams (EncodeField (..), ToParams (..))
 import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
-import Hsqlx.Transaction (IsolationLevel (..), Transaction (..), withReadOnlyTransaction, withSavepoint, withTransaction, withTransactionLevel, withTransaction_)
+import Hsqlx.Transaction (IsolationLevel (..), Transaction (..), withReadOnlyTransaction, withSavepoint, withTransaction, withTransactionConn, withTransactionLevel, withTransactionLevelConn, withTransaction_)
 import PgWire.Cancel (cancelQuery, withQueryTimeout)
 import PgWire.Connection (Connection, close, connect, connectString, simpleQuery, withConnection)
 import PgWire.Connection.Config (ConnConfig (..), TlsMode (..), defaultConnConfig)
