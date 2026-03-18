@@ -6,6 +6,7 @@ import Criterion.Main
 import Data.Int (Int32, Int64)
 import Data.IORef
 import Data.Text (Text)
+import Data.Text qualified as T
 import Hsqlx
 import System.IO.Unsafe (unsafePerformIO)
 import TestSupport
@@ -85,6 +86,31 @@ benchmarks =
         whnfIO $ do
           p <- getPool
           withResource p $ \c -> simpleQuery c "SELECT 1"
+
+    , bench "fetchAllVec 1000 rows" $
+        whnfIO (getConn >>= \c -> fetchAllVec c stmtListAllBulk ())
+
+    , bench "executeWithFold 1000 rows" $
+        whnfIO (getConn >>= \c -> executeWithFold c stmtListAllBulk () (RowFold (0 :: Int) (\n _ -> n + 1)))
+
+    , bench "forEach 1000 rows" $
+        whnfIO (getConn >>= \c -> forEach c stmtListAllBulk () (\_ -> pure ()))
+
+    , bench "executeBatch 100 inserts (pipelined)" $
+        whnfIO $ do
+          p <- getPool
+          withTransaction p $ \tx -> do
+            _ <- executeBatch (txConn tx) stmtInsertUser
+              [ ("bench_" <> T.pack (show i), Just ("b@t.com" :: Text))
+              | i <- [1 :: Int .. 100]
+              ]
+            pure ()
+
+    , bench "transaction overhead (BEGIN+COMMIT)" $
+        whnfIO $ do
+          p <- getPool
+          withTransaction p $ \tx ->
+            fetchScalar (txConn tx) stmtCount ()
     ]
   ]
 
