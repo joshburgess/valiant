@@ -8,6 +8,7 @@ module Hsqlx.Plugin.Rewrite
 import Control.Monad.IO.Class (liftIO)
 import Data.ByteString qualified as BS
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import GHC.Driver.Env.Types (Hsc)
 import GHC.Data.FastString (fsLit, unpackFS)
 import GHC.Hs
@@ -17,7 +18,7 @@ import GHC.Unit.Types (IsBootInterface (..))
 import GHC.Types.Name.Occurrence (mkVarOcc, occNameString)
 import GHC.Types.Name.Reader (mkRdrQual, rdrNameOcc)
 import GHC.Types.SourceText (SourceText (..), mkIntegralLit)
-import Hsqlx.Plugin.Cache (CacheColumn (..), CacheEntry (..), CacheParam (..), findCacheFile)
+import Hsqlx.Plugin.Cache (CacheColumn (..), CacheEntry (..), CacheParam (..), findCacheFile, findCacheBySqlHash)
 import Hsqlx.Plugin.Config (PluginConfig (..))
 import Hsqlx.Plugin.Hash (sha256Hex)
 import System.Directory (doesFileExist)
@@ -89,6 +90,7 @@ rewriteLExpr config (L loc expr) = do
 
 rewriteExpr :: PluginConfig -> HsExpr GhcPs -> Hsc (HsExpr GhcPs, Bool)
 rewriteExpr config (HsApp appAnn (L fLoc func) (L aLoc arg))
+  -- queryFile "path.sql" — load SQL from file, look up cache by path+hash
   | isQueryFileRdr func
   , Just path <- extractParsedStringLit arg = do
       mEntry <- liftIO $ loadCacheForPath config path
@@ -97,10 +99,20 @@ rewriteExpr config (HsApp appAnn (L fLoc func) (L aLoc arg))
           let replacement = buildMkStatementCall entry
           pure (replacement, True)
         Nothing -> do
-          -- Cache or file not found. Rewrite to a placeholder mkStatement
-          -- call so the HsqlxPluginRequired TypeError doesn't fire.
-          -- The typecheck phase will detect the path and emit HSQLX-001/002.
           let placeholder = buildPlaceholderCall path
+          pure (placeholder, True)
+  -- query "SELECT ..." — inline SQL, look up cache by SQL hash directly
+  | isQueryInlineRdr func
+  , Just sqlText <- extractParsedStringLit arg = do
+      mEntry <- liftIO $ loadCacheForInlineSql config sqlText
+      case mEntry of
+        Just entry -> do
+          let replacement = buildMkStatementCall entry
+          pure (replacement, True)
+        Nothing -> do
+          -- No cache for this SQL text. Use a placeholder that includes
+          -- the SQL itself as the "path" so the typecheck phase can report it.
+          let placeholder = buildPlaceholderInline sqlText
           pure (placeholder, True)
 rewriteExpr _ expr = pure (expr, False)
 
@@ -116,6 +128,16 @@ buildPlaceholderCall path =
       oids = mkIntList []
       cols = mkStrList []
       pathLit = mkStrLit path
+   in unLoc (mkSt `app` sql `app` oids `app` cols `app` pathLit)
+
+-- | Build a placeholder for inline SQL when cache is missing.
+buildPlaceholderInline :: String -> HsExpr GhcPs
+buildPlaceholderInline sqlText =
+  let mkSt = mkQualVar "Hsqlx.Statement" "mkStatement"
+      sql = mkStrLit sqlText
+      oids = mkIntList []
+      cols = mkStrList []
+      pathLit = mkStrLit "<inline>"
    in unLoc (mkSt `app` sql `app` oids `app` cols `app` pathLit)
 
 -- | Build: @Hsqlx.Statement.mkStatement sqlStr oids colNames path@
@@ -158,6 +180,11 @@ isQueryFileRdr (HsVar _ (L _ rdr)) =
    in s == "queryFile" || s == "queryFileAs"
 isQueryFileRdr _ = False
 
+isQueryInlineRdr :: HsExpr GhcPs -> Bool
+isQueryInlineRdr (HsVar _ (L _ rdr)) =
+  occNameString (rdrNameOcc rdr) == "query"
+isQueryInlineRdr _ = False
+
 extractParsedStringLit :: HsExpr GhcPs -> Maybe String
 extractParsedStringLit (HsLit _ (HsString _ fs)) = Just (unpackFS fs)
 extractParsedStringLit _ = Nothing
@@ -172,6 +199,12 @@ loadCacheForPath config path = do
       content <- BS.readFile sqlPath
       let hash = sha256Hex content
       findCacheFile (pcCacheDir config) path hash
+
+loadCacheForInlineSql :: PluginConfig -> String -> IO (Maybe CacheEntry)
+loadCacheForInlineSql config sqlText = do
+  let sqlBs = TE.encodeUtf8 (T.pack sqlText)
+      hash = sha256Hex sqlBs
+  findCacheBySqlHash (pcCacheDir config) hash
 
 -- | Remove @queryFile@ and @queryFileAs@ from explicit import lists.
 -- After the plugin rewrites these calls to @mkStatement@, the imports
@@ -190,7 +223,7 @@ stripQueryFileImports = map stripImportDecl
     isQueryFileIE :: LIE GhcPs -> Bool
     isQueryFileIE (L _ ie) =
       let s = showPprUnsafe ie
-       in s == "queryFile" || s == "queryFileAs"
+       in s == "queryFile" || s == "queryFileAs" || s == "query"
 
     showPprUnsafe :: (Outputable a) => a -> String
     showPprUnsafe = showSDocUnsafe . ppr

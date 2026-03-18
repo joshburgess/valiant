@@ -5,6 +5,7 @@ module Hsqlx.Plugin.Cache
   , StatementType (..)
   , readCacheEntry
   , findCacheFile
+  , findCacheBySqlHash
   , cacheFileName
   ) where
 
@@ -124,6 +125,25 @@ findCacheFile cacheDir sqlRelPath sqlHash = do
             Right entry
               | ceSqlHash entry == sqlHash -> Just entry
               | otherwise -> Nothing
+
+-- | Find a cache entry by SQL hash alone (for inline SQL without a file path).
+-- Scans all cache files in the directory looking for a matching sql_hash.
+findCacheBySqlHash :: FilePath -> Text -> IO (Maybe CacheEntry)
+findCacheBySqlHash cacheDir sqlHash = do
+  exists <- doesDirectoryExist cacheDir
+  if not exists
+    then pure Nothing
+    else do
+      files <- listDirectory cacheDir
+      let jsonFiles = filter (".json" `isSuffixOf`) files
+      go jsonFiles
+  where
+    go [] = pure Nothing
+    go (f : fs) = do
+      result <- readCacheEntry (cacheDir </> f)
+      case result of
+        Right entry | ceSqlHash entry == sqlHash -> pure (Just entry)
+        _ -> go fs
 
 cacheFileName :: FilePath -> Text -> FilePath
 cacheFileName sqlRelPath hashShort =

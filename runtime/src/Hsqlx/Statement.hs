@@ -11,6 +11,7 @@
 -- 'mkStatement' (for manual\/test construction).
 module Hsqlx.Statement
   ( Statement (..)
+  , query
   , queryFile
   , queryFileAs
   , mkStatement
@@ -76,6 +77,22 @@ queryFile _ = error "unreachable: hsqlx plugin not loaded"
 -- | Like 'queryFile' but for named result types with 'FromRow'.
 queryFileAs :: HsqlxPluginRequired => FilePath -> Statement p r
 queryFileAs _ = error "unreachable: hsqlx plugin not loaded"
+
+-- | Inline SQL with compile-time validation.
+--
+-- Write SQL directly in Haskell source. The GHC plugin intercepts this
+-- call, hashes the SQL text, looks up the type metadata in @.hsqlx\/@,
+-- and rewrites to 'mkStatement' with the correct types.
+--
+-- Requires running @hsqlx prepare@ with the same SQL text present in a
+-- @.sql@ file or registered via @hsqlx prepare --inline@.
+--
+-- @
+-- findById :: Statement Int32 (Int32, Text, Maybe Text)
+-- findById = query "SELECT id, name, email FROM users WHERE id = $1"
+-- @
+query :: HsqlxPluginRequired => String -> Statement p r
+query _ = error "unreachable: hsqlx plugin not loaded"
 
 -- | Construct a 'Statement' from literal data embedded by the plugin.
 -- The plugin rewrites @queryFile "path.sql"@ into a call to this function

@@ -42,6 +42,7 @@ module Hsqlx
     -- typed parameters and results. Create them with 'queryFile' (validated
     -- by the GHC plugin) or 'mkStatement' (for manual construction).
     Statement (..)
+  , query
   , queryFile
   , queryFileAs
   , mkStatement
@@ -353,7 +354,7 @@ import Hsqlx.Monad (Hsqlx, poolStatsM, resizeM, runHsqlx, withResourceTimeoutM)
 import Hsqlx.NamedParams (NamedStatement, ToNamedParams (..), mkStatementNamed)
 import Hsqlx.Notify (Notification (..), listen, unlisten, waitForNotification, waitForNotificationTimeout)
 import Hsqlx.Pipeline (Pipeline, pipeFetchOne, pipeFetchAll, pipeFetchScalar, pipeExecute, runPipeline)
-import Hsqlx.Statement (Statement (..), mkStatement, queryFile, queryFileAs)
+import Hsqlx.Statement (Statement (..), mkStatement, query, queryFile, queryFileAs)
 import Hsqlx.Streaming (CursorState (..), fetchBatch, withCursor)
 import Hsqlx.ToParams (EncodeField (..), ToParams (..))
 import PgWire.Binary.Types (PgDecode (..), PgEncode (..))

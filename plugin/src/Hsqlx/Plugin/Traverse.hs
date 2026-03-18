@@ -153,7 +153,7 @@ isQueryFileExpr _ = False
 isQueryFileName :: Var -> Bool
 isQueryFileName var =
   let occ = occNameString (nameOccName (varName var))
-   in occ == "queryFile" || occ == "queryFileAs"
+   in occ == "queryFile" || occ == "queryFileAs" || occ == "query"
 
 extractStringLit :: HsExpr GhcTc -> Maybe String
 extractStringLit (HsLit _ (HsString _ fs)) = Just (unpackFS fs)
