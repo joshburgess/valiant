@@ -74,17 +74,18 @@ binaryFmtVec = V.singleton BinaryFormat
 
 -- | Fetch zero or one row from a typed 'Statement'.
 -- Returns 'Nothing' if the query produces no results; if multiple rows are
--- returned, only the first is used.
+-- returned, only the first is used (remaining rows are discarded at the
+-- wire level without decoding).
 --
 -- @
 -- mUser <- fetchOne conn findById 42
 -- @
 fetchOne :: Connection -> Statement p r -> p -> IO (Maybe r)
 fetchOne conn stmt params = do
-  rows <- fetchRowsRaw conn stmt params
-  case rows of
-    [] -> pure Nothing
-    (row : _) -> case stmtDecode stmt row of
+  mRow <- fetchFirstRowRaw conn stmt params
+  case mRow of
+    Nothing -> pure Nothing
+    Just row -> case stmtDecode stmt row of
       Left err -> throwHsqlx (DecodeError (BS8.pack err))
       Right val -> pure (Just val)
 
@@ -100,20 +101,19 @@ fetchAll conn stmt params = do
   decodeRows (stmtDecode stmt) rows
 
 -- | Fetch exactly one row and decode it as a scalar value.
--- Throws 'DecodeError' if the query returns zero rows or more than one row.
+-- Throws 'DecodeError' if the query returns zero rows.
 --
 -- @
 -- n <- fetchScalar conn countUsers ()
 -- @
 fetchScalar :: Connection -> Statement p r -> p -> IO r
 fetchScalar conn stmt params = do
-  rows <- fetchRowsRaw conn stmt params
-  case rows of
-    [row] -> case stmtDecode stmt row of
+  mRow <- fetchFirstRowRaw conn stmt params
+  case mRow of
+    Nothing -> throwHsqlx (DecodeError "fetchScalar: query returned no rows")
+    Just row -> case stmtDecode stmt row of
       Left err -> throwHsqlx (DecodeError (BS8.pack err))
       Right val -> pure val
-    [] -> throwHsqlx (DecodeError "fetchScalar: query returned no rows")
-    _ -> throwHsqlx (DecodeError "fetchScalar: query returned more than one row")
 
 -- | Like 'fetchOne' but throws 'DecodeError' if no rows are returned.
 -- Useful when you know the row must exist (e.g., fetching by primary key
@@ -130,15 +130,16 @@ fetchOneOrThrow conn stmt params = do
     Just val -> pure val
 
 -- | Check whether a query returns any rows. Useful for @EXISTS@-style queries.
--- More efficient than 'fetchAll' since it does not decode any row data.
+-- More efficient than 'fetchAll' since it collects at most one row at the
+-- wire level and does not decode any row data.
 --
 -- @
 -- exists <- fetchExists conn userExistsById 42
 -- @
 fetchExists :: Connection -> Statement p r -> p -> IO Bool
 fetchExists conn stmt params = do
-  rows <- fetchRowsRaw conn stmt params
-  pure (not (null rows))
+  mRow <- fetchFirstRowRaw conn stmt params
+  pure (case mRow of { Nothing -> False; Just _ -> True })
 
 -- | Fetch all result rows as a 'Vector'. Uses a dedicated wire-level
 -- collector that builds a 'Vector' directly via a growable mutable
@@ -200,8 +201,9 @@ fetchOneOr conn stmt params def = do
 fetchFirst :: Connection -> Statement p r -> p -> IO (Maybe r)
 fetchFirst = fetchOne
 
--- | Execute a callback for each result row. Rows are decoded one at a time
--- in constant memory (no intermediate list is built).
+-- | Execute a callback for each result row. Rows are decoded and
+-- dispatched one at a time directly from the wire — no intermediate
+-- list is ever built. Uses exclusive wire access for true streaming.
 --
 -- @
 -- forEach conn listAllUsers () $ \\user ->
@@ -209,10 +211,31 @@ fetchFirst = fetchOne
 -- @
 forEach :: Connection -> Statement p r -> p -> (r -> IO ()) -> IO ()
 forEach conn stmt params action = do
-  rows <- fetchRowsRaw conn stmt params
-  mapM_ (\row -> case stmtDecode stmt row of
-    Left err -> throwHsqlx (DecodeError (BS8.pack err))
-    Right !val -> action val) rows
+  stmtName <- ensurePrepared conn stmt
+  let encodedParams = stmtEncode stmt params
+  submitExclusive (connAsync conn) $ \wc txRef -> do
+    sendFrontendMsgs wc
+      [ Bind "" stmtName binaryFmtVec encodedParams binaryFmtVec
+      , Execute "" 0
+      , Sync
+      ]
+    let go = do
+          msg <- recvBackendMsg wc
+          case msg of
+            BindComplete -> go
+            ParseComplete -> go
+            DataRow vals -> case stmtDecode stmt vals of
+              Left err -> throwHsqlx (DecodeError (BS8.pack err))
+              Right !val -> do
+                action val
+                go
+            CommandComplete _ -> go
+            EmptyQueryResponse -> go
+            ReadyForQuery status -> writeIORef txRef status
+            ErrorResponse err -> throwHsqlx (QueryError err)
+            NoticeResponse _ -> go
+            other -> throwHsqlx (ProtocolError ("Unexpected in forEach: " <> BS8.pack (show other)))
+    go
 
 ------------------------------------------------------------------------
 -- Commands
@@ -524,6 +547,26 @@ fetchBatchAll conn stmt paramsList = do
 ------------------------------------------------------------------------
 -- Internal
 ------------------------------------------------------------------------
+
+-- | Fetch at most the first raw row, discarding the rest at the wire level.
+fetchFirstRowRaw :: Connection -> Statement p r -> p -> IO (Maybe (Vector (Maybe ByteString)))
+fetchFirstRowRaw conn stmt params = do
+  (name, needsParse) <- lookupOrAllocStmt conn stmt
+  let encodedParams = stmtEncode stmt params
+      bindExec =
+        [ Bind "" name binaryFmtVec encodedParams binaryFmtVec
+        , Execute "" 0
+        , Sync
+        ]
+      msgs = if needsParse
+        then Parse name (stmtSQL stmt) (V.map Oid.unOid (stmtParamOids stmt)) : bindExec
+        else bindExec
+  resp <- submitRequest (connAsync conn) $ ReqExtendedQuery msgs CollectFirstRow
+  case resp of
+    RespFirstRow mRow -> do
+      when needsParse $ cacheStmt conn (stmtSQL stmt) name
+      pure mRow
+    _ -> throwHsqlx (ProtocolError "fetchFirstRowRaw: unexpected response type")
 
 -- | Fetch raw rows, coalescing Parse+Bind+Execute for cache misses.
 fetchRowsRaw :: Connection -> Statement p r -> p -> IO [Vector (Maybe ByteString)]

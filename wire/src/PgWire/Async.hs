@@ -83,6 +83,8 @@ data Response
     RespRowsAndCommand ![Vector (Maybe ByteString)] !CommandTag
   | -- | Rows collected as a Vector (not a list). Used by fetchAllVec.
     RespRowsVec !(Vector (Vector (Maybe ByteString)))
+  | -- | At most one row. Used by fetchOne/fetchScalar/fetchExists.
+    RespFirstRow !(Maybe (Vector (Maybe ByteString)))
 
 -- | Tells the reader thread how to interpret backend messages for a request.
 data ResponseCollector
@@ -102,6 +104,8 @@ data ResponseCollector
     CollectRowsAndCommand
   | -- | Like CollectRows but collects into a Vector instead of a list.
     CollectRowsVec
+  | -- | Collect at most the first row. Discards remaining DataRows.
+    CollectFirstRow
   | -- | Simple query protocol: text rows + optional tag + ReadyForQuery.
     CollectSimple
 
@@ -376,6 +380,10 @@ readerThread ac = go `catch` onDeath
       vec <- collectRowsVecLoop
       waitReadyForQuery
       pure (RespRowsVec vec)
+    collectResponse CollectFirstRow = do
+      mRow <- collectFirstRowLoop
+      waitReadyForQuery
+      pure (RespFirstRow mRow)
     collectResponse (CollectBatch n) = do
       results <- collectBatchLoop n
       waitReadyForQuery
@@ -427,6 +435,33 @@ readerThread ac = go `catch` onDeath
             EmptyQueryResponse -> pure (mv, i)
             ErrorResponse err -> throwIO (QueryError err)
             other -> throwIO (ProtocolError ("Unexpected in rows vec: " <> BS8.pack (show other)))
+
+    -- | Collect at most the first row, discard the rest.
+    collectFirstRowLoop :: IO (Maybe (Vector (Maybe ByteString)))
+    collectFirstRowLoop = loop
+      where
+        loop = do
+          msg <- recvAndDispatch
+          case msg of
+            ParseComplete -> loop
+            BindComplete -> loop
+            DataRow vals -> do
+              -- Got first row, now drain remaining rows
+              drainRows
+              pure (Just vals)
+            CommandComplete _ -> pure Nothing
+            EmptyQueryResponse -> pure Nothing
+            ErrorResponse err -> throwIO (QueryError err)
+            other -> throwIO (ProtocolError ("Unexpected in first row: " <> BS8.pack (show other)))
+        drainRows = do
+          msg <- recvAndDispatch
+          case msg of
+            DataRow _ -> drainRows -- discard
+            CommandComplete _ -> pure ()
+            EmptyQueryResponse -> pure ()
+            NoticeResponse _ -> drainRows
+            ErrorResponse err -> throwIO (QueryError err)
+            other -> throwIO (ProtocolError ("Unexpected draining rows: " <> BS8.pack (show other)))
 
     collectRowsAndCommandLoop :: IO ([Vector (Maybe ByteString)], CommandTag)
     collectRowsAndCommandLoop = loop id
