@@ -49,6 +49,7 @@ library
     Hsqlx.Execute
     Hsqlx.Fold
     Hsqlx.FromRow
+    Hsqlx.FromRowFast
     Hsqlx.LargeObject
     Hsqlx.Logging
     Hsqlx.Monad

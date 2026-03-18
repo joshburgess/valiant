@@ -70,6 +70,11 @@ benchmarks =
       [ bench "10 conns x 1 batch" $
           whnfIO (concurrentQueries 10 1 queryBatchInsert)
       ]
+    , bgroup "pg-type-wide-rows-fast"
+      -- Same as pg-type but using fetchAllFast (FromRowFast)
+      [ bench "10 conns x 10 queries" $
+          whnfIO (concurrentQueries 10 10 queryPgTypeFast)
+      ]
     , bgroup "batch-insert-1000-pipelined"
       -- Same as above but using hsqlx's pipelined executeBatch
       [ bench "10 conns x 1 batch" $
@@ -140,6 +145,12 @@ queryPgType :: Connection -> IO ()
 queryPgType conn = do
   -- Match asyncpg's pg_type query: wide rows from system catalog, binary format
   !_ <- fetchAll conn stmtPgType ()
+  pure ()
+
+queryPgTypeFast :: Connection -> IO ()
+queryPgTypeFast conn = do
+  -- Same query but using FromRowFast (no Either allocation per column)
+  !_ <- fetchAllFast conn stmtPgType ()
   pure ()
 
 queryBatchInsert :: Connection -> IO ()

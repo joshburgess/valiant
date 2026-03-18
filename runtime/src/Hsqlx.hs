@@ -59,6 +59,14 @@ module Hsqlx
   , fetchFirst
   , fetchExists
   , forEach
+    -- * Fast decode variants
+    -- | Use these on hot paths with wide rows. 'FromRowFast' throws
+    -- exceptions instead of returning 'Either', eliminating per-column
+    -- allocation overhead. Derive via @Generic@ like 'FromRow'.
+  , FromRowFast (..)
+  , DecodeColumnFast (..)
+  , fetchAllFast
+  , fetchOneFast
   , execute
   , executeReturning
   , executeReturningMany
@@ -335,7 +343,8 @@ import Hsqlx.Binary.Range (PgRange (..), RangeBound (..))
 import Hsqlx.Copy (CopyResult (..), copyIn, copyInBinary, copyOut)
 import Hsqlx.Dynamic ()
 import Hsqlx.Error (ConstraintViolation (..), catchConstraintViolation, constraintViolation, isDeadlockError, isForeignKeyViolation, isSerializationError, isUniqueViolation, pgErrorOf, sqlState)
-import Hsqlx.Execute (execute, executeBatch, executeMany, executeReturning, executeReturningMany, fetchAll, fetchAllVec, fetchAllWith, fetchBatchAll, fetchBatchOne, fetchExists, fetchFirst, fetchOne, fetchOneOr, fetchOneOrThrow, fetchScalar, forEach, rawExecute, rawFetchAll, rawFetchOne)
+import Hsqlx.Execute (execute, executeBatch, executeMany, executeReturning, executeReturningMany, fetchAll, fetchAllFast, fetchAllVec, fetchAllWith, fetchBatchAll, fetchBatchOne, fetchExists, fetchFirst, fetchOne, fetchOneFast, fetchOneOr, fetchOneOrThrow, fetchScalar, forEach, rawExecute, rawFetchAll, rawFetchOne)
+import Hsqlx.FromRowFast (FromRowFast (..), DecodeColumnFast (..))
 import Hsqlx.Fold (RowFold (..), executeWithFold)
 import Hsqlx.LargeObject (LoFd (..), LoMode (..), loClose, loCreate, loExport, loImport, loOpen, loRead, loSeek, loTell, loTruncate, loUnlink, loWrite)
 import Hsqlx.FromRow (DecodeColumn (..), FromRow (..))
