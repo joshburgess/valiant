@@ -13,52 +13,49 @@ is the database driver.
 - **asyncpg:** Python 3.12 + asyncpg + uvloop, 10 connections, 10s per benchmark
 - **hsqlx:** GHC 9.10.3, -O2, criterion (5s time-limit), 10 connections via pool
 
-## Results (Run 2 — March 2026, with binary pg_type + STM optimization)
+## Results (Run 3 — March 2026, with fast-path send + binary pg_type)
 
 ### SELECT 1+1 (minimal overhead — measures driver/protocol cost)
 
 | Driver | Queries/sec |
 |--------|------------|
-| **asyncpg** | **30,660/s** |
-| **hsqlx** | **24,631/s** |
+| asyncpg (uvloop) | 30,279/s |
+| **hsqlx (fast path)** | **~31,056/s** |
 
-asyncpg is 24% faster on trivial queries. This gap is due to uvloop
-(libuv-based event loop, implemented in C) and asyncpg's Cython-compiled
-protocol layer. hsqlx uses GHC's green thread scheduler and pure Haskell
-protocol code. Both are far above what any application query needs.
+With the fast-path send optimization, **hsqlx matches asyncpg** on
+trivial queries. The fast path bypasses the writer thread's queue when
+there's no contention, eliminating ~30-40μs of coordination overhead.
 
 ### generate_series(1000) — bulk row fetch (1000 integer rows)
 
 | Driver | Queries/sec | Rows/sec |
 |--------|------------|----------|
-| **asyncpg** | **2,831/s** | **2.83M/s** |
-| **hsqlx** | **2,770/s** | **2.77M/s** |
+| asyncpg | 2,819/s | 2.82M/s |
+| **hsqlx** | **3,091/s** | **3.09M/s** |
 
-**Within 2%.** Row decoding throughput is nearly identical — hsqlx's pure
-Haskell binary decoders match asyncpg's Cython decoders on integer data.
+**hsqlx is 10% faster.** Pure Haskell binary decoders with direct byte
+indexing outperform asyncpg's Cython decoders on integer-heavy workloads.
 
 ### pg_type wide rows (~350 rows × 12 columns, mixed types)
 
 | Driver | Queries/sec |
 |--------|------------|
-| **asyncpg** | **1,491/s** |
-| **hsqlx** | **~928/s** |
+| **asyncpg** | **1,499/s** |
+| hsqlx | ~1,163/s |
 
-asyncpg is 61% faster on wide text-heavy rows. This gap is due to
-asyncpg's Cython-compiled text decoders and the overhead of decoding
-12 columns per row in pure Haskell. The pg_type columns include OIDs,
-booleans, and text — a mixed-type workload that exercises the full
-codec stack.
+asyncpg is 29% faster on wide text-heavy rows. This gap is from asyncpg's
+Cython-compiled codec layer decoding 12 mixed-type columns per row
+faster than pure Haskell.
 
 ### Batch insert 1000 rows (sequential — one INSERT per round-trip)
 
 | Driver | Batches/sec | Inserts/sec |
 |--------|------------|-------------|
-| asyncpg | **21.9/s** | **21,867/s** |
-| hsqlx (sequential) | 16.6/s | 16,600/s |
-| **hsqlx (pipelined)** | **168.9/s** | **168,900/s** |
+| asyncpg | 22.7/s | 22,664/s |
+| hsqlx (sequential) | 18.0/s | 18,000/s |
+| **hsqlx (pipelined)** | **173.8/s** | **173,800/s** |
 
-Sequential: asyncpg is 32% faster (uvloop's tighter event loop).
+Sequential: asyncpg is 26% faster (uvloop's tighter event loop).
 **Pipelined: hsqlx is 7.7x faster than asyncpg** — asyncpg has no
 equivalent to `executeBatch`, which sends all 1000 Bind+Execute pairs
 in a single network round-trip.
@@ -67,18 +64,18 @@ in a single network round-trip.
 
 | Benchmark | asyncpg | hsqlx |
 |-----------|---------|-------|
-| SELECT 1+1 (sustained 10s) | 30,660/s | 24,631/s |
-| fetch 1000 rows (sustained) | 2,831/s | 2,913/s |
+| SELECT 1+1 (10 conns × 1000) | 30,279/s | **31,056/s** |
+| fetch 1000 rows (10 conns × 100) | 2,819/s | **3,084/s** |
 
 ## Summary
 
 | Benchmark | asyncpg | hsqlx | Winner |
 |-----------|---------|-------|--------|
-| SELECT 1+1 | 30,660/s | 24,631/s | asyncpg (1.24x) |
-| fetch 1000 rows | 2,831/s | 2,770/s | asyncpg (1.02x) |
-| pg_type wide rows | 1,491/s | ~928/s | asyncpg (1.61x) |
-| batch insert (sequential) | 21.9/s | 16.6/s | asyncpg (1.32x) |
-| **batch insert (pipelined)** | N/A | **168.9/s** | **hsqlx (7.7x)** |
+| SELECT 1+1 throughput | 30,279/s | **31,056/s** | **hsqlx (1.03x)** |
+| fetch 1000 rows | 2,819/s | **3,091/s** | **hsqlx (1.10x)** |
+| pg_type wide rows | **1,499/s** | 1,163/s | asyncpg (1.29x) |
+| batch insert (sequential) | **22.7/s** | 18.0/s | asyncpg (1.26x) |
+| **batch insert (pipelined)** | N/A | **173.8/s** | **hsqlx (7.7x)** |
 
 ## Analysis
 

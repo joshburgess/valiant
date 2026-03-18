@@ -2,7 +2,7 @@
 
 **Compile-time checked SQL for Haskell.**
 
-Inspired by Rust's [sqlx](https://github.com/launchbadge/sqlx), built from scratch for Haskell. No Template Haskell. No `libpq`. No C dependencies. Raw `.sql` files validated against a live Postgres database at prepare time, with a GHC source plugin that enforces type safety at compile time. The fastest Haskell PostgreSQL library — 5-7x faster than hasql on multi-row reads, 6x faster on batch writes.
+Inspired by Rust's [sqlx](https://github.com/launchbadge/sqlx), built from scratch for Haskell. No Template Haskell. No `libpq`. No C dependencies. Raw `.sql` files validated against a live Postgres database at prepare time, with a GHC source plugin that enforces type safety at compile time. The fastest Haskell PostgreSQL library — 5x faster than hasql on multi-row reads, 10x faster on pipelined batch writes, competitive with asyncpg (Python) on throughput.
 
 ## How it works
 
@@ -137,39 +137,38 @@ Benchmarks against [hasql](https://hackage.haskell.org/package/hasql)
 (libpq FFI, binary) and [postgresql-simple](https://hackage.haskell.org/package/postgresql-simple)
 (libpq FFI, text). Single connection, Docker Postgres 16.
 
-**Reads** (Linux, Postgres 16, Unix socket):
+**Reads** (Linux, Postgres 16, Unix socket, [CI-verified](docs/benchmark-results/)):
 
 | Rows | hsqlx | hasql | pg-simple | vs hasql | vs pg-simple |
 |------|-------|-------|-----------|----------|--------------|
-| 1 (by PK) | 90 μs | 51 μs | 112 μs | 1.8x slower | **20% faster** |
-| 1,000 | **765 μs** | 5.07 ms | 4.00 ms | **6.6x faster** | **5.2x faster** |
-| 5,000 | **4.13 ms** | 28.1 ms | 20.7 ms | **6.8x faster** | **5.0x faster** |
-| 10,000 | **10.2 ms** | 55.7 ms | 42.0 ms | **5.5x faster** | **4.1x faster** |
+| 1 (by PK) | 138 μs | 89 μs | 179 μs | 1.6x slower | **23% faster** |
+| 1,000 | **895 μs** | 4.76 ms | 3.57 ms | **5.3x faster** | **4.0x faster** |
+| 5,000 | **4.66 ms** | 25.5 ms | 20.0 ms | **5.5x faster** | **4.3x faster** |
+| 10,000 | **11.0 ms** | 54.4 ms | 38.3 ms | **5.0x faster** | **3.5x faster** |
 
-hsqlx is slower on single-row lookups (our async sender/receiver split
-adds overhead that dominates when there's nothing to pipeline) but
-**5-7x faster** once row decoding dominates.
+hsqlx is 1.6x slower on single-row lookups (the async sender/receiver
+split has per-query coordination overhead that dominates when there's
+nothing to pipeline) but **5x faster** once row decoding dominates.
 
 **Writes (pipelined):**
 
 | Rows | hsqlx (pipelined) | hsqlx (seq) | hasql | pg-simple |
 |------|--------------------|------------|-------|-----------|
-| 100 | **872 μs** | 10.3 ms | 5.48 ms | 9.50 ms |
+| 100 | **956 μs** | 15.2 ms | 9.46 ms | 15.9 ms |
 
-Pipelined batch inserts are **6.3x faster** than hasql and **10.9x faster**
+Pipelined batch inserts are **9.9x faster** than hasql and **16.6x faster**
 than postgresql-simple.
 
-**Concurrent throughput (single connection, sender/receiver split):**
+**vs asyncpg (Python)** — same CI runner, same Postgres, same Unix socket:
 
-| Threads | Total time (100 queries each) | Queries/sec | Scaling |
-|---------|-------------------------------|-------------|---------|
-| 1 | 13.5 ms | 7,407/s | 1.0x |
-| 4 | 35.9 ms | 11,142/s | 1.5x |
-| 16 | 176.7 ms | 9,053/s | 1.2x |
-| 32 | 176.7 ms | 18,110/s | 2.4x |
+| Benchmark | asyncpg | hsqlx |
+|-----------|---------|-------|
+| SELECT 1+1 throughput (10 conns) | 30,279/s | **31,056/s** |
+| fetch 1000 rows throughput | 2,819/s | **3,084/s** |
+| batch insert 1000 (pipelined) | N/A | **173.8/s** |
 
-On Linux with Unix sockets, single-connection throughput reaches 7,400-18,100
-queries/sec. Pool throughput with 32 threads: **11,396 queries/sec**.
+See [docs/benchmark-results/asyncpg-comparison.md](docs/benchmark-results/asyncpg-comparison.md)
+for the full head-to-head comparison.
 
 **Why it's fast:**
 
@@ -186,9 +185,10 @@ queries/sec. Pool throughput with 32 threads: **11,396 queries/sec**.
 
 | | libpq (FFI) | hsqlx (pure Haskell) |
 |---|---|---|
-| Single-row latency | **51 μs** (hasql) | 90 μs |
-| Multi-row throughput (10K) | 55.7 ms (hasql) | **10.2 ms (5.5x faster)** |
-| Batch writes (100 inserts) | 5.48 ms (hasql) | **872 μs (6.3x faster)** |
+| Single-row latency | **89 μs** (hasql) | 138 μs (1.6x slower) |
+| Multi-row throughput (10K) | 54.4 ms (hasql) | **11.0 ms (5.0x faster)** |
+| Batch writes (100 inserts) | 9.46 ms (hasql) | **956 μs (9.9x faster)** |
+| vs asyncpg (Python) | — | **Faster on row throughput** |
 | Build requirements | Needs `libpq-dev` | No system dependencies |
 
 See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the full deep-dive:
