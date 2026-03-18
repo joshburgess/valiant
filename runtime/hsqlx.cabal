@@ -195,4 +195,4 @@ benchmark hsqlx-bench
     , text
     , time
     , vector
-  ghc-options: -threaded -rtsopts -O2
+  ghc-options: -threaded -rtsopts -O2 "-with-rtsopts=-I0 -A32m"
