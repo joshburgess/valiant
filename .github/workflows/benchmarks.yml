@@ -3,8 +3,8 @@
 # Runs on ubuntu-24.04 with Postgres 16 installed via apt — no Docker,
 # no TCP overhead, no NAT bridge. Unix socket at /var/run/postgresql/.
 #
-# Triggered manually or on pushes that touch performance-sensitive code.
-# Results are uploaded as artifacts and printed to the job summary.
+# Split into separate jobs to avoid timeouts. Jobs share the cabal
+# cache but run independently. Use mode to select which to run.
 
 name: Benchmarks
 
@@ -12,157 +12,334 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Benchmark mode: all | reads | inserts | codec | concurrent | pool | asyncpg | quick'
+        description: 'Benchmark mode: all | codec | query | concurrent | pool | asyncpg | comparative | quick'
         required: false
         default: 'all'
-  push:
-    branches: [main]
-    paths:
-      - 'wire/src/**'
-      - 'runtime/src/**'
-      - 'runtime/bench/**'
-      - 'bench-compare/**'
 
 concurrency:
   group: benchmarks-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  GHC_VERSION: '9.10.3'
+  CABAL_VERSION: '3.12'
+
 jobs:
-  benchmark:
+  # ── Build (shared by all benchmark jobs) ──────────────────────────
+  build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
-
-    services: {}  # No Docker — we install Postgres natively
-
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-
-      # ── Install Postgres 16 natively ──────────────────────────────
-      - name: Install PostgreSQL 16
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-16
-          sudo systemctl start postgresql
-
-      - name: Configure Postgres for benchmarks
-        run: |
-          # Create test user and database
-          sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
-          sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
-
-          # Allow trust auth for Unix socket connections (prepend to override default peer rules)
-          PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" | xargs)
-          sudo sed -i '1s/^/local all all trust\n/' "$PG_HBA"
-
-          # Tune for throughput (same settings as docker-compose.yml)
-          sudo -u postgres psql -c "ALTER SYSTEM SET shared_buffers = '256MB';"
-          sudo -u postgres psql -c "ALTER SYSTEM SET work_mem = '64MB';"
-          sudo -u postgres psql -c "ALTER SYSTEM SET synchronous_commit = 'off';"
-          sudo -u postgres psql -c "ALTER SYSTEM SET fsync = 'off';"
-          sudo -u postgres psql -c "ALTER SYSTEM SET full_page_writes = 'off';"
-          sudo -u postgres psql -c "ALTER SYSTEM SET max_connections = '200';"
-          sudo systemctl restart postgresql
-
-          # Verify Unix socket works
-          psql -h /var/run/postgresql -U hsqlx_test -d hsqlx_test -c "SELECT 'ok';"
-
-      # ── Install GHC ──────────────────────────────────────────────
-      - name: Setup GHC 9.10.3
-        uses: haskell-actions/setup@v2
+      - uses: haskell-actions/setup@v2
         with:
-          ghc-version: '9.10.3'
-          cabal-version: '3.12'
-
-      - name: Cache cabal store
-        uses: actions/cache@v4
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{ env.CABAL_VERSION }}
+      - uses: actions/cache@v4
         with:
-          path: ~/.cabal/store
-          key: bench-${{ runner.os }}-ghc9.10.3-${{ hashFiles('cabal.project', '**/*.cabal') }}
-          restore-keys: bench-${{ runner.os }}-ghc9.10.3-
-
+          path: |
+            ~/.cabal/store
+            dist-newstyle
+          key: bench-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}
+          restore-keys: bench-${{ runner.os }}-${{ env.GHC_VERSION }}-
       - name: Build benchmarks
         run: |
           cabal update
           cabal build hsqlx-bench bench-compare -O2
+      - name: Save build artifacts
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cabal/store
+            dist-newstyle
+          key: bench-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
 
-      # ── Run benchmarks ───────────────────────────────────────────
-      # Unix socket connection string — no TCP overhead
-      - name: Set DATABASE_URL (Unix socket)
-        run: |
-          echo "DATABASE_URL=postgres://hsqlx_test:hsqlx_test@/hsqlx_test?host=/var/run/postgresql" >> $GITHUB_ENV
+  # ── Postgres setup (reusable step definition) ─────────────────────
+  # Each job sets up its own Postgres since jobs run on separate runners.
 
+  # ── Codec benchmarks (no DB needed) ──────────────────────────────
+  codec:
+    needs: build
+    if: contains(fromJSON('["all", "codec", "quick"]'), github.event.inputs.mode || 'all')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{ env.CABAL_VERSION }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cabal/store
+            dist-newstyle
+          key: bench-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
+          restore-keys: bench-${{ runner.os }}-${{ env.GHC_VERSION }}-
       - name: Run codec benchmarks
-        if: contains(fromJSON('["all", "codec"]'), github.event.inputs.mode || 'all')
         run: |
-          cabal bench hsqlx-bench \
-            --benchmark-options='--match prefix codec --time-limit 3 --csv codec.csv' \
-            2>&1 | tee codec-output.txt
-
-      - name: Run query benchmarks
-        if: contains(fromJSON('["all", "reads", "quick"]'), github.event.inputs.mode || 'all')
-        run: |
-          cabal bench hsqlx-bench \
-            --benchmark-options='--match prefix query --time-limit 3 --csv query.csv' \
-            2>&1 | tee query-output.txt
-
-      - name: Run concurrent benchmarks
-        if: contains(fromJSON('["all", "concurrent"]'), github.event.inputs.mode || 'all')
-        run: |
-          cabal bench hsqlx-bench \
-            --benchmark-options='+RTS -N -RTS --match prefix concurrent --time-limit 3 --csv concurrent.csv' \
-            2>&1 | tee concurrent-output.txt
-
-      - name: Run pool benchmarks
-        if: contains(fromJSON('["all", "pool"]'), github.event.inputs.mode || 'all')
-        run: |
-          cabal bench hsqlx-bench \
-            --benchmark-options='+RTS -N -RTS --match prefix pool --time-limit 3 --csv pool.csv' \
-            2>&1 | tee pool-output.txt
-
-      - name: Run asyncpg-compare benchmarks
-        if: contains(fromJSON('["all", "asyncpg"]'), github.event.inputs.mode || 'all')
-        run: |
-          cabal bench hsqlx-bench \
-            --benchmark-options='+RTS -N -RTS --match prefix asyncpg-compare --time-limit 5 --csv asyncpg-compare.csv' \
-            2>&1 | tee asyncpg-compare-output.txt
-
-      - name: Run comparative benchmarks
-        if: contains(fromJSON('["all", "reads", "inserts", "quick"]'), github.event.inputs.mode || 'all')
-        run: |
-          BENCH_MODE="${{ github.event.inputs.mode || 'quick' }}" \
-          cabal run bench-compare -- \
-            --time-limit 3 --csv comparative.csv \
-            2>&1 | tee comparative-output.txt
-
-      # ── Collect results ──────────────────────────────────────────
-      - name: Generate summary
+          cabal bench hsqlx-bench --benchmark-options='--match prefix codec --time-limit 3 --csv codec.csv' 2>&1 | tee codec-output.txt
+      - uses: actions/upload-artifact@v4
         if: always()
+        with:
+          name: bench-codec
+          path: |
+            codec.csv
+            codec-output.txt
+
+  # ── Query benchmarks ─────────────────────────────────────────────
+  query:
+    needs: build
+    if: contains(fromJSON('["all", "query", "quick"]'), github.event.inputs.mode || 'all')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{ env.CABAL_VERSION }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cabal/store
+            dist-newstyle
+          key: bench-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
+          restore-keys: bench-${{ runner.os }}-${{ env.GHC_VERSION }}-
+      - name: Setup Postgres
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-16
+          sudo systemctl start postgresql
+          sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
+          PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" | xargs)
+          sudo sed -i '1s/^/local all all trust\n/' "$PG_HBA"
+          sudo -u postgres psql -c "ALTER SYSTEM SET synchronous_commit = 'off';"
+          sudo -u postgres psql -c "ALTER SYSTEM SET fsync = 'off';"
+          sudo systemctl restart postgresql
+      - name: Run query benchmarks
+        env:
+          DATABASE_URL: postgres://hsqlx_test:hsqlx_test@/hsqlx_test?host=/var/run/postgresql
+        run: |
+          cabal bench hsqlx-bench --benchmark-options='--match prefix query --time-limit 3 --csv query.csv' 2>&1 | tee query-output.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-query
+          path: |
+            query.csv
+            query-output.txt
+
+  # ── Concurrent benchmarks ────────────────────────────────────────
+  concurrent:
+    needs: build
+    if: contains(fromJSON('["all", "concurrent"]'), github.event.inputs.mode || 'all')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{ env.CABAL_VERSION }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cabal/store
+            dist-newstyle
+          key: bench-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
+          restore-keys: bench-${{ runner.os }}-${{ env.GHC_VERSION }}-
+      - name: Setup Postgres
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-16
+          sudo systemctl start postgresql
+          sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
+          PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" | xargs)
+          sudo sed -i '1s/^/local all all trust\n/' "$PG_HBA"
+          sudo -u postgres psql -c "ALTER SYSTEM SET synchronous_commit = 'off';"
+          sudo -u postgres psql -c "ALTER SYSTEM SET fsync = 'off';"
+          sudo -u postgres psql -c "ALTER SYSTEM SET max_connections = '200';"
+          sudo systemctl restart postgresql
+      - name: Run concurrent benchmarks
+        env:
+          DATABASE_URL: postgres://hsqlx_test:hsqlx_test@/hsqlx_test?host=/var/run/postgresql
+        run: |
+          cabal bench hsqlx-bench --benchmark-options='+RTS -N -RTS --match prefix concurrent --time-limit 2 --csv concurrent.csv' 2>&1 | tee concurrent-output.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-concurrent
+          path: |
+            concurrent.csv
+            concurrent-output.txt
+
+  # ── Pool benchmarks ──────────────────────────────────────────────
+  pool:
+    needs: build
+    if: contains(fromJSON('["all", "pool"]'), github.event.inputs.mode || 'all')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{ env.CABAL_VERSION }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cabal/store
+            dist-newstyle
+          key: bench-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
+          restore-keys: bench-${{ runner.os }}-${{ env.GHC_VERSION }}-
+      - name: Setup Postgres
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-16
+          sudo systemctl start postgresql
+          sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
+          PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" | xargs)
+          sudo sed -i '1s/^/local all all trust\n/' "$PG_HBA"
+          sudo -u postgres psql -c "ALTER SYSTEM SET synchronous_commit = 'off';"
+          sudo -u postgres psql -c "ALTER SYSTEM SET fsync = 'off';"
+          sudo -u postgres psql -c "ALTER SYSTEM SET max_connections = '200';"
+          sudo systemctl restart postgresql
+      - name: Run pool benchmarks
+        env:
+          DATABASE_URL: postgres://hsqlx_test:hsqlx_test@/hsqlx_test?host=/var/run/postgresql
+        run: |
+          cabal bench hsqlx-bench --benchmark-options='+RTS -N -RTS --match prefix pool --time-limit 2 --csv pool.csv' 2>&1 | tee pool-output.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-pool
+          path: |
+            pool.csv
+            pool-output.txt
+
+  # ── asyncpg comparison benchmarks ────────────────────────────────
+  asyncpg:
+    needs: build
+    if: contains(fromJSON('["all", "asyncpg"]'), github.event.inputs.mode || 'all')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{ env.CABAL_VERSION }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cabal/store
+            dist-newstyle
+          key: bench-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
+          restore-keys: bench-${{ runner.os }}-${{ env.GHC_VERSION }}-
+      - name: Setup Postgres
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-16
+          sudo systemctl start postgresql
+          sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
+          PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" | xargs)
+          sudo sed -i '1s/^/local all all trust\n/' "$PG_HBA"
+          sudo -u postgres psql -c "ALTER SYSTEM SET synchronous_commit = 'off';"
+          sudo -u postgres psql -c "ALTER SYSTEM SET fsync = 'off';"
+          sudo -u postgres psql -c "ALTER SYSTEM SET max_connections = '200';"
+          sudo systemctl restart postgresql
+      - name: Run asyncpg comparison benchmarks
+        env:
+          DATABASE_URL: postgres://hsqlx_test:hsqlx_test@/hsqlx_test?host=/var/run/postgresql
+        run: |
+          cabal bench hsqlx-bench --benchmark-options='+RTS -N -RTS --match prefix asyncpg-compare --time-limit 5 --csv asyncpg-compare.csv' 2>&1 | tee asyncpg-compare-output.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-asyncpg
+          path: |
+            asyncpg-compare.csv
+            asyncpg-compare-output.txt
+
+  # ── Comparative benchmarks (vs hasql, pg-simple, persistent) ─────
+  comparative:
+    needs: build
+    if: contains(fromJSON('["all", "comparative"]'), github.event.inputs.mode || 'all')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{ env.CABAL_VERSION }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cabal/store
+            dist-newstyle
+          key: bench-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
+          restore-keys: bench-${{ runner.os }}-${{ env.GHC_VERSION }}-
+      - name: Setup Postgres
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-16 libpq-dev
+          sudo systemctl start postgresql
+          sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
+          PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" | xargs)
+          sudo sed -i '1s/^/local all all trust\n/' "$PG_HBA"
+          sudo -u postgres psql -c "ALTER SYSTEM SET synchronous_commit = 'off';"
+          sudo -u postgres psql -c "ALTER SYSTEM SET fsync = 'off';"
+          sudo systemctl restart postgresql
+      - name: Run comparative benchmarks
+        env:
+          DATABASE_URL: postgres://hsqlx_test:hsqlx_test@/hsqlx_test?host=/var/run/postgresql
+        run: |
+          BENCH_MODE=quick cabal run bench-compare -- --time-limit 3 --csv comparative.csv 2>&1 | tee comparative-output.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-comparative
+          path: |
+            comparative.csv
+            comparative-output.txt
+
+  # ── Summary ──────────────────────────────────────────────────────
+  summary:
+    needs: [codec, query, concurrent, pool, asyncpg, comparative]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bench-*
+          merge-multiple: true
+      - name: Generate summary
         run: |
           echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Runner:** $(uname -srm)" >> $GITHUB_STEP_SUMMARY
-          echo "**CPU:** $(lscpu | grep 'Model name' | sed 's/.*: *//')" >> $GITHUB_STEP_SUMMARY
-          echo "**GHC:** $(ghc --version)" >> $GITHUB_STEP_SUMMARY
-          echo "**Postgres:** $(psql --version | head -1)" >> $GITHUB_STEP_SUMMARY
-          echo "**Connection:** Unix socket (/var/run/postgresql)" >> $GITHUB_STEP_SUMMARY
+          echo "**Runner:** ubuntu-24.04 (4-core x86_64)" >> $GITHUB_STEP_SUMMARY
+          echo "**Connection:** Unix socket" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-
           for f in *-output.txt; do
             if [ -f "$f" ]; then
               echo "### $(basename "$f" -output.txt)" >> $GITHUB_STEP_SUMMARY
               echo '```' >> $GITHUB_STEP_SUMMARY
-              grep -E "^benchmarking|^time" "$f" >> $GITHUB_STEP_SUMMARY
+              grep -E "^benchmarking|^time" "$f" >> $GITHUB_STEP_SUMMARY || true
               echo '```' >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
             fi
           done
-
-      - name: Upload benchmark results
-        if: always()
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results-${{ github.sha }}
-          path: |
-            *.csv
-            *-output.txt
+          name: benchmark-results-all
+          path: "*.csv"
           retention-days: 90
