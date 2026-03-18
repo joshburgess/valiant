@@ -17,6 +17,7 @@ module PgWire.Pool
   , PoolStats (..)
   , newPool
   , closePool
+  , drainPool
   , withResource
   , poolStats
   , poolIsAlive
@@ -46,7 +47,7 @@ import PgWire.Async (AsyncWireConn (..))
 import PgWire.Connection (Connection (..), close, connectString, simpleQuery)
 import PgWire.Error (HsqlxError (..), throwHsqlx)
 import PgWire.Pool.Config (PoolConfig (..), QueueMode (..), RecyclingMethod (..))
-import PgWire.Pool.Observation (PoolEvent (ConnectionCreated, ConnectionDestroyed, ConnectionRecycled, HealthCheckFailed, AcquireTimeout, ReaperSwept, WarmerCreated, PoolResized, PoolShutdown))
+import PgWire.Pool.Observation (PoolEvent (ConnectionAcquired, ConnectionCreated, ConnectionDestroyed, ConnectionRecycled, ConnectionReleased, HealthCheckFailed, AcquireTimeout, ReaperSwept, WarmerCreated, PoolResized, PoolShutdown))
 import PgWire.TypeCache (TypeCache, newTypeCache)
 import System.Random (randomRIO)
 
@@ -195,6 +196,52 @@ closePool pool = do
   mapM_ (destroyEntry pool "pool closed") entries
   observe pool PoolShutdown
 
+-- | Gracefully drain the pool for rolling deployments.
+--
+-- Marks the pool as closed (no new acquires), then polls until all
+-- in-use connections are returned, then closes everything. Blocks
+-- until the drain is complete or the timeout expires.
+--
+-- @
+-- -- During rolling deployment:
+-- drainPool pool 30  -- wait up to 30 seconds for in-flight queries
+-- @
+drainPool :: Pool -> NominalDiffTime -> IO ()
+drainPool pool timeout = do
+  -- Mark as closed — new withResource calls will get PoolClosed
+  atomically $ writeTVar (pClosed pool) True
+  -- Wake blocked waiters immediately
+  ws <- atomically $ do
+    waiters <- readTVar (pWaiters pool)
+    writeTVar (pWaiters pool) Seq.empty
+    pure waiters
+  mapM_ (\w -> atomically $ tryPutTMVar w (Left PoolClosed)) ws
+  -- Poll until all active connections are returned or timeout
+  let timeoutMicros = round (timeout * 1000000) :: Int
+      pollInterval = 100000 -- 100ms
+      pollLoop !remaining
+        | remaining <= 0 = pure () -- timeout, force close
+        | otherwise = do
+            active <- readTVarIO (pActive pool)
+            idle <- Seq.length <$> readTVarIO (pIdle pool)
+            if active <= idle
+              then pure () -- all connections returned to idle
+              else do
+                threadDelay pollInterval
+                pollLoop (remaining - pollInterval)
+  pollLoop timeoutMicros
+  -- Now close everything (reuse closePool's cleanup logic)
+  entries <- atomically $ do
+    idle <- readTVar (pIdle pool)
+    writeTVar (pIdle pool) Seq.empty
+    pure idle
+  reaper <- readIORef (pReaper pool)
+  cancel reaper
+  mWarmer <- readIORef (pWarmer pool)
+  mapM_ cancel mWarmer
+  mapM_ (destroyEntry pool "drain") entries
+  observe pool PoolShutdown
+
 -- | Acquire a connection from the pool, run an action, and return the connection.
 --
 -- The connection is guaranteed to be returned to the pool (or destroyed) even
@@ -207,9 +254,13 @@ closePool pool = do
 -- @
 withResource :: Pool -> (Connection -> IO a) -> IO a
 withResource pool action = mask $ \restore -> do
+  t0 <- getCurrentTime
   conn <- acquire pool
+  t1 <- getCurrentTime
+  observe pool (ConnectionAcquired (diffUTCTime t1 t0))
   result <- restore (action conn) `onException` destroyConn pool conn "exception"
   release pool conn
+  observe pool ConnectionReleased
   pure result
 
 -- | Like 'withResource' but with a custom acquire timeout.
@@ -225,9 +276,13 @@ withResource pool action = mask $ \restore -> do
 -- @
 withResourceTimeout :: Pool -> NominalDiffTime -> (Connection -> IO a) -> IO a
 withResourceTimeout pool timeout action = mask $ \restore -> do
+  t0 <- getCurrentTime
   conn <- acquireWithTimeout pool timeout
+  t1 <- getCurrentTime
+  observe pool (ConnectionAcquired (diffUTCTime t1 t0))
   result <- restore (action conn) `onException` destroyConn pool conn "exception"
   release pool conn
+  observe pool ConnectionReleased
   pure result
 
 -- | Get an atomic snapshot of the pool's current statistics.
@@ -435,9 +490,8 @@ recycleCheck pool entry now = case poolRecyclingMethod (pConfig pool) of
 
 createConnection :: Pool -> IO Connection
 createConnection pool = do
-  conn <-
-    connectString (poolConnString (pConfig pool))
-      `onException` atomically (modifyTVar' (pActive pool) (subtract 1))
+  conn <- connectWithRetry (poolConnectionRetries (pConfig pool)) 100000
+    `onException` atomically (modifyTVar' (pActive pool) (subtract 1))
   now <- getCurrentTime
   deadline <- jitteredDeadline (pConfig pool) now
   atomically $ do
@@ -448,6 +502,18 @@ createConnection pool = do
   runHook (pOnCreate pool) conn
   runHook (pOnAcquire pool) conn
   pure conn
+  where
+    -- Exponential backoff: 100ms, 200ms, 400ms, ...
+    connectWithRetry :: Int -> Int -> IO Connection
+    connectWithRetry 0 _ = connectString (poolConnString (pConfig pool))
+    connectWithRetry !retriesLeft !delayMicros = do
+      result <- try @SomeException (connectString (poolConnString (pConfig pool)))
+      case result of
+        Right c -> pure c
+        Left _ -> do
+          logPool pool "warn" ("connection failed, retrying in " <> BS8.pack (show (delayMicros `div` 1000)) <> "ms")
+          threadDelay delayMicros
+          connectWithRetry (retriesLeft - 1) (delayMicros * 2)
 
 -- | Compute a jittered deadline for a connection.
 -- deadline = now + maxLife + uniform(-jitter, +jitter)

@@ -123,6 +123,7 @@ module Hsqlx
   , defaultPoolConfig
   , newPool
   , closePool
+  , drainPool
   , withResource
   , withResourceTimeout
   , newPoolFromString
@@ -351,7 +352,7 @@ import Hsqlx.Transaction (IsolationLevel (..), Transaction (..), TransactionMode
 import PgWire.Cancel (cancelQuery, withQueryTimeout)
 import PgWire.Connection (Connection, close, connect, connectString, simpleQuery, withConnection)
 import PgWire.Connection.Config (ConnConfig (..), TlsMode (..), defaultConnConfig)
-import PgWire.Pool (Pool, PoolStats (..), closePool, newPool, poolIsAlive, poolStats, resize, retain, setPostCreateHook, setOnAcquireHook, setPreReleaseHook, withResource, withResourceTimeout)
+import PgWire.Pool (Pool, PoolStats (..), closePool, drainPool, newPool, poolIsAlive, poolStats, resize, retain, setPostCreateHook, setOnAcquireHook, setPreReleaseHook, withResource, withResourceTimeout)
 import PgWire.Pool.Config (PoolConfig (..), PoolLogger, QueueMode (..), RecyclingMethod (..), defaultPoolConfig, nullPoolLogger)
 import PgWire.Pool.Observation ()
 

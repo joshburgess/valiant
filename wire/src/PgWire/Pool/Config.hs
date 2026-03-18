@@ -87,6 +87,9 @@ data PoolConfig = PoolConfig
   , poolMaxLifeJitter :: !NominalDiffTime
   -- ^ Randomize 'poolMaxLife' ± this amount to avoid thundering herd
   -- expiration. Default: 60s.
+  , poolConnectionRetries :: !Int
+  -- ^ Number of retries when creating a connection fails. Retries use
+  -- exponential backoff (100ms, 200ms, 400ms, ...). Default: 3.
   , poolLogger :: PoolLogger
   -- ^ Logging callback. Default: 'nullPoolLogger' (discards all events).
   , poolObserver :: PoolObserver
@@ -111,6 +114,7 @@ instance Show PoolConfig where
     , ",poolQueueMode=" <> show (poolQueueMode cfg)
     , ",poolHealthCheckAge=" <> show (poolHealthCheckAge cfg)
     , ",poolMaxLifeJitter=" <> show (poolMaxLifeJitter cfg)
+    , ",poolConnectionRetries=" <> show (poolConnectionRetries cfg)
     , ",poolLogger=<function>"
     , ",poolObserver=<function>}"
     ]
@@ -131,6 +135,7 @@ defaultPoolConfig =
     , poolQueueMode = QueueLIFO
     , poolHealthCheckAge = 5
     , poolMaxLifeJitter = 60
+    , poolConnectionRetries = 3
     , poolLogger = nullPoolLogger
     , poolObserver = nullObserver
     }
