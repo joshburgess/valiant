@@ -46,6 +46,16 @@ jobs:
 
       - name: Configure Postgres for benchmarks
         run: |
+          # Create test user and database
+          sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
+
+          # Allow password auth for Unix socket connections (default is peer)
+          PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" | xargs)
+          echo "local all hsqlx_test md5" | sudo tee -a "$PG_HBA" > /dev/null
+          # Also allow trust for the runner user
+          echo "local all all trust" | sudo tee -a "$PG_HBA" > /dev/null
+
           # Tune for throughput (same settings as docker-compose.yml)
           sudo -u postgres psql -c "ALTER SYSTEM SET shared_buffers = '256MB';"
           sudo -u postgres psql -c "ALTER SYSTEM SET work_mem = '64MB';"
@@ -55,12 +65,8 @@ jobs:
           sudo -u postgres psql -c "ALTER SYSTEM SET max_connections = '200';"
           sudo systemctl restart postgresql
 
-          # Create test user and database
-          sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
-          sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
-
           # Verify Unix socket works
-          sudo -u postgres psql -h /var/run/postgresql -U hsqlx_test -d hsqlx_test -c "SELECT 'ok';"
+          psql -h /var/run/postgresql -U hsqlx_test -d hsqlx_test -c "SELECT 'ok';"
 
       # ── Install GHC ──────────────────────────────────────────────
       - name: Setup GHC 9.10.3
