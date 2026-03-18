@@ -33,6 +33,7 @@ library
     Hsqlx.Binary.Encode
     Hsqlx.Binary.Enum
     Hsqlx.Binary.Inet
+    Hsqlx.Binary.MacAddr
     Hsqlx.Binary.Interval
     Hsqlx.Binary.JSON
     Hsqlx.Binary.Range

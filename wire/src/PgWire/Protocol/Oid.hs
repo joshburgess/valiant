@@ -20,6 +20,8 @@ module PgWire.Protocol.Oid
   , oidInterval
   , oidInet
   , oidCidr
+  , oidMacAddr
+  , oidMacAddr8
     -- * Array OIDs
   , oidBoolArray
   , oidByteaArray
@@ -67,13 +69,15 @@ oidTime = Oid 1083
 oidTimestamp = Oid 1114
 oidTimestamptz = Oid 1184
 
-oidNumeric, oidUuid, oidJsonb, oidInterval, oidInet, oidCidr :: Oid
+oidNumeric, oidUuid, oidJsonb, oidInterval, oidInet, oidCidr, oidMacAddr, oidMacAddr8 :: Oid
 oidNumeric = Oid 1700
 oidUuid = Oid 2950
 oidJsonb = Oid 3802
 oidInterval = Oid 1186
 oidInet = Oid 869
 oidCidr = Oid 650
+oidMacAddr = Oid 829
+oidMacAddr8 = Oid 774
 
 -- Array OIDs ----------------------------------------------------------------
 

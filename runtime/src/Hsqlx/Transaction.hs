@@ -11,21 +11,30 @@
 module Hsqlx.Transaction
   ( Transaction (..)
   , IsolationLevel (..)
+  , TransactionMode (..)
+  , defaultTransactionMode
   , withTransaction
   , withTransaction_
   , withTransactionLevel
+  , withTransactionMode
   , withTransactionConn
   , withTransactionLevelConn
+  , withTransactionModeConn
   , withReadOnlyTransaction
+  , withDeferrableTransaction
+  , withTransactionRetry
+  , withTransactionRetryIf
   , withSavepoint
   ) where
 
-import Control.Exception (SomeException, catch, mask, onException)
+import Control.Exception (SomeException, catch, mask, onException, throwIO, try)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
 import Data.Word (Word64)
 import PgWire.Connection (Connection, simpleQuery)
+import PgWire.Error (HsqlxError (..))
+import PgWire.Protocol.Backend (PgError (..))
 import PgWire.Pool (Pool, withResource)
 import System.IO.Unsafe (unsafePerformIO)
 
@@ -111,11 +120,57 @@ withTransactionLevelConn level conn action = mask $ \restore -> do
   _ <- simpleQuery conn "COMMIT"
   pure result
 
+-- | Full transaction mode configuration, bundling isolation level,
+-- read/write mode, and deferrable flag.
+--
+-- @
+-- let mode = defaultTransactionMode
+--       { tmIsolation = Serializable
+--       , tmReadOnly = True
+--       , tmDeferrable = True
+--       }
+-- withTransactionMode mode pool $ \\tx -> ...
+-- @
+data TransactionMode = TransactionMode
+  { tmIsolation :: !IsolationLevel
+  -- ^ Isolation level. Default: 'ReadCommitted'.
+  , tmReadOnly :: !Bool
+  -- ^ If 'True', issues @READ ONLY@. Default: 'False'.
+  , tmDeferrable :: !Bool
+  -- ^ If 'True', issues @DEFERRABLE@. Only meaningful with
+  -- 'Serializable' + 'tmReadOnly'. Default: 'False'.
+  }
+  deriving stock (Show, Eq)
+
+-- | Default transaction mode: 'ReadCommitted', read-write, not deferrable.
+defaultTransactionMode :: TransactionMode
+defaultTransactionMode = TransactionMode
+  { tmIsolation = ReadCommitted
+  , tmReadOnly = False
+  , tmDeferrable = False
+  }
+
+-- | Run an action inside a transaction with the given 'TransactionMode'.
+--
+-- This is the most general transaction function, supporting all combinations
+-- of isolation level, read/write mode, and deferrable flag.
+withTransactionMode :: TransactionMode -> Pool -> (Transaction -> IO a) -> IO a
+withTransactionMode mode pool action =
+  withResource pool $ \conn -> withTransactionModeConn mode conn action
+
+-- | Like 'withTransactionMode' but on an existing connection.
+withTransactionModeConn :: TransactionMode -> Connection -> (Transaction -> IO a) -> IO a
+withTransactionModeConn mode conn action = mask $ \restore -> do
+  _ <- simpleQuery conn (beginModeStatement mode)
+  result <- restore (action (Transaction conn)) `onException` rollback conn
+  _ <- simpleQuery conn "COMMIT"
+  pure result
+
 -- | Run an action inside a @READ ONLY@ transaction. Postgres guarantees
 -- no writes can occur, which enables use of standby replicas.
 --
 -- Uses the default 'ReadCommitted' isolation level. Combine with
--- 'withTransactionLevel' manually if you need a different level.
+-- 'withTransactionMode' if you need a different level.
 --
 -- @
 -- users <- withReadOnlyTransaction pool $ \\tx ->
@@ -123,11 +178,70 @@ withTransactionLevelConn level conn action = mask $ \restore -> do
 -- @
 withReadOnlyTransaction :: Pool -> (Transaction -> IO a) -> IO a
 withReadOnlyTransaction pool action =
-  withResource pool $ \conn -> mask $ \restore -> do
-    _ <- simpleQuery conn "BEGIN READ ONLY"
-    result <- restore (action (Transaction conn)) `onException` rollback conn
-    _ <- simpleQuery conn "COMMIT"
-    pure result
+  withTransactionMode defaultTransactionMode { tmReadOnly = True } pool action
+
+-- | Run an action inside a @SERIALIZABLE READ ONLY DEFERRABLE@ transaction.
+--
+-- PostgreSQL guarantees a consistent snapshot without risk of serialization
+-- failure, making this ideal for long-running analytics or reporting queries.
+-- May block briefly at the start while PostgreSQL finds a safe snapshot.
+--
+-- @
+-- report <- withDeferrableTransaction pool $ \\tx ->
+--   fetchAll (txConn tx) bigAnalyticsQuery ()
+-- @
+withDeferrableTransaction :: Pool -> (Transaction -> IO a) -> IO a
+withDeferrableTransaction pool action =
+  withTransactionMode
+    TransactionMode
+      { tmIsolation = Serializable
+      , tmReadOnly = True
+      , tmDeferrable = True
+      }
+    pool
+    action
+
+-- | Run a 'Serializable' transaction, automatically retrying on
+-- serialization failures (SQLSTATE 40001) up to @maxRetries@ times.
+--
+-- The action is re-run from scratch on each retry (a new BEGIN is issued).
+-- If all retries are exhausted, the last serialization error is thrown.
+--
+-- @
+-- withTransactionRetry 3 pool $ \\tx -> do
+--   balance <- fetchScalar (txConn tx) getBalance userId
+--   execute (txConn tx) setBalance (balance + amount, userId)
+-- @
+withTransactionRetry :: Int -> Pool -> (Transaction -> IO a) -> IO a
+withTransactionRetry maxRetries =
+  withTransactionRetryIf isSerializationErr maxRetries
+  where
+    isSerializationErr (QueryError err) = pgCode err == "40001"
+    isSerializationErr _ = False
+
+-- | Like 'withTransactionRetry' but with a custom predicate to decide
+-- which errors should trigger a retry.
+--
+-- @
+-- -- Retry on both serialization failures and deadlocks
+-- let shouldRetry err = isSerializationError err || isDeadlockError err
+-- withTransactionRetryIf shouldRetry 3 pool $ \\tx -> ...
+-- @
+withTransactionRetryIf
+  :: (HsqlxError -> Bool)
+  -> Int
+  -> Pool
+  -> (Transaction -> IO a)
+  -> IO a
+withTransactionRetryIf shouldRetry maxRetries pool action = go 0
+  where
+    go !attempt = do
+      result <- try (withTransactionLevel Serializable pool action)
+      case result of
+        Right val -> pure val
+        Left err
+          | shouldRetry err && attempt < maxRetries -> go (attempt + 1)
+          | otherwise -> throwIO err
 
 -- | Run an action inside a savepoint within an existing transaction.
 --
@@ -169,6 +283,17 @@ beginStatement = \case
   ReadCommitted -> "BEGIN"
   RepeatableRead -> "BEGIN ISOLATION LEVEL REPEATABLE READ"
   Serializable -> "BEGIN ISOLATION LEVEL SERIALIZABLE"
+
+beginModeStatement :: TransactionMode -> ByteString
+beginModeStatement (TransactionMode iso ro def) =
+  "BEGIN" <> isoClause <> roClause <> defClause
+  where
+    isoClause = case iso of
+      ReadCommitted -> ""
+      RepeatableRead -> " ISOLATION LEVEL REPEATABLE READ"
+      Serializable -> " ISOLATION LEVEL SERIALIZABLE"
+    roClause = if ro then " READ ONLY" else ""
+    defClause = if def then " DEFERRABLE" else ""
 
 -- | Global counter for unique savepoint names.
 {-# NOINLINE savepointCounter #-}

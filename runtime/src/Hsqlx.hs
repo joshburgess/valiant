@@ -117,6 +117,7 @@ module Hsqlx
   , closePool
   , withResource
   , withResourceTimeout
+  , newPoolFromString
   , PoolStats (..)
   , poolStats
   , poolIsAlive
@@ -133,12 +134,19 @@ module Hsqlx
     -- thrown, the transaction is automatically rolled back.
   , Transaction (..)
   , IsolationLevel (..)
+  , TransactionMode (..)
+  , defaultTransactionMode
   , withTransaction
   , withTransaction_
   , withTransactionLevel
+  , withTransactionMode
   , withTransactionConn
   , withTransactionLevelConn
+  , withTransactionModeConn
   , withReadOnlyTransaction
+  , withDeferrableTransaction
+  , withTransactionRetry
+  , withTransactionRetryIf
   , withSavepoint
 
     -- * Hsqlx monad (optional convenience)
@@ -251,6 +259,9 @@ module Hsqlx
   , ipv6
   , ipv6Host
   , inetToText
+  , PgMacAddr (..)
+  , macAddr
+  , macAddrToText
   , PgInterval (..)
   , PgRange (..)
   , RangeBound (..)
@@ -266,6 +277,7 @@ import GHC.Generics (Generic)
 import Hsqlx.Batch (fetchByIds)
 import Hsqlx.Binary.Composite (CompositeField (..))
 import Hsqlx.Binary.Inet (PgInet (..), ipv4, ipv4Host, ipv6, ipv6Host, inetToText)
+import Hsqlx.Binary.MacAddr (PgMacAddr (..), macAddr, macAddrToText)
 import Hsqlx.Binary.Interval (PgInterval (..))
 import Hsqlx.Binary.Range (PgRange (..), RangeBound (..))
 import Hsqlx.Copy (CopyResult (..), copyIn, copyInBinary, copyOut)
@@ -282,9 +294,21 @@ import Hsqlx.Statement (Statement (..), mkStatement, queryFile, queryFileAs)
 import Hsqlx.Streaming (CursorState (..), fetchBatch, withCursor)
 import Hsqlx.ToParams (EncodeField (..), ToParams (..))
 import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
-import Hsqlx.Transaction (IsolationLevel (..), Transaction (..), withReadOnlyTransaction, withSavepoint, withTransaction, withTransactionConn, withTransactionLevel, withTransactionLevelConn, withTransaction_)
+import Hsqlx.Transaction (IsolationLevel (..), Transaction (..), TransactionMode (..), defaultTransactionMode, withDeferrableTransaction, withReadOnlyTransaction, withSavepoint, withTransaction, withTransactionConn, withTransactionLevel, withTransactionLevelConn, withTransactionMode, withTransactionModeConn, withTransactionRetry, withTransactionRetryIf, withTransaction_)
 import PgWire.Cancel (cancelQuery, withQueryTimeout)
 import PgWire.Connection (Connection, close, connect, connectString, simpleQuery, withConnection)
 import PgWire.Connection.Config (ConnConfig (..), TlsMode (..), defaultConnConfig)
 import PgWire.Pool (Pool, PoolStats (..), closePool, newPool, poolIsAlive, poolStats, resize, retain, setPostCreateHook, setOnAcquireHook, setPreReleaseHook, withResource, withResourceTimeout)
 import PgWire.Pool.Config (PoolConfig (..), PoolLogger, QueueMode (..), RecyclingMethod (..), defaultPoolConfig, nullPoolLogger)
+
+import Data.ByteString (ByteString)
+
+-- | Create a connection pool from a connection string with default settings.
+--
+-- Equivalent to @'newPool' 'defaultPoolConfig' { poolConnString = connStr }@.
+--
+-- @
+-- pool <- newPoolFromString \"postgres:\/\/user:pass\@localhost:5432\/mydb\"
+-- @
+newPoolFromString :: ByteString -> IO Pool
+newPoolFromString connStr = newPool defaultPoolConfig { poolConnString = connStr }
