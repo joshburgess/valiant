@@ -158,6 +158,23 @@ module Hsqlx
   , resizeM
   , withResourceTimeoutM
 
+    -- * Large objects
+    -- | Streaming interface for binary data too large for a single column.
+    -- All operations must occur within a transaction.
+  , LoFd (..)
+  , LoMode (..)
+  , loCreate
+  , loUnlink
+  , loOpen
+  , loClose
+  , loRead
+  , loWrite
+  , loSeek
+  , loTell
+  , loTruncate
+  , loImport
+  , loExport
+
     -- * Advisory locks
     -- | PostgreSQL advisory locks for distributed coordination.
     -- Session-scoped locks require explicit release; transaction-scoped
@@ -280,6 +297,7 @@ module Hsqlx
   , Unbounded (..)
   , finite
   , fromFinite
+  , PgPoint (..)
   , PgInterval (..)
   , PgRange (..)
   , RangeBound (..)
@@ -298,6 +316,7 @@ import Hsqlx.Binary.Composite (CompositeField (..))
 import Hsqlx.Binary.HStore (PgHStore (..), hstoreFromList, hstoreToList)
 import Hsqlx.Binary.Inet (PgInet (..), ipv4, ipv4Host, ipv6, ipv6Host, inetToText)
 import Hsqlx.Binary.MacAddr (PgMacAddr (..), macAddr, macAddrToText)
+import Hsqlx.Binary.Point (PgPoint (..))
 import Hsqlx.Binary.Unbounded (Unbounded (..), finite, fromFinite)
 import Hsqlx.Binary.Interval (PgInterval (..))
 import Hsqlx.Binary.Range (PgRange (..), RangeBound (..))
@@ -305,6 +324,7 @@ import Hsqlx.Copy (CopyResult (..), copyIn, copyInBinary, copyOut)
 import Hsqlx.Error (ConstraintViolation (..), catchConstraintViolation, constraintViolation, isDeadlockError, isForeignKeyViolation, isSerializationError, isUniqueViolation, pgErrorOf, sqlState)
 import Hsqlx.Execute (execute, executeBatch, executeMany, executeReturning, executeReturningMany, fetchAll, fetchAllVec, fetchAllWith, fetchBatchAll, fetchBatchOne, fetchExists, fetchFirst, fetchOne, fetchOneOr, fetchOneOrThrow, fetchScalar, forEach, rawExecute, rawFetchAll, rawFetchOne)
 import Hsqlx.Fold (RowFold (..), executeWithFold)
+import Hsqlx.LargeObject (LoFd (..), LoMode (..), loClose, loCreate, loExport, loImport, loOpen, loRead, loSeek, loTell, loTruncate, loUnlink, loWrite)
 import Hsqlx.FromRow (DecodeColumn (..), FromRow (..))
 import Hsqlx.Logging (LogEvent (..), LogLevel (..), Logger, nullLogger, poolLoggerFromLogger, stderrLogger)
 import Hsqlx.Monad (Hsqlx, poolStatsM, resizeM, runHsqlx, withResourceTimeoutM)

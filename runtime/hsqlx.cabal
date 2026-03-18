@@ -37,6 +37,7 @@ library
     Hsqlx.Binary.Inet
     Hsqlx.Binary.MacAddr
     Hsqlx.Binary.Interval
+    Hsqlx.Binary.Point
     Hsqlx.Binary.Unbounded
     Hsqlx.Binary.JSON
     Hsqlx.Binary.Range
@@ -47,6 +48,7 @@ library
     Hsqlx.Execute
     Hsqlx.Fold
     Hsqlx.FromRow
+    Hsqlx.LargeObject
     Hsqlx.Logging
     Hsqlx.Monad
     Hsqlx.NamedParams

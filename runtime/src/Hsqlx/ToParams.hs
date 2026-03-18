@@ -128,3 +128,27 @@ instance (EncodeField a, EncodeField b, EncodeField c, EncodeField d, EncodeFiel
 instance (EncodeField a, EncodeField b, EncodeField c, EncodeField d, EncodeField e, EncodeField f, EncodeField g, EncodeField h, EncodeField i, EncodeField j) => ToParams (a, b, c, d, e, f, g, h, i, j) where
   toParams (a, b, c, d, e, f, g, h, i, j) = V.fromListN 10 [encodeField a, encodeField b, encodeField c, encodeField d, encodeField e, encodeField f, encodeField g, encodeField h, encodeField i, encodeField j]
   {-# INLINE toParams #-}
+
+instance (EncodeField a, EncodeField b, EncodeField c, EncodeField d, EncodeField e, EncodeField f, EncodeField g, EncodeField h, EncodeField i, EncodeField j, EncodeField k) => ToParams (a, b, c, d, e, f, g, h, i, j, k) where
+  toParams (a, b, c, d, e, f, g, h, i, j, k) = V.fromListN 11 [encodeField a, encodeField b, encodeField c, encodeField d, encodeField e, encodeField f, encodeField g, encodeField h, encodeField i, encodeField j, encodeField k]
+  {-# INLINE toParams #-}
+
+instance (EncodeField a, EncodeField b, EncodeField c, EncodeField d, EncodeField e, EncodeField f, EncodeField g, EncodeField h, EncodeField i, EncodeField j, EncodeField k, EncodeField l) => ToParams (a, b, c, d, e, f, g, h, i, j, k, l) where
+  toParams (a, b, c, d, e, f, g, h, i, j, k, l) = V.fromListN 12 [encodeField a, encodeField b, encodeField c, encodeField d, encodeField e, encodeField f, encodeField g, encodeField h, encodeField i, encodeField j, encodeField k, encodeField l]
+  {-# INLINE toParams #-}
+
+instance (EncodeField a, EncodeField b, EncodeField c, EncodeField d, EncodeField e, EncodeField f, EncodeField g, EncodeField h, EncodeField i, EncodeField j, EncodeField k, EncodeField l, EncodeField m) => ToParams (a, b, c, d, e, f, g, h, i, j, k, l, m) where
+  toParams (a, b, c, d, e, f, g, h, i, j, k, l, m) = V.fromListN 13 [encodeField a, encodeField b, encodeField c, encodeField d, encodeField e, encodeField f, encodeField g, encodeField h, encodeField i, encodeField j, encodeField k, encodeField l, encodeField m]
+  {-# INLINE toParams #-}
+
+instance (EncodeField a, EncodeField b, EncodeField c, EncodeField d, EncodeField e, EncodeField f, EncodeField g, EncodeField h, EncodeField i, EncodeField j, EncodeField k, EncodeField l, EncodeField m, EncodeField n) => ToParams (a, b, c, d, e, f, g, h, i, j, k, l, m, n) where
+  toParams (a, b, c, d, e, f, g, h, i, j, k, l, m, n) = V.fromListN 14 [encodeField a, encodeField b, encodeField c, encodeField d, encodeField e, encodeField f, encodeField g, encodeField h, encodeField i, encodeField j, encodeField k, encodeField l, encodeField m, encodeField n]
+  {-# INLINE toParams #-}
+
+instance (EncodeField a, EncodeField b, EncodeField c, EncodeField d, EncodeField e, EncodeField f, EncodeField g, EncodeField h, EncodeField i, EncodeField j, EncodeField k, EncodeField l, EncodeField m, EncodeField n, EncodeField o) => ToParams (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) where
+  toParams (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) = V.fromListN 15 [encodeField a, encodeField b, encodeField c, encodeField d, encodeField e, encodeField f, encodeField g, encodeField h, encodeField i, encodeField j, encodeField k, encodeField l, encodeField m, encodeField n, encodeField o]
+  {-# INLINE toParams #-}
+
+instance (EncodeField a, EncodeField b, EncodeField c, EncodeField d, EncodeField e, EncodeField f, EncodeField g, EncodeField h, EncodeField i, EncodeField j, EncodeField k, EncodeField l, EncodeField m, EncodeField n, EncodeField o, EncodeField p) => ToParams (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
+  toParams (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) = V.fromListN 16 [encodeField a, encodeField b, encodeField c, encodeField d, encodeField e, encodeField f, encodeField g, encodeField h, encodeField i, encodeField j, encodeField k, encodeField l, encodeField m, encodeField n, encodeField o, encodeField p]
+  {-# INLINE toParams #-}

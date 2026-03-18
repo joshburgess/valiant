@@ -201,6 +201,7 @@ oidMap =
     , (Oid 650, HaskellType "PgInet" "Hsqlx")
     , (Oid 829, HaskellType "PgMacAddr" "Hsqlx")
     , (Oid 774, HaskellType "PgMacAddr" "Hsqlx")
+    , (Oid 600, HaskellType "PgPoint" "Hsqlx")
     , (Oid 2950, HaskellType "UUID" "Data.UUID")
     , (Oid 3802, HaskellType "Value" "Data.Aeson")
     ]
@@ -228,6 +229,7 @@ oidNameMap =
     , (Oid 650, "cidr")
     , (Oid 829, "macaddr")
     , (Oid 774, "macaddr8")
+    , (Oid 600, "point")
     , (Oid 2950, "uuid")
     , (Oid 3802, "jsonb")
     -- Array types
