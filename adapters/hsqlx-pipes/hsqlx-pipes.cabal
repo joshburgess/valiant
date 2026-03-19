@@ -32,3 +32,25 @@ library
     , pg-wire
     , pipes           >=4.3  && <4.4
     , vector          >=0.12 && <0.14
+
+test-suite hsqlx-pipes-test
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Main.hs
+  default-language: GHC2021
+  default-extensions:
+    OverloadedStrings
+
+  other-modules:
+    TestSupport
+
+  build-depends:
+    , base            >=4.17 && <5
+    , bytestring
+    , hspec           >=2.11 && <2.12
+    , hsqlx
+    , hsqlx-pipes
+    , pg-wire
+    , pipes
+    , text

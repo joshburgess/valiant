@@ -55,3 +55,25 @@ library
     , fused-effects   >=1.1  && <1.3
     , hsqlx
     , pg-wire
+
+test-suite hsqlx-fused-effects-test
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Main.hs
+  default-language: GHC2021
+  default-extensions:
+    OverloadedStrings
+
+  other-modules:
+    TestSupport
+
+  build-depends:
+    , base            >=4.17 && <5
+    , bytestring
+    , fused-effects
+    , hspec           >=2.11 && <2.12
+    , hsqlx
+    , hsqlx-fused-effects
+    , pg-wire
+    , text

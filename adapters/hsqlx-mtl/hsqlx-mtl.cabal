@@ -45,3 +45,27 @@ library
     , time            >=1.12 && <1.15
     , transformers    >=0.6  && <0.7
     , vector          >=0.12 && <0.14
+
+test-suite hsqlx-mtl-test
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Main.hs
+  default-language: GHC2021
+  default-extensions:
+    FlexibleInstances
+    OverloadedStrings
+  ghc-options: -Wno-orphans
+
+  other-modules:
+    TestSupport
+
+  build-depends:
+    , base            >=4.17 && <5
+    , bytestring
+    , hspec           >=2.11 && <2.12
+    , hsqlx
+    , hsqlx-mtl
+    , pg-wire
+    , text
+    , transformers
