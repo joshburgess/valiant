@@ -106,7 +106,6 @@ test-suite hsqlx-test
     Hsqlx.Binary.JSONSpec
     Hsqlx.Binary.NewtypeSpec
     Hsqlx.Binary.PropertyHedgehogSpec
-    Hsqlx.Binary.PropertySpec
     Hsqlx.Binary.RangeSpec
     Hsqlx.Binary.ScientificSpec
     Hsqlx.Binary.UUIDSpec
@@ -124,7 +123,6 @@ test-suite hsqlx-test
     , hspec-hedgehog >=0.1  && <0.3
     , hsqlx
     , pg-wire
-    , QuickCheck     >=2.14 && <2.16
     , scientific
     , text
     , uuid-types
