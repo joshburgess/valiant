@@ -171,13 +171,9 @@ module Hsqlx
   , withSavepoint
 
     -- * Hsqlx monad (optional convenience)
-    -- | A 'ReaderT Pool IO' monad that carries the pool implicitly.
-    -- Import "Hsqlx.Monad" for the lifted @*M@ functions.
-  , Hsqlx
-  , runHsqlx
-  , poolStatsM
-  , resizeM
-  , withResourceTimeoutM
+    -- | For the @ReaderT Pool IO@ monad with lifted @*M@ functions,
+    -- install @hsqlx-mtl@ and import "Hsqlx.Monad".
+    -- For generic MTL-style operations, import "Hsqlx.Mtl".
 
     -- * Large objects
     -- | Streaming interface for binary data too large for a single column.
@@ -350,7 +346,6 @@ import Hsqlx.Fold (RowFold (..), executeWithFold)
 import Hsqlx.LargeObject (LoFd (..), LoMode (..), loClose, loCreate, loExport, loImport, loOpen, loRead, loSeek, loTell, loTruncate, loUnlink, loWrite)
 import Hsqlx.FromRow (DecodeColumn (..), FromRow (..))
 import Hsqlx.Logging (LogEvent (..), LogLevel (..), Logger, nullLogger, poolLoggerFromLogger, stderrLogger)
-import Hsqlx.Monad (Hsqlx, poolStatsM, resizeM, runHsqlx, withResourceTimeoutM)
 import Hsqlx.NamedParams (NamedStatement, ToNamedParams (..), mkStatementNamed)
 import Hsqlx.Notify (Notification (..), listen, unlisten, waitForNotification, waitForNotificationTimeout)
 import Hsqlx.Pipeline (Pipeline, pipeFetchOne, pipeFetchAll, pipeFetchScalar, pipeExecute, runPipeline)

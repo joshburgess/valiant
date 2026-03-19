@@ -52,7 +52,6 @@ library
     Hsqlx.FromRowFast
     Hsqlx.LargeObject
     Hsqlx.Logging
-    Hsqlx.Monad
     Hsqlx.NamedParams
     Hsqlx.Notify
     Hsqlx.Pipeline
@@ -78,9 +77,6 @@ library
     , scientific            >=0.3     && <0.4
     , uuid-types            >=1.0     && <1.1
     , aeson                 >=2.1     && <2.3
-
-    -- Monad (for Hsqlx.Monad)
-    , transformers          >=0.6     && <0.7
 
     -- Concurrency (for Streaming, Notify)
     , async                 >=2.2     && <2.3

@@ -34,6 +34,7 @@ library
     StrictData
 
   exposed-modules:
+    Hsqlx.Monad
     Hsqlx.Mtl
 
   build-depends:
@@ -41,3 +42,6 @@ library
     , hsqlx
     , mtl             >=2.2  && <2.4
     , pg-wire
+    , time            >=1.12 && <1.15
+    , transformers    >=0.6  && <0.7
+    , vector          >=0.12 && <0.14
