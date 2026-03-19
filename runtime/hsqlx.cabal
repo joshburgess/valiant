@@ -105,6 +105,7 @@ test-suite hsqlx-test
     Hsqlx.Binary.IntervalSpec
     Hsqlx.Binary.JSONSpec
     Hsqlx.Binary.NewtypeSpec
+    Hsqlx.Binary.PropertyHedgehogSpec
     Hsqlx.Binary.PropertySpec
     Hsqlx.Binary.RangeSpec
     Hsqlx.Binary.ScientificSpec
@@ -118,7 +119,9 @@ test-suite hsqlx-test
     , base           >=4.17 && <5
     , bytestring
     , containers
+    , hedgehog       >=1.2  && <1.6
     , hspec          >=2.11 && <2.12
+    , hspec-hedgehog >=0.1  && <0.3
     , hsqlx
     , pg-wire
     , QuickCheck     >=2.14 && <2.16
