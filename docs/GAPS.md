@@ -487,10 +487,55 @@ per-value heap allocation.
 
 ---
 
-## Recommended iteration order
+## Completed (from this list)
 
-1. **Connection pool optimization** — medium-large, production necessity
-2. **GHC plugin 9.10 port** — medium, ecosystem compatibility
-3. **Mock server** — medium-large, enables property-based testing
-4. **Pre-allocated receive buffer** — small, reduces recv allocations
-5. **Conduit integration** — small, streaming ecosystem interop
+- Connection pool optimization (done: jitter, hooks, resize, drain, observations)
+- GHC plugin 9.6/9.8/9.10 (done: CPP conditionals)
+- Mock server (done: PgWire.MockServer)
+- Pre-allocated receive buffer (done: 32KB chunks, Builder accumulation)
+- Conduit/pipes/streaming/streamly integration (done: 4 adapter packages)
+
+---
+
+## Future Work
+
+### State machine testing for connection pool
+
+Use `quickcheck-lockstep` or Hedgehog's built-in state machine testing
+to formally verify pool behavior under arbitrary command sequences.
+
+**Model:**
+```haskell
+data PoolModel = PoolModel
+  { mIdle :: Int
+  , mActive :: Int
+  , mMaxSize :: Int
+  , mClosed :: Bool
+  }
+```
+
+**Commands:**
+- `Acquire` — take a connection from the pool
+- `Release` — return a connection
+- `Close` — shut down the pool
+- `Resize Int` — change max size
+- `Tick` — simulate reaper sweep (expire idle connections)
+
+**Postconditions (checked after every command):**
+- `mIdle + mActive <= mMaxSize`
+- `mActive >= 0 && mIdle >= 0`
+- After `Close`: all subsequent `Acquire` returns `PoolClosed`
+- After `Resize n`: `mMaxSize == n`
+- After `Release`: `mActive` decreases by 1
+
+**Why it matters:** The Hedgehog property tests we have verify invariants
+after a fixed sequence of operations. State machine testing generates
+*arbitrary interleaved sequences* of commands and checks invariants
+after *every step*. This can find ordering-dependent bugs that fixed
+sequences miss.
+
+**Estimated effort:** 200-300 lines. Requires `quickcheck-lockstep` or
+Hedgehog state machine API. Can run against the mock server (no DB).
+
+**Reference:** Well-Typed's Haskell Unfolder Episode 44 (May 2025) on
+`quickcheck-lockstep` for state-based testing.
