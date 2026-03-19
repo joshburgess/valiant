@@ -4,6 +4,8 @@ packages: . runtime bench-compare wire example deps/entropy plugin
           adapters/hsqlx-conduit
           adapters/hsqlx-effectful
           adapters/hsqlx-fused-effects
+          adapters/hsqlx-mtl
+          adapters/hsqlx-pipes
           adapters/hsqlx-streaming
           adapters/hsqlx-streamly
 tests: True
