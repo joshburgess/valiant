@@ -164,6 +164,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/hlint-setup@v2
+        with:
+          version: '3.10'
       - uses: haskell-actions/hlint-run@v2
         with:
           path: '["runtime/src/", "wire/src/", "plugin/src/", "src/", "adapters/"]'

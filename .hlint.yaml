@@ -1,12 +1,49 @@
 # HLint configuration for hsqlx
 # Run: hlint runtime/src/ wire/src/ plugin/src/ src/ adapters/
 
-# Ignore suggestions that conflict with our style
-- ignore: {name: "Use newtype instead of data"}  # PrepareOpts is intentionally data for future fields
-- ignore: {name: "Parse error"}  # False positive on PatternSynonyms/CPP
-- ignore: {name: "Avoid lambda", within: [PgWire.Pool, PgWire.Wire, PgWire.MockServer]}  # Explicit lambdas are clearer in STM/IO contexts
+# ── Hint groups ─────────────────────────────────────────────────────
+- group: {name: future, enabled: true}   # pure over return, etc.
 
-# Module-specific ignores
-- ignore: {name: "Use fewer imports", within: [PgWire.Wire]}  # Explicit imports for clarity
-- ignore: {name: "Eta reduce", within: [Hsqlx.Transaction]}  # where clause prevents full eta reduce
-- ignore: {name: "Avoid lambda", within: [PgWire.Connection.Config]}  # isDigit lambda is clearer inline
+# ── Language extensions for parsing ─────────────────────────────────
+- arguments: [-XOverloadedStrings, -XLambdaCase]
+
+# ── Globally ignored hints ──────────────────────────────────────────
+# Style opinions that we disagree with or that conflict with our conventions
+- ignore: {name: "Use newtype instead of data"}   # data is intentional for future extension
+- ignore: {name: "Reduce duplication"}             # too subjective, left to code review
+- ignore: {name: "Parse error"}                    # false positive on CPP/PatternSynonyms
+
+# ── Module-scoped ignores ───────────────────────────────────────────
+# Performance-critical modules: don't change evaluation semantics
+- ignore: {name: "Eta reduce", within: [Hsqlx.Transaction, Hsqlx.Execute, Hsqlx.FromRow, Hsqlx.FromRowFast]}
+- ignore: {name: "Avoid lambda", within: [PgWire.Pool, PgWire.Wire, PgWire.MockServer, PgWire.Async, PgWire.Connection.Config]}
+- ignore: {name: "Use fewer imports", within: [PgWire.Wire]}
+
+# ── Restricted functions (banned globally) ──────────────────────────
+# These should never appear in committed code
+- functions:
+  # Debug functions
+  - {name: trace, within: [], message: "Remove debug trace"}
+  - {name: traceShow, within: [], message: "Remove debug traceShow"}
+  - {name: traceShowId, within: [], message: "Remove debug traceShowId"}
+  - {name: traceM, within: [], message: "Remove debug traceM"}
+
+  # Partial functions (use safe alternatives)
+  - {name: "Data.List.nub", within: [Hsqlx.CLI.Discover, Hsqlx.CLI.Command.Generate], message: "Use nubOrd from containers or Data.List.nub is O(n^2)"}
+
+  # Unsafe functions (allowed only in specific modules)
+  - {name: unsafePerformIO, within: [Hsqlx.Streaming, Hsqlx.Binary.Inet, PgWire.Async, Hsqlx.Conduit, Hsqlx.Pipes, Hsqlx.Stream, Hsqlx.Streamly, Hsqlx.Transaction, BenchQuery, BenchConcurrent, BenchPool, BenchAsyncpgCompare]}
+  - {name: unsafeCoerce, within: []}
+
+# ── Import alias consistency ────────────────────────────────────────
+- modules:
+  - {name: [Data.Map, Data.Map.Strict], as: Map}
+  - {name: [Data.Set], as: Set}
+  - {name: [Data.Text], as: T}
+  - {name: [Data.ByteString], as: BS}
+  - {name: [Data.ByteString.Char8], as: BS8}
+  - {name: [Data.ByteString.Lazy], as: LBS}
+  - {name: [Data.Vector], as: V}
+
+# ── Custom hints ────────────────────────────────────────────────────
+- warn: {lhs: return, rhs: pure, name: "Use pure instead of return"}
