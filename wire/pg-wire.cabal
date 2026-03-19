@@ -102,16 +102,20 @@ test-suite pg-wire-test
     PgWire.MockServerSpec
     PgWire.Pool.ConfigSpec
     PgWire.Pool.NoThunksSpec
+    PgWire.Pool.PropertySpec
     PgWire.Protocol.BuildersSpec
     PgWire.Protocol.OidSpec
     PgWire.Protocol.ParsersSpec
 
   ghc-options: -rtsopts "-with-rtsopts=-K8K" -finfo-table-map -fdistinct-constructor-tables
   build-depends:
+    , async        >=2.2  && <2.3
     , base         >=4.17 && <5
     , bytestring
     , crypton
+    , hedgehog     >=1.2  && <1.6
     , hspec        >=2.11 && <2.12
+    , hspec-hedgehog >=0.1 && <0.3
     , memory
     , nothunks
     , pg-wire

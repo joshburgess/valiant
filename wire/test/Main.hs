@@ -8,6 +8,7 @@ import PgWire.ErrorSpec qualified as ErrorSpec
 import PgWire.MockServerSpec qualified as MockServerSpec
 import PgWire.Pool.ConfigSpec qualified as PoolConfigSpec
 import PgWire.Pool.NoThunksSpec qualified as NoThunksSpec
+import PgWire.Pool.PropertySpec qualified as PoolPropertySpec
 import PgWire.Protocol.BuildersSpec qualified as BuildersSpec
 import PgWire.Protocol.OidSpec qualified as OidSpec
 import PgWire.Connection.EscapingSpec qualified as EscapingSpec
@@ -30,3 +31,4 @@ main = hspec $ do
   describe "PgWire.Connection.Escaping" EscapingSpec.spec
   describe "PgWire.MockServer" MockServerSpec.spec
   describe "PgWire.Pool.NoThunks" NoThunksSpec.spec
+  describe "PgWire.Pool.Property" PoolPropertySpec.spec
