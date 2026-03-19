@@ -1,0 +1,10 @@
+# HLint configuration for hsqlx
+# Run: hlint runtime/src/ wire/src/ plugin/src/ src/ adapters/
+
+# Ignore suggestions that conflict with our style
+- ignore: {name: "Use newtype instead of data"}  # PrepareOpts is intentionally data for future fields
+- ignore: {name: "Parse error"}  # False positive on PatternSynonyms/CPP
+- ignore: {name: "Avoid lambda", within: [PgWire.Pool, PgWire.Wire, PgWire.MockServer]}  # Explicit lambdas are clearer in STM/IO contexts
+
+# Module-specific ignores
+- ignore: {name: "Use fewer imports", within: [PgWire.Wire]}  # Explicit imports for clarity
