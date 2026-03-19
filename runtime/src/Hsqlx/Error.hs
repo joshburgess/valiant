@@ -45,6 +45,7 @@ module Hsqlx.Error
   ) where
 
 import Control.Exception (catch, throwIO)
+import Data.Maybe (fromMaybe)
 import Data.ByteString (ByteString)
 import PgWire.Error (HsqlxError (..))
 import PgWire.Protocol.Backend (PgError (..))
@@ -98,7 +99,7 @@ data ConstraintViolation
 constraintViolation :: HsqlxError -> Maybe ConstraintViolation
 constraintViolation (QueryError err) =
   let code = pgCode err
-      name = maybe "" id (pgConstraint err)
+      name = fromMaybe "" (pgConstraint err)
    in case code of
         "23502" -> Just (NotNullViolation name)
         "23503" -> Just (ForeignKeyViolation name)

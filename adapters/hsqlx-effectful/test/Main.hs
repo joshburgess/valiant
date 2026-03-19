@@ -56,10 +56,9 @@ main = hspec $ do
           pool <- mkPool
           let stmtInsert = Hsqlx.mkStatement "INSERT INTO users (name, email) VALUES ($1, $2)" [25, 25] [] "<test>"
               stmtCount = Hsqlx.mkStatement "SELECT count(*)::int4 FROM users" [] ["count"] "<test>" :: Hsqlx.Statement () Int32
-          _ <- runEff . runHsqlx pool $ do
+          _ <- runEff . runHsqlx pool $
             withTransactionEff $ \tx ->
               Hsqlx.execute (txConn tx) stmtInsert ("EffUser" :: Text, Just ("eff@test.com" :: Text))
-          pure ()
           count <- runEff . runHsqlx pool $ fetchScalarEff stmtCount ()
           closePool pool
           count `shouldBe` 1

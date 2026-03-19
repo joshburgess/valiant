@@ -637,7 +637,7 @@ runHook ref conn = do
 
 -- | Log a pool event using the configured logger.
 logPool :: Pool -> BS8.ByteString -> BS8.ByteString -> IO ()
-logPool pool level msg = poolLogger (pConfig pool) level msg
+logPool pool = poolLogger (pConfig pool)
 
 -- | Emit a structured observation event, catching and ignoring exceptions.
 observe :: Pool -> PoolEvent -> IO ()

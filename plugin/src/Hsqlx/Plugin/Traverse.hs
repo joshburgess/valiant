@@ -32,14 +32,14 @@ findQueryFileCalls env =
   concatMap findInBind (bagToList (tcg_binds env))
 
 findInBind :: GenLocated l (HsBindLR GhcTc GhcTc) -> [QueryFileCall]
-findInBind (L _ (FunBind {fun_id = L _ var, fun_matches = matches})) =
+findInBind (L _ FunBind {fun_id = L _ var, fun_matches = matches}) =
   let bindName = occNameString (nameOccName (varName var))
       bindType = idType var
       calls = findCallsInMG matches
    in [ QueryFileCall sp path bindType bindName | (sp, path) <- calls ]
-findInBind (L _ (XHsBindsLR (AbsBinds {abs_binds = binds}))) =
+findInBind (L _ (XHsBindsLR AbsBinds {abs_binds = binds})) =
   concatMap findInBind (bagToList binds)
-findInBind (L _ (VarBind {var_id = var, var_rhs = rhs})) =
+findInBind (L _ VarBind {var_id = var, var_rhs = rhs}) =
   let bindName = occNameString (nameOccName (varName var))
       bindType = idType var
       calls = findCallsInLExpr rhs

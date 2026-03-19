@@ -106,8 +106,8 @@ executeBatchB h stmt paramsList =
 
 -- | Run an action in a transaction.
 withTransactionB :: HsqlxHandle e -> (Transaction -> IO a) -> IO a
-withTransactionB h action = Hsqlx.withTransaction (unHandle h) action
+withTransactionB h = Hsqlx.withTransaction (unHandle h)
 
 -- | Run an action with a raw connection.
 withConnectionB :: HsqlxHandle e -> (Connection -> IO a) -> IO a
-withConnectionB h action = withResource (unHandle h) action
+withConnectionB h = withResource (unHandle h)

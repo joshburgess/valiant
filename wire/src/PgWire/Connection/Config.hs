@@ -14,6 +14,8 @@ module PgWire.Connection.Config
 
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
+import Data.Char (isDigit)
+import Data.Maybe (fromMaybe)
 import Data.Time (NominalDiffTime)
 import Data.Word (Word16)
 import Network.Socket (HostName, PortNumber)
@@ -123,7 +125,7 @@ parseUri bs = do
   -- Split user:pass@host:port/db?params
   let (authHost, pathQuery) = case BS8.break (== '/') afterSlash of
         (ah, pq) -> (ah, BS8.drop 1 pq)
-      (dbAndParams) = pathQuery
+      dbAndParams = pathQuery
       (db, queryStr) = BS8.break (== '?') dbAndParams
 
   -- Split auth@host
@@ -177,8 +179,8 @@ parseUri bs = do
       , ccKeepalivesCount = 0
       , ccTargetSessionAttrs = maybe SessionAny parseSessionAttrs
           (lookup "target_session_attrs" params)
-      , ccClientEncoding = maybe "UTF8" id (lookup "client_encoding" params)
-      , ccOptions = maybe "" id (lookup "options" params)
+      , ccClientEncoding = fromMaybe "UTF8" (lookup "client_encoding" params)
+      , ccOptions = fromMaybe "" (lookup "options" params)
       , ccLoadBalanceHosts = lookup "load_balance_hosts" params == Just "random"
       }
 
@@ -191,7 +193,7 @@ readTimeout (Just bs) = case BS8.readInt bs of
 parseKeyValue :: ByteString -> Either String ConnConfig
 parseKeyValue bs =
   let pairs = map parsePair (BS8.words bs)
-      get key def = maybe def id (lookup key pairs)
+      get key def = fromMaybe def (lookup key pairs)
       portStr = get "port" "5432"
       port = maybe 5432 fromIntegral (readPort portStr)
       tlsMode = case get "sslmode" "disable" of
@@ -241,7 +243,7 @@ readIntDef d bs = case BS8.readInt bs of
 readPort :: ByteString -> Maybe Word16
 readPort bs
   | BS8.null bs = Nothing
-  | BS8.all (\c -> c >= '0' && c <= '9') bs =
+  | BS8.all (\c -> isDigit c) bs =
       let n = BS8.foldl' (\acc c -> acc * 10 + fromIntegral (fromEnum c - 48)) 0 bs :: Int
        in if n > 0 && n <= 65535 then Just (fromIntegral n) else Nothing
   | otherwise = Nothing

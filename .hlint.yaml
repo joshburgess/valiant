@@ -8,3 +8,5 @@
 
 # Module-specific ignores
 - ignore: {name: "Use fewer imports", within: [PgWire.Wire]}  # Explicit imports for clarity
+- ignore: {name: "Eta reduce", within: [Hsqlx.Transaction]}  # where clause prevents full eta reduce
+- ignore: {name: "Avoid lambda", within: [PgWire.Connection.Config]}  # isDigit lambda is clearer inline

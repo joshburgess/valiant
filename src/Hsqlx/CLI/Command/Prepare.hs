@@ -3,6 +3,7 @@ module Hsqlx.CLI.Command.Prepare
   ) where
 
 import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -164,7 +165,7 @@ resolveParam customs conn nameMap ParamMeta {..} =
               { cpIndex = pmIndex
               , cpName = paramName
               , cpPgOid = fromIntegral oid
-              , cpPgTypeName = maybe "unknown" id (oidToTypeNameWith mempty pmOid)
+              , cpPgTypeName = fromMaybe "unknown" (oidToTypeNameWith mempty pmOid)
               , cpHaskellType = htType ht
               , cpHaskellModule = htModule ht
               , cpPgTypeCategory = Nothing
@@ -208,7 +209,7 @@ resolveColumn customs conn ColumnMeta {..} nullable =
         CacheColumn
           { ccName = cmName
           , ccPgOid = fromIntegral oid
-          , ccPgTypeName = maybe "unknown" id (oidToTypeNameWith mempty cmOid)
+          , ccPgTypeName = fromMaybe "unknown" (oidToTypeNameWith mempty cmOid)
           , ccNullable = nullable
           , ccHaskellType = htType (resolveType nullable ht)
           , ccHaskellModule = htModule ht

@@ -50,6 +50,7 @@ import Data.IORef
 import Data.Int (Int64)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe)
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 import Data.Word (Word32)
@@ -193,7 +194,7 @@ fetchAllWith conn stmt params f = do
 fetchOneOr :: Connection -> Statement p r -> p -> r -> IO r
 fetchOneOr conn stmt params def = do
   mResult <- fetchOne conn stmt params
-  pure (maybe def id mResult)
+  pure (fromMaybe def mResult)
 
 -- | Fetch the first row from a query that may return multiple rows.
 -- Equivalent to 'fetchOne' but communicates intent more clearly when the

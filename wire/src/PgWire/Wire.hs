@@ -32,6 +32,7 @@ import Data.ByteString.Unsafe qualified as BU
 import Data.ByteString.Builder qualified as B
 import Data.ByteString.Lazy qualified as LBS
 import Data.IORef
+import Data.Maybe (fromMaybe)
 import Data.Time (NominalDiffTime)
 import PgWire.Error (HsqlxError (..), throwHsqlx)
 import System.Timeout (timeout)
@@ -139,7 +140,7 @@ upgradeTls wc tlsCfg = do
         Just "system" -> pure systemStore
         Just path -> do
           mStore <- readCertificateStore path
-          pure (maybe systemStore id mStore)
+          pure (fromMaybe systemStore mStore)
 
       -- Load client certificate + key if provided
       clientCred <- case (tlsClientCert tlsCfg, tlsClientKey tlsCfg) of

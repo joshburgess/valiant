@@ -3,7 +3,7 @@ module Hsqlx.CLI.Command.Watch
   ) where
 
 import Control.Concurrent (threadDelay)
-import Control.Monad (forever, when)
+import Control.Monad (forever, unless)
 import Data.IORef
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -27,7 +27,7 @@ runWatch env = do
     Just _ -> pure ()
 
   exists <- doesDirectoryExist (appSqlDir env)
-  when (not exists) $ dieWithError (ErrSqlDirNotFound (appSqlDir env))
+  unless exists $ dieWithError (ErrSqlDirNotFound (appSqlDir env))
 
   printHeader $ "Watching " <> T.pack (appSqlDir env) <> " for changes..."
   printLn ""
@@ -58,7 +58,7 @@ scanAndPrepare env hashRef = do
   let newHashes = Map.fromList [(sqlRelPath sf, sqlHash sf) | sf <- files]
       changes = detectChanges oldHashes newHashes
 
-  when (not (null changes)) $ do
+  unless (null changes) $ do
     mapM_ reportChange changes
     printLn "  Re-preparing..."
     exitCode <- runPrepare env []

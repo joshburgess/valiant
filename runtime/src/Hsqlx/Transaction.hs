@@ -83,7 +83,7 @@ withTransaction = withTransactionLevel ReadCommitted
 --   execute (txConn tx) insertStmt params
 -- @
 withTransaction_ :: Pool -> (Transaction -> IO ()) -> IO ()
-withTransaction_ pool action = withTransaction pool action
+withTransaction_ = withTransaction
 {-# INLINE withTransaction_ #-}
 
 -- | Run an action inside a transaction with the given isolation level.
@@ -177,8 +177,8 @@ withTransactionModeConn mode conn action = mask $ \restore -> do
 --   fetchAll (txConn tx) listAllUsers ()
 -- @
 withReadOnlyTransaction :: Pool -> (Transaction -> IO a) -> IO a
-withReadOnlyTransaction pool action =
-  withTransactionMode defaultTransactionMode { tmReadOnly = True } pool action
+withReadOnlyTransaction =
+  withTransactionMode defaultTransactionMode { tmReadOnly = True }
 
 -- | Run an action inside a @SERIALIZABLE READ ONLY DEFERRABLE@ transaction.
 --
@@ -191,15 +191,13 @@ withReadOnlyTransaction pool action =
 --   fetchAll (txConn tx) bigAnalyticsQuery ()
 -- @
 withDeferrableTransaction :: Pool -> (Transaction -> IO a) -> IO a
-withDeferrableTransaction pool action =
+withDeferrableTransaction =
   withTransactionMode
     TransactionMode
       { tmIsolation = Serializable
       , tmReadOnly = True
       , tmDeferrable = True
       }
-    pool
-    action
 
 -- | Run a 'Serializable' transaction, automatically retrying on
 -- serialization failures (SQLSTATE 40001) up to @maxRetries@ times.
