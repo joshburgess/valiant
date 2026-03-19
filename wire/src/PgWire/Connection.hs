@@ -96,6 +96,11 @@ data Connection = Connection
   , connStmtCache :: !(IORef (Map ByteString ByteString))
   , connStmtCounter :: !(IORef Word64)
   , connSslActive :: !Bool
+  , connPreparedStatements :: !Bool
+  -- ^ Whether to use named prepared statements (default: True).
+  -- Set to False for compatibility with PgBouncer in transaction mode.
+  -- When False, all queries use the unnamed statement (parsed + discarded
+  -- each time, never cached).
   }
 
 -- | Access the underlying 'WireConn' for direct wire operations.
@@ -284,6 +289,7 @@ connectSingleHost cfg = do
       , connStmtCache = stmtCache
       , connStmtCounter = stmtCounter
       , connSslActive = sslActive
+      , connPreparedStatements = ccPreparedStatements cfg
       }
 
 -- | Connect using a connection string.

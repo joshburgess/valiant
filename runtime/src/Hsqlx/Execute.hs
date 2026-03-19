@@ -617,22 +617,30 @@ fetchRowsRaw conn stmt params = do
     _ -> throwHsqlx (ProtocolError "fetchRows: unexpected response type")
 
 -- | Check the statement cache. On miss, allocate a name and evict if needed.
+-- When prepared statements are disabled (PgBouncer compatibility), always
+-- returns the unnamed statement ("", True) so queries are parsed each time.
 lookupOrAllocStmt :: Connection -> Statement p r -> IO (ByteString, Bool)
-lookupOrAllocStmt conn stmt = do
-  cache <- readIORef (connStmtCache conn)
-  let sql = stmtSQL stmt
-  case Map.lookup sql cache of
-    Just name -> pure (name, False)
-    Nothing -> do
-      evictIfNeeded conn cache
-      counter <- atomicModifyIORef' (connStmtCounter conn) (\n -> (n + 1, n))
-      let name = "s" <> BS8.pack (show counter)
-      pure (name, True)
+lookupOrAllocStmt conn stmt
+  | not (connPreparedStatements conn) =
+      -- Unprepared mode: always use unnamed statement, always parse
+      pure ("", True)
+  | otherwise = do
+      cache <- readIORef (connStmtCache conn)
+      let sql = stmtSQL stmt
+      case Map.lookup sql cache of
+        Just name -> pure (name, False)
+        Nothing -> do
+          evictIfNeeded conn cache
+          counter <- atomicModifyIORef' (connStmtCounter conn) (\n -> (n + 1, n))
+          let name = "s" <> BS8.pack (show counter)
+          pure (name, True)
 
 -- | Cache a statement name after successful Parse.
+-- No-op when prepared statements are disabled (unnamed statements are never cached).
 cacheStmt :: Connection -> ByteString -> ByteString -> IO ()
-cacheStmt conn sql name =
-  modifyIORef' (connStmtCache conn) (Map.insert sql name)
+cacheStmt conn sql name
+  | not (connPreparedStatements conn) = pure ()
+  | otherwise = modifyIORef' (connStmtCache conn) (Map.insert sql name)
 
 -- | Decode a list of raw row vectors into typed values.
 decodeRows :: (Vector (Maybe ByteString) -> Either String r) -> [Vector (Maybe ByteString)] -> IO [r]

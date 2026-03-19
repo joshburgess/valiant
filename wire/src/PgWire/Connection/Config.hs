@@ -77,6 +77,11 @@ data ConnConfig = ConnConfig
   -- ^ Extra command-line options to send to the server at startup.
   , ccLoadBalanceHosts :: Bool
   -- ^ Randomize host order for multi-host connections (default: False).
+  , ccPreparedStatements :: Bool
+  -- ^ Use named prepared statements (default: True). Set to False for
+  -- compatibility with PgBouncer in transaction mode or pgpool.
+  -- When False, all queries use the unnamed statement which is
+  -- parsed and discarded each time.
   }
   deriving stock (Show)
 
@@ -104,6 +109,7 @@ defaultConnConfig =
     , ccClientEncoding = "UTF8"
     , ccOptions = ""
     , ccLoadBalanceHosts = False
+    , ccPreparedStatements = True
     }
 
 -- | Parse a PostgreSQL connection string.
@@ -182,6 +188,7 @@ parseUri bs = do
       , ccClientEncoding = fromMaybe "UTF8" (lookup "client_encoding" params)
       , ccOptions = fromMaybe "" (lookup "options" params)
       , ccLoadBalanceHosts = lookup "load_balance_hosts" params == Just "random"
+      , ccPreparedStatements = lookup "prepared_statements" params /= Just "false"
       }
 
 readTimeout :: Maybe ByteString -> NominalDiffTime
@@ -229,6 +236,7 @@ parseKeyValue bs =
           , ccClientEncoding = get "client_encoding" "UTF8"
           , ccOptions = get "options" ""
           , ccLoadBalanceHosts = get "load_balance_hosts" "disable" == "random"
+          , ccPreparedStatements = get "prepared_statements" "true" /= "false"
           }
   where
     parsePair p =
