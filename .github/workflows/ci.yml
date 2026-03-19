@@ -1,4 +1,4 @@
-# CI: build, unit tests, and integration tests.
+# CI: build and test each package independently.
 
 name: CI
 
@@ -12,52 +12,159 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  GHC_VERSION: '9.10.3'
+  CABAL_VERSION: '3.12'
+
 jobs:
-  build-and-test:
+  # ── Build (shared cache) ──────────────────────────────────────────
+  build:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-
     steps:
       - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{ env.CABAL_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cabal/store
+            dist-newstyle
+          key: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}
+          restore-keys: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-
+      - name: Build all packages
+        run: |
+          cabal update
+          cabal build pg-wire hsqlx hsqlx-plugin hsqlx-cli
+          cabal build hsqlx-mtl hsqlx-effectful hsqlx-bluefin hsqlx-fused-effects
+          cabal build hsqlx-conduit hsqlx-streaming hsqlx-streamly hsqlx-pipes
+      - uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cabal/store
+            dist-newstyle
+          key: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
 
-      - name: Install and configure PostgreSQL 16
+  # ── Unit tests (no database needed) ───────────────────────────────
+  test-pg-wire:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{ env.CABAL_VERSION }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cabal/store
+            dist-newstyle
+          key: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
+          restore-keys: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-
+      - run: cabal test pg-wire-test
+
+  test-hsqlx:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{ env.CABAL_VERSION }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cabal/store
+            dist-newstyle
+          key: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
+          restore-keys: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-
+      - run: cabal test hsqlx-test
+
+  test-cli:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{ env.CABAL_VERSION }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cabal/store
+            dist-newstyle
+          key: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
+          restore-keys: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-
+      - run: cabal test hsqlx-cli-test
+
+  test-plugin:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{ env.CABAL_VERSION }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cabal/store
+            dist-newstyle
+          key: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
+          restore-keys: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-
+      - run: cabal test hsqlx-plugin-test
+
+  # ── Integration tests (need Postgres) ─────────────────────────────
+  test-integration:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{ env.CABAL_VERSION }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cabal/store
+            dist-newstyle
+          key: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
+          restore-keys: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-
+      - name: Setup Postgres
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-16
           sudo systemctl start postgresql
           sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
           sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
-          # Allow trust auth for Unix socket (prepend to override default peer rules)
           PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" | xargs)
           sudo sed -i '1s/^/local all all trust\n/' "$PG_HBA"
           sudo systemctl reload postgresql
-
-      - name: Setup GHC 9.10.3
-        uses: haskell-actions/setup@v2
-        with:
-          ghc-version: '9.10.3'
-          cabal-version: '3.12'
-
-      - name: Cache cabal store
-        uses: actions/cache@v4
-        with:
-          path: ~/.cabal/store
-          key: ci-${{ runner.os }}-ghc9.10.3-${{ hashFiles('cabal.project', '**/*.cabal') }}
-          restore-keys: ci-${{ runner.os }}-ghc9.10.3-
-
-      - name: Build packages (excluding bench-compare)
-        run: |
-          cabal update
-          cabal build pg-wire hsqlx hsqlx-plugin hsqlx-cli
-          cabal build hsqlx-conduit hsqlx-streaming hsqlx-streamly
-
-      - name: Run unit tests (pg-wire)
-        run: cabal test pg-wire-test
-
-      - name: Run unit tests (hsqlx)
-        run: cabal test hsqlx-test
-
       - name: Run integration tests
         env:
           DATABASE_URL: postgres://hsqlx_test:hsqlx_test@/hsqlx_test?host=/var/run/postgresql
         run: cabal test hsqlx-integration
+
+  # ── HLint ─────────────────────────────────────────────────────────
+  hlint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/hlint-setup@v2
+      - uses: haskell-actions/hlint-run@v2
+        with:
+          path: '["runtime/src/", "wire/src/", "plugin/src/", "src/", "adapters/"]'
+          fail-on: warning
