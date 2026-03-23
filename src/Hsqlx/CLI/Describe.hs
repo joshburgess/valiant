@@ -161,11 +161,11 @@ data PgTypeInfo = PgTypeInfo
 -- | Query @pg_type@ for information about an unknown OID.
 queryTypeInfo :: PQ.Connection -> Oid -> IO (Maybe PgTypeInfo)
 queryTypeInfo conn (Oid rawOid) = do
-  let query =
-        "SELECT typname, typtype, typarray, typbasetype, typelem "
-          <> "FROM pg_type WHERE oid = "
-          <> BS8.pack (show (fromIntegral rawOid :: Word32))
-  mResult <- PQ.exec conn query
+  let oidParam = BS8.pack (show (fromIntegral rawOid :: Word32))
+  mResult <- PQ.execParams conn
+    "SELECT typname, typtype, typarray, typbasetype, typelem FROM pg_type WHERE oid = $1"
+    [Just (PQ.Oid 26, oidParam, PQ.Text)]  -- OID 26 = oid type
+    PQ.Text
   case mResult of
     Nothing -> pure Nothing
     Just result -> do
@@ -206,11 +206,11 @@ parseOidField (Just bs) =
 -- | Query @pg_enum@ for the labels of an enum type.
 queryEnumLabels :: PQ.Connection -> Oid -> IO [Text]
 queryEnumLabels conn (Oid rawOid) = do
-  let query =
-        "SELECT enumlabel FROM pg_enum WHERE enumtypid = "
-          <> BS8.pack (show (fromIntegral rawOid :: Word32))
-          <> " ORDER BY enumsortorder"
-  mResult <- PQ.exec conn query
+  let oidParam = BS8.pack (show (fromIntegral rawOid :: Word32))
+  mResult <- PQ.execParams conn
+    "SELECT enumlabel FROM pg_enum WHERE enumtypid = $1 ORDER BY enumsortorder"
+    [Just (PQ.Oid 26, oidParam, PQ.Text)]
+    PQ.Text
   case mResult of
     Nothing -> pure []
     Just result -> do
@@ -226,10 +226,11 @@ queryEnumLabels conn (Oid rawOid) = do
 -- | Query @pg_range@ for the subtype OID of a range type.
 queryRangeSubtype :: PQ.Connection -> Oid -> IO (Maybe Oid)
 queryRangeSubtype conn (Oid rawOid) = do
-  let query =
-        "SELECT rngsubtype FROM pg_range WHERE rngtypid = "
-          <> BS8.pack (show (fromIntegral rawOid :: Word32))
-  mResult <- PQ.exec conn query
+  let oidParam = BS8.pack (show (fromIntegral rawOid :: Word32))
+  mResult <- PQ.execParams conn
+    "SELECT rngsubtype FROM pg_range WHERE rngtypid = $1"
+    [Just (PQ.Oid 26, oidParam, PQ.Text)]
+    PQ.Text
   case mResult of
     Nothing -> pure Nothing
     Just result -> do

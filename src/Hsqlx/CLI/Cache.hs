@@ -19,7 +19,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Time (UTCTime)
 import Data.Word (Word32)
-import System.Directory (createDirectoryIfMissing, doesDirectoryExist, listDirectory)
+import System.Directory (createDirectoryIfMissing, doesDirectoryExist, listDirectory, renameFile)
 import System.FilePath ((</>))
 
 -- | The full cache entry written to a @.hsqlx/*.json@ file.
@@ -176,12 +176,16 @@ ensureCacheDir :: FilePath -> IO ()
 ensureCacheDir = createDirectoryIfMissing True
 
 -- | Write a 'CacheEntry' to disk as pretty-printed JSON.
+-- Uses write-to-temp-then-rename for atomicity: a crash mid-write
+-- cannot leave a corrupted cache file.
 writeCacheEntry :: FilePath -> CacheEntry -> IO ()
 writeCacheEntry cacheDir entry = do
   ensureCacheDir cacheDir
   let fileName = cacheFileName (ceFile entry) (T.take 12 (ceSqlHash entry))
       path = cacheDir </> fileName
-  LBS.writeFile path (encodePretty entry)
+      tmpPath = path <> ".tmp"
+  LBS.writeFile tmpPath (encodePretty entry)
+  renameFile tmpPath path
 
 -- | Read a 'CacheEntry' from a JSON file.
 readCacheEntry :: FilePath -> IO (Either String CacheEntry)

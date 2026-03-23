@@ -20,12 +20,14 @@ isNullable conn col
   | cmColumnNumber col == 0 = pure True -- no source column info
   | otherwise = do
       let Oid tableOid = cmTableOid col
-          query =
-            "SELECT NOT attnotnull FROM pg_attribute WHERE attrelid = "
-              <> BS8.pack (show tableOid)
-              <> " AND attnum = "
-              <> BS8.pack (show (cmColumnNumber col))
-      mResult <- PQ.exec conn query
+          tableParam = BS8.pack (show tableOid)
+          colParam = BS8.pack (show (cmColumnNumber col))
+      mResult <- PQ.execParams conn
+        "SELECT NOT attnotnull FROM pg_attribute WHERE attrelid = $1 AND attnum = $2"
+        [ Just (PQ.Oid 26, tableParam, PQ.Text)   -- oid type
+        , Just (PQ.Oid 21, colParam, PQ.Text)      -- int2 type
+        ]
+        PQ.Text
       case mResult of
         Nothing -> pure True -- assume nullable on error
         Just result -> do

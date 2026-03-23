@@ -15,7 +15,7 @@ import Hsqlx.CLI.Discover (SqlFile (..), discoverSqlFiles)
 import Hsqlx.CLI.Error (HsqlxCliError (..), dieWithError)
 import Hsqlx.CLI.Output
 import Hsqlx.CLI.SqlMetadata (SqlMetadata (..), parseSqlMetadata)
-import System.Directory (createDirectoryIfMissing)
+import System.Directory (createDirectoryIfMissing, renameFile)
 import System.Exit (ExitCode (..))
 import System.FilePath (dropExtension, splitDirectories, takeBaseName, takeDirectory, (</>))
 
@@ -67,7 +67,9 @@ generateModule env opts (dirKey, files) = do
           modulePath = genOutputDir opts </> moduleNameToPath moduleName
           content = renderModule env moduleName pairs
       createDirectoryIfMissing True (takeDirectory modulePath)
-      writeFile modulePath content
+      let tmpPath = modulePath <> ".tmp"
+      writeFile tmpPath content
+      renameFile tmpPath modulePath
       printLn $
         "  Generated "
           <> T.pack modulePath
