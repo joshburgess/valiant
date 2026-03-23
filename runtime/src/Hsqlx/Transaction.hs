@@ -265,7 +265,6 @@ withSavepoint tx action = do
   mask $ \restore -> do
     result <- restore (action tx) `onException` do
       _ <- simpleQuery conn ("ROLLBACK TO SAVEPOINT " <> name)
-      _ <- simpleQuery conn ("RELEASE SAVEPOINT " <> name)
       pure ()
     _ <- simpleQuery conn ("RELEASE SAVEPOINT " <> name)
     pure result

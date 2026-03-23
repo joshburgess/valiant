@@ -21,6 +21,7 @@ module Hsqlx.LargeObject
     -- * Open / close
   , loOpen
   , loClose
+  , withLargeObject
     -- * Read / write
   , loRead
   , loWrite
@@ -33,6 +34,7 @@ module Hsqlx.LargeObject
   , loExport
   ) where
 
+import Control.Exception (bracket)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as BS8
@@ -90,6 +92,13 @@ loClose :: Connection -> LoFd -> IO ()
 loClose conn (LoFd fd) = do
   _ <- simpleQuery conn ("SELECT lo_close(" <> BS8.pack (show fd) <> ")")
   pure ()
+
+-- | Open a large object, run an action, then close. Guarantees the file
+-- descriptor is closed even if the action throws an exception.
+-- Must be called within a transaction.
+withLargeObject :: Connection -> Word32 -> LoMode -> (LoFd -> IO a) -> IO a
+withLargeObject conn oid mode =
+  bracket (loOpen conn oid mode) (loClose conn)
 
 -- | Read up to @n@ bytes from a large object.
 loRead :: Connection -> LoFd -> Int32 -> IO ByteString

@@ -28,7 +28,6 @@ module Hsqlx.Pipeline
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
-import Data.Int (Int64)
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 import PgWire.Async (Request (..), Response (..), ResponseCollector (..), submitRequest)
@@ -88,16 +87,13 @@ pipeFetchScalar stmt params = QueryP stmt params $ \rows ->
 {-# INLINE pipeFetchScalar #-}
 
 -- | Pipeline a command (INSERT\/UPDATE\/DELETE).
--- Always returns 0 because individual command tags are not tracked in the
--- pipeline collector. Use 'Hsqlx.Execute.execute' outside a pipeline if you
--- need the actual rows-affected count.
-pipeExecute :: Statement p () -> p -> Pipeline Int64
-pipeExecute stmt params = QueryP stmt params $ \_ ->
-  -- The row count comes from CommandComplete, not DataRow.
-  -- For pipelined commands, we return 0 since we don't track
-  -- individual command tags in the pipeline collector.
-  -- Use executeBatch for batch commands where you need the count.
-  pure 0
+--
+-- Row counts are not available in pipeline mode because the batch collector
+-- does not track individual command tags. Use 'Hsqlx.Execute.execute' or
+-- 'Hsqlx.Execute.executeBatch' outside a pipeline if you need the
+-- rows-affected count.
+pipeExecute :: Statement p () -> p -> Pipeline ()
+pipeExecute stmt params = QueryP stmt params $ \_ -> pure ()
 {-# INLINE pipeExecute #-}
 
 -- | Execute all queries in the pipeline in a single network round-trip.
