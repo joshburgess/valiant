@@ -105,6 +105,7 @@ test-suite pg-wire-test
     PgWire.Pool.NoThunksSpec
     PgWire.Pool.PropertySpec
     PgWire.Protocol.BuildersSpec
+    PgWire.Protocol.FuzzSpec
     PgWire.Protocol.OidSpec
     PgWire.Protocol.ParsersSpec
 
@@ -114,6 +115,7 @@ test-suite pg-wire-test
     , base         >=4.17 && <5
     , bytestring
     , crypton
+    , deepseq
     , hedgehog     >=1.2  && <1.6
     , hspec        >=2.11 && <2.12
     , hspec-hedgehog >=0.1 && <0.3

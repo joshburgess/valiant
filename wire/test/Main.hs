@@ -13,6 +13,7 @@ import PgWire.Protocol.BuildersSpec qualified as BuildersSpec
 import PgWire.Protocol.OidSpec qualified as OidSpec
 import PgWire.Connection.EscapingSpec qualified as EscapingSpec
 import PgWire.Connection.FeaturesSpec qualified as FeaturesSpec
+import PgWire.Protocol.FuzzSpec qualified as FuzzSpec
 import PgWire.Protocol.ParsersSpec qualified as ParsersSpec
 import Test.Hspec
 
@@ -20,6 +21,7 @@ main :: IO ()
 main = hspec $ do
   describe "PgWire.Protocol.Builders" BuildersSpec.spec
   describe "PgWire.Protocol.Parsers" ParsersSpec.spec
+  describe "PgWire.Protocol.Fuzz" FuzzSpec.spec
   describe "PgWire.Protocol.Oid" OidSpec.spec
   describe "PgWire.Connection.Config" ConfigSpec.spec
   describe "PgWire.Pool.Config" PoolConfigSpec.spec
