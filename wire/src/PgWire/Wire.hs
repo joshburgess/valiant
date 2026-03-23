@@ -304,7 +304,9 @@ recvBackendMsg wc = do
   payload <-
     if payloadLen > 0
       then wcRecv wc (fromIntegral payloadLen)
-      else pure BS.empty
+      else if payloadLen < 0
+        then throwHsqlx (ProtocolError ("Invalid message length: " <> BS8.pack (show len)))
+        else pure BS.empty
   -- Trace the raw bytes (header + payload)
   traceIfEnabled wc TraceRecv (header <> payload)
   case parseBackendMsg tag payload of

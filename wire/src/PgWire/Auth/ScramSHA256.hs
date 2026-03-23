@@ -103,7 +103,7 @@ scramAuthInternal wc user password mCertHash = do
         Just sigB64 -> case B64.decode sigB64 of
           Left err -> throwHsqlx (AuthError ("Bad server sig base64: " <> BS8.pack err))
           Right sig
-            | sig /= serverSignature ->
+            | not (BA.constEq sig serverSignature) ->
                 throwHsqlx (AuthError "Server signature mismatch")
             | otherwise -> pure ()
     Authentication AuthOk -> pure ()

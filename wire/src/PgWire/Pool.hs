@@ -656,22 +656,26 @@ reaperThread pool = go
 
     go = do
       threadDelay intervalMicros
+      reap `catch` \(_ :: SomeException) ->
+        logPool pool "warn" "reaper: exception in sweep cycle (continuing)"
+      go
+
+    reap = do
       now <- getCurrentTime
       -- Atomically drain the idle queue
       entries <- atomically $ do
         idle <- readTVar (pIdle pool)
         writeTVar (pIdle pool) Seq.empty
         pure (seqToList idle)
-      (keep, reap) <- partitionM (shouldKeep now) entries
+      (keep, toReap) <- partitionM (shouldKeep now) entries
       -- Merge kept entries back (prepend; entries added by release
       -- during filtering are already at the tail)
       atomically $ modifyTVar' (pIdle pool) (Seq.fromList keep Seq.><)
-      let reapCount = length reap
-      mapM_ (destroyEntry pool "reaped") reap
+      let reapCount = length toReap
+      mapM_ (destroyEntry pool "reaped") toReap
       when (reapCount > 0) $ do
         logPool pool "info" ("reaper swept " <> BS8.pack (show reapCount) <> " connections")
         observe pool (ReaperSwept reapCount)
-      go
 
     shouldKeep now entry = do
       expired <- isExpiredIO pool entry now
@@ -689,6 +693,11 @@ warmerThread pool = go
 
     go = do
       threadDelay intervalMicros
+      warm `catch` \(_ :: SomeException) ->
+        logPool pool "warn" "warmer: exception in warm cycle (continuing)"
+      go
+
+    warm = do
       deficit <- atomically $ do
         closed <- readTVar (pClosed pool)
         if closed
@@ -705,7 +714,6 @@ warmerThread pool = go
       when (created > 0) $ do
         logPool pool "info" ("warmer created " <> BS8.pack (show created) <> " connections")
         observe pool (WarmerCreated created)
-      go
 
     warmN :: Int -> Int -> IO Int
     warmN !acc 0 = pure acc

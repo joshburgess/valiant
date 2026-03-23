@@ -32,9 +32,12 @@ module Hsqlx.Advisory
   ) where
 
 import Control.Exception (bracket_, finally)
+import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.Int (Int64)
-import PgWire.Connection (Connection, simpleQuery)
+import PgWire.Connection (Connection, simpleQuery, transactionStatus)
+import PgWire.Error (HsqlxError (..), throwHsqlx)
+import PgWire.Protocol.Backend (TxStatus (..))
 
 -- | Acquire a session-scoped advisory lock, run an action, then release.
 -- Blocks until the lock is available.
@@ -98,6 +101,7 @@ advisoryTryLock conn key = do
 -- @
 withAdvisoryLockTx :: Connection -> Int64 -> IO a -> IO a
 withAdvisoryLockTx conn key action = do
+  requireTransaction conn "withAdvisoryLockTx"
   advisoryLockTx conn key
   action
 
@@ -105,6 +109,7 @@ withAdvisoryLockTx conn key action = do
 -- Returns 'Nothing' if the lock is already held.
 withAdvisoryLockTxTry :: Connection -> Int64 -> IO a -> IO (Maybe a)
 withAdvisoryLockTxTry conn key action = do
+  requireTransaction conn "withAdvisoryLockTxTry"
   acquired <- advisoryTryLockTx conn key
   if acquired
     then Just <$> action
@@ -124,3 +129,11 @@ advisoryTryLockTx conn key = do
   pure $ case rows of
     [[Just "t"]] -> True
     _ -> False
+
+-- | Check that the connection is in a transaction. Throws if not.
+requireTransaction :: Connection -> ByteString -> IO ()
+requireTransaction conn label = do
+  status <- transactionStatus conn
+  case status of
+    TxInTransaction -> pure ()
+    _ -> throwHsqlx (ProtocolError (label <> ": must be called within a transaction"))

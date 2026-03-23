@@ -107,7 +107,7 @@ loRead conn (LoFd fd) n = do
     ("SELECT loread(" <> BS8.pack (show fd) <> ", " <> BS8.pack (show n) <> ")")
   case rows of
     [[Just bs]] -> pure (unescapeBytea bs)
-    _ -> pure BS.empty
+    _ -> fail "loRead: unexpected result"
 
 -- | Write bytes to a large object. Returns number of bytes written.
 loWrite :: Connection -> LoFd -> ByteString -> IO Int32
@@ -118,8 +118,8 @@ loWrite conn (LoFd fd) bs = do
   case rows of
     [[Just nBs]] -> case BS8.readInt nBs of
       Just (n, _) -> pure (fromIntegral n)
-      Nothing -> pure 0
-    _ -> pure 0
+      Nothing -> fail "loWrite: could not parse result"
+    _ -> fail "loWrite: unexpected result"
 
 -- | Seek to a position in a large object. Returns the new position.
 loSeek :: Connection -> LoFd -> Int64 -> Int32 -> IO Int64
@@ -129,8 +129,8 @@ loSeek conn (LoFd fd) offset whence = do
   case rows of
     [[Just posBs]] -> case BS8.readInteger posBs of
       Just (n, _) -> pure (fromIntegral n)
-      Nothing -> pure 0
-    _ -> pure 0
+      Nothing -> fail "loSeek: could not parse position"
+    _ -> fail "loSeek: unexpected result"
 
 -- | Get the current position in a large object.
 loTell :: Connection -> LoFd -> IO Int64
@@ -139,8 +139,8 @@ loTell conn (LoFd fd) = do
   case rows of
     [[Just posBs]] -> case BS8.readInteger posBs of
       Just (n, _) -> pure (fromIntegral n)
-      Nothing -> pure 0
-    _ -> pure 0
+      Nothing -> fail "loTell: could not parse position"
+    _ -> fail "loTell: unexpected result"
 
 -- | Truncate a large object to the given length.
 loTruncate :: Connection -> LoFd -> Int64 -> IO ()
