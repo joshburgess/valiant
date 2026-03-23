@@ -2,6 +2,12 @@
 
 Conducted 2026-03-23. Covers `pg-wire` and `hsqlx` runtime internals.
 
+**Status: ALL FINDINGS RESOLVED** (2026-03-23)
+
+- 19 issues fixed across 8 commits
+- 2 false positives (#18 pool psInUse, #24 BEGIN masking)
+- 3 LOW items addressed via documentation
+
 Each finding includes a performance impact assessment. Fixes that add overhead
 to hot paths are flagged so we can make explicit tradeoff decisions.
 

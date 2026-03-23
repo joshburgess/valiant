@@ -43,7 +43,16 @@ pgEncodeArray (Oid elemOid) elems =
       let bs = pgEncode a
        in B.int32BE (fromIntegral (BS.length bs)) <> B.byteString bs
 
--- | Decode a PostgreSQL one-dimensional binary array to a Vector.
+-- | Decode a PostgreSQL one-dimensional binary array to a @Vector@.
+--
+-- Limitations:
+--
+-- * Only one-dimensional arrays are supported. Multi-dimensional arrays
+--   produce an error.
+-- * NULL elements are not supported — PostgreSQL arrays containing NULLs
+--   will fail with @\"NULL elements not supported in Vector decode\"@.
+--   Use @Vector (Maybe a)@ with a custom decoder if you need nullable
+--   array elements.
 pgDecodeArray :: (PgDecode a) => ByteString -> Either String (Vector a)
 pgDecodeArray bs
   | BS.length bs < 12 = Left "array: header too short (need at least 12 bytes)"

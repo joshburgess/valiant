@@ -3,6 +3,11 @@
 -- When multiple connections encounter the same custom OID (e.g., a PG
 -- enum), this cache avoids redundant @pg_type@ round-trips. The cache
 -- is shared across all connections in a pool via a 'TVar'.
+--
+-- The cache grows without bound but is bounded in practice by the number
+-- of distinct custom types in the database (typically tens, not thousands).
+-- Applications that dynamically create and drop types at high volume may
+-- want to monitor 'cachedTypeCount' for unexpected growth.
 module PgWire.TypeCache
   ( TypeCache
   , TypeInfo (..)
