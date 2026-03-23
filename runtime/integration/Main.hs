@@ -1,5 +1,6 @@
 module Main where
 
+import ChaosSpec qualified
 import ConnectionSpec qualified
 import ConnectionFeaturesSpec qualified
 import CopySpec qualified
@@ -20,3 +21,4 @@ main = hspec $ do
   describe "Copy" CopySpec.spec
   describe "Pipeline" PipelineSpec.spec
   describe "Soundness" SoundnessSpec.spec
+  describe "Chaos" ChaosSpec.spec
