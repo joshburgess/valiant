@@ -38,7 +38,7 @@ import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as BS8
 import Data.Int (Int32, Int64)
 import Data.Word (Word32)
-import PgWire.Connection (Connection, simpleQuery)
+import PgWire.Connection (Connection, escapeLiteral, simpleQuery)
 
 -- | A large object file descriptor, returned by 'loOpen'.
 newtype LoFd = LoFd { unLoFd :: Int32 }
@@ -144,7 +144,7 @@ loTruncate conn (LoFd fd) len = do
 -- Returns the OID of the new object.
 loImport :: Connection -> ByteString -> IO Word32
 loImport conn path = do
-  (rows, _) <- simpleQuery conn ("SELECT lo_import('" <> path <> "')")
+  (rows, _) <- simpleQuery conn ("SELECT lo_import(" <> escapeLiteral conn path <> ")")
   case rows of
     [[Just oidBs]] -> case BS8.readInt oidBs of
       Just (n, _) -> pure (fromIntegral n)
@@ -155,7 +155,7 @@ loImport conn path = do
 loExport :: Connection -> Word32 -> ByteString -> IO ()
 loExport conn oid path = do
   _ <- simpleQuery conn
-    ("SELECT lo_export(" <> BS8.pack (show oid) <> ", '" <> path <> "')")
+    ("SELECT lo_export(" <> BS8.pack (show oid) <> ", " <> escapeLiteral conn path <> ")")
   pure ()
 
 -- Simple bytea escape/unescape for the text protocol used by simpleQuery.

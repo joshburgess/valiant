@@ -115,6 +115,7 @@ ensurePreparedRaw conn sql oids = do
       modifyIORef' (connStmtCache conn) (PSQ.insert sql tick name)
       pure name
     Nothing -> do
+      evictIfNeeded conn cache
       counter <- atomicModifyIORef' (connStmtCounter conn) (\n -> (n + 1, n))
       let name = "s" <> BS8.pack (show counter)
       resp <- submitRequest (connAsync conn) $ ReqPrepare (Parse name sql oids)
@@ -124,3 +125,20 @@ ensurePreparedRaw conn sql oids = do
           modifyIORef' (connStmtCache conn) (PSQ.insert sql tick name)
           pure name
         _ -> throwHsqlx (ProtocolError "ensurePreparedRaw: unexpected response type")
+
+-- | Maximum number of prepared statements cached per connection.
+maxCachedStatements :: Int
+maxCachedStatements = 256
+
+-- | Evict the least recently used statement if the cache is full.
+evictIfNeeded :: Connection -> PSQ.HashPSQ ByteString Word64 ByteString -> IO ()
+evictIfNeeded conn cache
+  | PSQ.size cache < maxCachedStatements = pure ()
+  | otherwise = case PSQ.findMin cache of
+      Nothing -> pure ()
+      Just (oldSql, _prio, oldName) -> do
+        resp <- submitRequest (connAsync conn) $ ReqClose (Close DescribeStatement oldName)
+        case resp of
+          RespClosed -> pure ()
+          _ -> pure () -- best effort
+        modifyIORef' (connStmtCache conn) (PSQ.delete oldSql)

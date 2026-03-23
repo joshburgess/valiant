@@ -31,7 +31,7 @@ module Hsqlx.Advisory
   , advisoryLockTx
   ) where
 
-import Control.Exception (bracket_)
+import Control.Exception (bracket_, finally)
 import Data.ByteString.Char8 qualified as BS8
 import Data.Int (Int64)
 import PgWire.Connection (Connection, simpleQuery)
@@ -62,8 +62,7 @@ withAdvisoryLockTry conn key action = do
   acquired <- advisoryTryLock conn key
   if acquired
     then do
-      result <- action
-      advisoryUnlock conn key
+      result <- action `finally` advisoryUnlock conn key
       pure (Just result)
     else pure Nothing
 

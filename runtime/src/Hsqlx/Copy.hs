@@ -11,6 +11,7 @@ module Hsqlx.Copy
   , CopyResult (..)
   ) where
 
+import Control.Exception (SomeException, catch, throwIO)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Builder qualified as B
@@ -47,6 +48,11 @@ copyIn conn sql producer =
     sendFrontendMsg wc (Query sql)
     waitCopyIn wc
     producer (\chunk -> sendFrontendMsg wc (CopyData chunk))
+      `catch` \(e :: SomeException) -> do
+        sendFrontendMsg wc (CopyFail (BS8.pack (show e)))
+        -- Drain until ReadyForQuery so the connection is usable again
+        _ <- collectCopyResult wc txRef
+        throwIO e
     sendFrontendMsg wc CopyDone
     collectCopyResult wc txRef
 
@@ -103,9 +109,14 @@ copyInBinary conn sql numCols producer =
     sendFrontendMsg wc (Query sql)
     waitCopyIn wc
     sendFrontendMsg wc (CopyData binaryCopyHeader)
-    producer $ \row -> do
-      let rowBytes = encodeBinaryRow numCols row
-      sendFrontendMsg wc (CopyData rowBytes)
+    let sendRow row = do
+          let rowBytes = encodeBinaryRow numCols row
+          sendFrontendMsg wc (CopyData rowBytes)
+    producer sendRow
+      `catch` \(e :: SomeException) -> do
+        sendFrontendMsg wc (CopyFail (BS8.pack (show e)))
+        _ <- collectCopyResult wc txRef
+        throwIO e
     sendFrontendMsg wc (CopyData binaryCopyTrailer)
     sendFrontendMsg wc CopyDone
     collectCopyResult wc txRef
