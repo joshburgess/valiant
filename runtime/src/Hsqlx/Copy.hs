@@ -49,9 +49,13 @@ copyIn conn sql producer =
     waitCopyIn wc
     producer (\chunk -> sendFrontendMsg wc (CopyData chunk))
       `catch` \(e :: SomeException) -> do
-        sendFrontendMsg wc (CopyFail (BS8.pack (show e)))
-        -- Drain until ReadyForQuery so the connection is usable again
-        _ <- collectCopyResult wc txRef
+        -- Best-effort: send CopyFail and drain so the connection is usable.
+        -- If the wire is dead, ignore the cleanup failure and re-throw
+        -- the original exception.
+        (do sendFrontendMsg wc (CopyFail (BS8.pack (show e)))
+            _ <- collectCopyResult wc txRef
+            pure ()
+          ) `catch` \(_ :: SomeException) -> pure ()
         throwIO e
     sendFrontendMsg wc CopyDone
     collectCopyResult wc txRef
@@ -114,8 +118,10 @@ copyInBinary conn sql numCols producer =
           sendFrontendMsg wc (CopyData rowBytes)
     producer sendRow
       `catch` \(e :: SomeException) -> do
-        sendFrontendMsg wc (CopyFail (BS8.pack (show e)))
-        _ <- collectCopyResult wc txRef
+        (do sendFrontendMsg wc (CopyFail (BS8.pack (show e)))
+            _ <- collectCopyResult wc txRef
+            pure ()
+          ) `catch` \(_ :: SomeException) -> pure ()
         throwIO e
     sendFrontendMsg wc (CopyData binaryCopyTrailer)
     sendFrontendMsg wc CopyDone

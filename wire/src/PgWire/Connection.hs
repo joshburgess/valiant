@@ -301,7 +301,7 @@ connectSingleHost cfg = do
       , connStmtTick = stmtTick
       , connSslActive = sslActive
       , connPreparedStatements = ccPreparedStatements cfg
-      , connMaxPreparedStatements = ccMaxPreparedStatements cfg
+      , connMaxPreparedStatements = max 1 (ccMaxPreparedStatements cfg)
       }
 
 -- | Connect using a connection string.

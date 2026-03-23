@@ -91,6 +91,14 @@ withTransaction_ = withTransaction
 -- Behaves like 'withTransaction' but issues @BEGIN ISOLATION LEVEL ...@ with
 -- the specified level. Uses 'mask' to ensure the @BEGIN@\/@COMMIT@\/@ROLLBACK@
 -- sequence cannot be interrupted by async exceptions.
+--
+-- If COMMIT fails (e.g., deferred constraint violation), the transaction is
+-- rolled back so the connection is returned to the pool in a clean state.
+-- Note: if the network drops after the server commits but before the client
+-- receives the response, the client will attempt a ROLLBACK on an already-
+-- committed transaction. This is an inherent TCP limitation — without two-
+-- phase commit, the client cannot distinguish "committed but response lost"
+-- from "failed to commit."
 withTransactionLevel :: IsolationLevel -> Pool -> (Transaction -> IO a) -> IO a
 withTransactionLevel level pool action =
   withResource pool $ \conn -> mask $ \restore -> do

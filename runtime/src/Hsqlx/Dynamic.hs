@@ -38,6 +38,7 @@ import Data.Word (Word32)
 import Hsqlx.FromRow (FromRow (..))
 import PgWire.Binary.Types (PgEncode (..))
 import PgWire.Connection (Connection)
+import PgWire.Error (HsqlxError (..), throwHsqlx)
 import PgWire.Protocol.Oid (Oid (..))
 import qualified Hsqlx.Execute as Execute
 import Data.Proxy (Proxy (..))
@@ -106,7 +107,7 @@ runSnippet conn snip = do
   let (sqlBs, oids, vals) = materialize snip
   rawRows <- Execute.rawFetchAll conn sqlBs (map fromIntegral oids) vals
   mapM (\row -> case fromRow row of
-    Left err -> fail err
+    Left err -> throwHsqlx (DecodeError (BS8.pack err))
     Right val -> pure val) rawRows
 
 -- | Execute a 'Snippet' and return the first row, or 'Nothing'.
@@ -117,7 +118,7 @@ runSnippetOne conn snip = do
   case mRow of
     Nothing -> pure Nothing
     Just row -> case fromRow row of
-      Left err -> fail err
+      Left err -> throwHsqlx (DecodeError (BS8.pack err))
       Right val -> pure (Just val)
 
 -- | Render a 'Snippet' to its SQL text (for debugging/logging).

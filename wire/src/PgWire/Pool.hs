@@ -34,7 +34,7 @@ import NoThunks.Class (NoThunks)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (Async, async, cancel, race)
 import Control.Concurrent.STM
-import Control.Exception (SomeException, catch, mask, onException, try)
+import Control.Exception (AsyncException, SomeException, catch, mask, onException, throwIO, try)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
 import Data.Int (Int32)
@@ -667,8 +667,10 @@ reaperThread pool = go
 
     go = do
       threadDelay intervalMicros
-      reap `catch` \(_ :: SomeException) ->
-        logPool pool "warn" "reaper: exception in sweep cycle (continuing)"
+      reap
+        `catch` \(e :: AsyncException) -> throwIO e
+        `catch` \(_ :: SomeException) ->
+          logPool pool "warn" "reaper: exception in sweep cycle (continuing)"
       go
 
     reap = do
@@ -704,8 +706,10 @@ warmerThread pool = go
 
     go = do
       threadDelay intervalMicros
-      warm `catch` \(_ :: SomeException) ->
-        logPool pool "warn" "warmer: exception in warm cycle (continuing)"
+      warm
+        `catch` \(e :: AsyncException) -> throwIO e
+        `catch` \(_ :: SomeException) ->
+          logPool pool "warn" "warmer: exception in warm cycle (continuing)"
       go
 
     warm = do

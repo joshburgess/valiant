@@ -25,7 +25,7 @@ module Hsqlx.Streaming
   , CursorState (..)
   ) where
 
-import Control.Exception (onException)
+import Control.Exception (SomeException, catch, onException)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
@@ -91,9 +91,10 @@ withCursor conn stmt params _batchSize action =
 
     exhausted <- newIORef False
     let cs = CursorState cursorName wc txRef exhausted
-        closeCursor = do
-          sendFrontendMsg wc (Query ("CLOSE " <> cursorName))
-          collectSimpleDiscard wc txRef
+        closeCursor =
+          (do sendFrontendMsg wc (Query ("CLOSE " <> cursorName))
+              collectSimpleDiscard wc txRef
+            ) `catch` \(_ :: SomeException) -> pure ()
     result <- action cs `onException` closeCursor
     closeCursor
     pure result
