@@ -126,14 +126,10 @@ ensurePreparedRaw conn sql oids = do
           pure name
         _ -> throwHsqlx (ProtocolError "ensurePreparedRaw: unexpected response type")
 
--- | Maximum number of prepared statements cached per connection.
-maxCachedStatements :: Int
-maxCachedStatements = 256
-
 -- | Evict the least recently used statement if the cache is full.
 evictIfNeeded :: Connection -> PSQ.HashPSQ ByteString Word64 ByteString -> IO ()
 evictIfNeeded conn cache
-  | PSQ.size cache < maxCachedStatements = pure ()
+  | PSQ.size cache < connMaxPreparedStatements conn = pure ()
   | otherwise = case PSQ.findMin cache of
       Nothing -> pure ()
       Just (oldSql, _prio, oldName) -> do

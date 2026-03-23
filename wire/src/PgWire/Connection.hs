@@ -108,6 +108,8 @@ data Connection = Connection
   -- Set to False for compatibility with PgBouncer in transaction mode.
   -- When False, all queries use the unnamed statement (parsed + discarded
   -- each time, never cached).
+  , connMaxPreparedStatements :: !Int
+  -- ^ Maximum number of prepared statements cached on this connection.
   }
 
 -- | Access the underlying 'WireConn' for direct wire operations.
@@ -299,6 +301,7 @@ connectSingleHost cfg = do
       , connStmtTick = stmtTick
       , connSslActive = sslActive
       , connPreparedStatements = ccPreparedStatements cfg
+      , connMaxPreparedStatements = ccMaxPreparedStatements cfg
       }
 
 -- | Connect using a connection string.

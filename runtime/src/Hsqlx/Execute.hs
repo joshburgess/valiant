@@ -656,10 +656,6 @@ decodeRows decode = mapM $ \row -> case decode row of
   Left err -> throwHsqlx (DecodeError (BS8.pack err))
   Right !val -> pure val
 
--- | Maximum number of prepared statements cached per connection.
-maxCachedStatements :: Int
-maxCachedStatements = 256
-
 -- | Batch size threshold for switching to streaming mode.
 batchStreamThreshold :: Int
 batchStreamThreshold = 256
@@ -698,7 +694,7 @@ nextTick conn = atomicModifyIORef' (connStmtTick conn) (\n -> (n + 1, n + 1))
 -- prepared statement (the entry with the lowest tick priority).
 evictIfNeeded :: Connection -> HashPSQ ByteString Word64 ByteString -> IO ()
 evictIfNeeded conn cache
-  | PSQ.size cache < maxCachedStatements = pure ()
+  | PSQ.size cache < connMaxPreparedStatements conn = pure ()
   | otherwise = case PSQ.findMin cache of
       Nothing -> pure ()
       Just (oldSql, _prio, oldName) -> do

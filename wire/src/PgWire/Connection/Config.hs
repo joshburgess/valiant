@@ -82,6 +82,13 @@ data ConnConfig = ConnConfig
   -- compatibility with PgBouncer in transaction mode or pgpool.
   -- When False, all queries use the unnamed statement which is
   -- parsed and discarded each time.
+  , ccMaxPreparedStatements :: !Int
+  -- ^ Maximum number of prepared statements cached per connection
+  -- (default: 256). When the cache is full, the least recently used
+  -- statement is evicted. Higher values reduce re-parses for workloads
+  -- with many distinct queries, at the cost of server-side memory
+  -- (each cached statement holds a parse tree in PostgreSQL).
+  -- Ignored when 'ccPreparedStatements' is False.
   }
   deriving stock (Show)
 
@@ -110,6 +117,7 @@ defaultConnConfig =
     , ccOptions = ""
     , ccLoadBalanceHosts = False
     , ccPreparedStatements = True
+    , ccMaxPreparedStatements = 256
     }
 
 -- | Parse a PostgreSQL connection string.
@@ -189,6 +197,7 @@ parseUri bs = do
       , ccOptions = fromMaybe "" (lookup "options" params)
       , ccLoadBalanceHosts = lookup "load_balance_hosts" params == Just "random"
       , ccPreparedStatements = lookup "prepared_statements" params /= Just "false"
+      , ccMaxPreparedStatements = maybe 256 (\v -> readIntDef 256 v) (lookup "statement_cache_size" params)
       }
 
 readTimeout :: Maybe ByteString -> NominalDiffTime
@@ -237,6 +246,7 @@ parseKeyValue bs =
           , ccOptions = get "options" ""
           , ccLoadBalanceHosts = get "load_balance_hosts" "disable" == "random"
           , ccPreparedStatements = get "prepared_statements" "true" /= "false"
+          , ccMaxPreparedStatements = readIntDef 256 (get "statement_cache_size" "256")
           }
   where
     parsePair p =
