@@ -30,6 +30,7 @@ module PgWire.Async
   , submitExclusive
   ) where
 
+import Control.Concurrent (forkIO)
 import Control.Concurrent.Async (Async, async, cancel, link2)
 import Control.Concurrent.MVar
 import Control.Concurrent.STM
@@ -604,11 +605,11 @@ readerThread ac = go `catch` onDeath
       case msg of
         NotificationResponse pid channel payload -> do
           handler <- readIORef (acNotifyHandler ac)
-          handler pid channel payload `catch` \(_ :: SomeException) -> pure ()
+          _ <- forkIO (handler pid channel payload `catch` \(_ :: SomeException) -> pure ())
           recvAndDispatch
         NoticeResponse notice -> do
           handler <- readIORef (acNoticeHandler ac)
-          handler notice `catch` \(_ :: SomeException) -> pure ()
+          _ <- forkIO (handler notice `catch` \(_ :: SomeException) -> pure ())
           recvAndDispatch
         ParameterStatus key value -> do
           modifyIORef' (acParamStatus ac) (Map.insert key value)
