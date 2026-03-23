@@ -140,6 +140,7 @@ test-suite hsqlx-integration
   default-language: GHC2021
   default-extensions:
     OverloadedStrings
+  ghc-options: -threaded -rtsopts
 
   other-modules:
     ChaosSpec
