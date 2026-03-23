@@ -48,12 +48,12 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
 import Data.Int (Int64)
-import Data.Map.Strict (Map)
-import Data.Map.Strict qualified as Map
+import Data.HashPSQ (HashPSQ)
+import Data.HashPSQ qualified as PSQ
 import Data.Maybe (fromMaybe)
 import Data.Vector (Vector)
 import Data.Vector qualified as V
-import Data.Word (Word32)
+import Data.Word (Word32, Word64)
 import PgWire.Async (Request (..), Response (..), ResponseCollector (..), submitRequest, submitExclusive)
 import PgWire.Connection (Connection (..))
 import PgWire.Protocol.Oid qualified as Oid
@@ -460,8 +460,11 @@ rawExecute conn sql oids params = do
 lookupOrAllocRaw :: Connection -> ByteString -> IO (ByteString, Bool)
 lookupOrAllocRaw conn sql = do
   cache <- readIORef (connStmtCache conn)
-  case Map.lookup sql cache of
-    Just name -> pure (name, False)
+  case PSQ.lookup sql cache of
+    Just (_prio, name) -> do
+      tick <- nextTick conn
+      modifyIORef' (connStmtCache conn) (PSQ.insert sql tick name)
+      pure (name, False)
     Nothing -> do
       evictIfNeeded conn cache
       counter <- atomicModifyIORef' (connStmtCounter conn) (\n -> (n + 1, n))
@@ -627,8 +630,11 @@ lookupOrAllocStmt conn stmt
   | otherwise = do
       cache <- readIORef (connStmtCache conn)
       let sql = stmtSQL stmt
-      case Map.lookup sql cache of
-        Just name -> pure (name, False)
+      case PSQ.lookup sql cache of
+        Just (_prio, name) -> do
+          tick <- nextTick conn
+          modifyIORef' (connStmtCache conn) (PSQ.insert sql tick name)
+          pure (name, False)
         Nothing -> do
           evictIfNeeded conn cache
           counter <- atomicModifyIORef' (connStmtCounter conn) (\n -> (n + 1, n))
@@ -640,7 +646,9 @@ lookupOrAllocStmt conn stmt
 cacheStmt :: Connection -> ByteString -> ByteString -> IO ()
 cacheStmt conn sql name
   | not (connPreparedStatements conn) = pure ()
-  | otherwise = modifyIORef' (connStmtCache conn) (Map.insert sql name)
+  | otherwise = do
+      tick <- nextTick conn
+      modifyIORef' (connStmtCache conn) (PSQ.insert sql tick name)
 
 -- | Decode a list of raw row vectors into typed values.
 decodeRows :: (Vector (Maybe ByteString) -> Either String r) -> [Vector (Maybe ByteString)] -> IO [r]
@@ -664,8 +672,11 @@ ensurePrepared :: Connection -> Statement p r -> IO ByteString
 ensurePrepared conn stmt = do
   cache <- readIORef (connStmtCache conn)
   let sql = stmtSQL stmt
-  case Map.lookup sql cache of
-    Just name -> pure name
+  case PSQ.lookup sql cache of
+    Just (_prio, name) -> do
+      tick <- nextTick conn
+      modifyIORef' (connStmtCache conn) (PSQ.insert sql tick name)
+      pure name
     Nothing -> do
       evictIfNeeded conn cache
       counter <- atomicModifyIORef' (connStmtCounter conn) (\n -> (n + 1, n))
@@ -674,22 +685,28 @@ ensurePrepared conn stmt = do
       resp <- submitRequest (connAsync conn) $ ReqPrepare (Parse name sql oids)
       case resp of
         RespParsed -> do
-          modifyIORef' (connStmtCache conn) (Map.insert sql name)
+          tick <- nextTick conn
+          modifyIORef' (connStmtCache conn) (PSQ.insert sql tick name)
           pure name
         _ -> throwHsqlx (ProtocolError "ensurePrepared: unexpected response type")
 
--- | If the cache has reached its limit, close the oldest prepared statement.
-evictIfNeeded :: Connection -> Map ByteString ByteString -> IO ()
+-- | Bump the monotonic tick counter and return the new value.
+nextTick :: Connection -> IO Word64
+nextTick conn = atomicModifyIORef' (connStmtTick conn) (\n -> (n + 1, n + 1))
+
+-- | If the cache has reached its limit, evict the least recently used
+-- prepared statement (the entry with the lowest tick priority).
+evictIfNeeded :: Connection -> HashPSQ ByteString Word64 ByteString -> IO ()
 evictIfNeeded conn cache
-  | Map.size cache < maxCachedStatements = pure ()
-  | otherwise = case Map.lookupMin cache of
+  | PSQ.size cache < maxCachedStatements = pure ()
+  | otherwise = case PSQ.findMin cache of
       Nothing -> pure ()
-      Just (oldSql, oldName) -> do
+      Just (oldSql, _prio, oldName) -> do
         resp <- submitRequest (connAsync conn) $ ReqClose (Close DescribeStatement oldName)
         case resp of
           RespClosed -> pure ()
           _ -> pure () -- best effort
-        modifyIORef' (connStmtCache conn) (Map.delete oldSql)
+        modifyIORef' (connStmtCache conn) (PSQ.delete oldSql)
 
 ------------------------------------------------------------------------
 -- Streaming batch helpers (exclusive mode, direct wire access)

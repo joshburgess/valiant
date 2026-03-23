@@ -65,6 +65,8 @@ import System.Random (randomRIO)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
+import Data.HashPSQ (HashPSQ)
+import Data.HashPSQ qualified as PSQ
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Int (Int32)
@@ -93,8 +95,13 @@ data Connection = Connection
   , connConfig :: !ConnConfig
   , connBackendPid :: {-# UNPACK #-} !Int32
   , connBackendKey :: {-# UNPACK #-} !Int32
-  , connStmtCache :: !(IORef (Map ByteString ByteString))
+  , connStmtCache :: !(IORef (HashPSQ ByteString Word64 ByteString))
+  -- ^ LRU prepared statement cache. Keys are SQL text, priorities are
+  -- monotonic access ticks (lower = least recently used), values are
+  -- server-side statement names.
   , connStmtCounter :: !(IORef Word64)
+  , connStmtTick :: !(IORef Word64)
+  -- ^ Monotonic tick counter for LRU cache priorities.
   , connSslActive :: !Bool
   , connPreparedStatements :: !Bool
   -- ^ Whether to use named prepared statements (default: True).
@@ -271,8 +278,9 @@ connectSingleHost cfg = do
 
   pid <- readIORef pidRef
   key <- readIORef keyRef
-  stmtCache <- newIORef Map.empty
+  stmtCache <- newIORef PSQ.empty
   stmtCounter <- newIORef 0
+  stmtTick <- newIORef 0
   let sslActive = case ccTls cfg of
         TlsDisable -> False
         _ -> True
@@ -288,6 +296,7 @@ connectSingleHost cfg = do
       , connBackendKey = key
       , connStmtCache = stmtCache
       , connStmtCounter = stmtCounter
+      , connStmtTick = stmtTick
       , connSslActive = sslActive
       , connPreparedStatements = ccPreparedStatements cfg
       }

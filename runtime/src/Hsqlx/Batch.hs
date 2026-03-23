@@ -25,10 +25,10 @@ module Hsqlx.Batch
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
-import Data.Map.Strict qualified as Map
+import Data.HashPSQ qualified as PSQ
 import Data.Vector (Vector)
 import Data.Vector qualified as V
-import Data.Word (Word32)
+import Data.Word (Word32, Word64)
 import PgWire.Async (Request (..), Response (..), ResponseCollector (..), submitRequest)
 import PgWire.Binary.Types (PgEncode (..))
 import PgWire.Connection (Connection (..))
@@ -102,17 +102,25 @@ arrayOidFor oid        = oid       -- fallback: use as-is
 
 -- Internal helpers --------------------------------------------------------
 
+-- | Bump the monotonic tick counter and return the new value.
+nextTick :: Connection -> IO Word64
+nextTick conn = atomicModifyIORef' (connStmtTick conn) (\n -> (n + 1, n + 1))
+
 ensurePreparedRaw :: Connection -> ByteString -> Vector Word32 -> IO ByteString
 ensurePreparedRaw conn sql oids = do
   cache <- readIORef (connStmtCache conn)
-  case Map.lookup sql cache of
-    Just name -> pure name
+  case PSQ.lookup sql cache of
+    Just (_prio, name) -> do
+      tick <- nextTick conn
+      modifyIORef' (connStmtCache conn) (PSQ.insert sql tick name)
+      pure name
     Nothing -> do
       counter <- atomicModifyIORef' (connStmtCounter conn) (\n -> (n + 1, n))
       let name = "s" <> BS8.pack (show counter)
       resp <- submitRequest (connAsync conn) $ ReqPrepare (Parse name sql oids)
       case resp of
         RespParsed -> do
-          modifyIORef' (connStmtCache conn) (Map.insert sql name)
+          tick <- nextTick conn
+          modifyIORef' (connStmtCache conn) (PSQ.insert sql tick name)
           pure name
         _ -> throwHsqlx (ProtocolError "ensurePreparedRaw: unexpected response type")
