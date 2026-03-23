@@ -6,6 +6,7 @@ import CopySpec qualified
 import ExecuteSpec qualified
 import PipelineSpec qualified
 import PoolSpec qualified
+import SoundnessSpec qualified
 import TransactionSpec qualified
 import Test.Hspec
 
@@ -18,3 +19,4 @@ main = hspec $ do
   describe "Transaction" TransactionSpec.spec
   describe "Copy" CopySpec.spec
   describe "Pipeline" PipelineSpec.spec
+  describe "Soundness" SoundnessSpec.spec
