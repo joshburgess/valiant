@@ -33,7 +33,7 @@ module PgWire.Async
 import Control.Concurrent.Async (Async, async, cancel, link2)
 import Control.Concurrent.MVar
 import Control.Concurrent.STM
-import Control.Exception (SomeException, catch, throwIO, try)
+import Control.Exception (SomeException, catch, mask, onException, throwIO, try)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
@@ -256,9 +256,12 @@ submitRequest awc req = do
       -- Fast path: send directly, enqueue pending for reader
       let (msgs, collector) = requestToMsgs req
       sendFrontendMsgs (awcWire awc) msgs
-      atomically $ writeTQueue (awcPending awc) (PendingResponse collector respVar)
-      -- Release the send lock
-      atomically $ putTMVar (awcSendLock awc) ()
+      -- Enqueue pending and release lock atomically so another fast-path
+      -- caller cannot send and enqueue before our pending is visible to
+      -- the reader — preserving the FIFO invariant.
+      atomically $ do
+        writeTQueue (awcPending awc) (PendingResponse collector respVar)
+        putTMVar (awcSendLock awc) ()
       -- Wait for response from reader
       result <- takeMVar respVar
       case result of
@@ -273,7 +276,7 @@ submitRequest awc req = do
 --
 -- Used for COPY, cursors, folds — operations that need direct socket access.
 submitExclusive :: AsyncWireConn -> (WireConn -> IORef TxStatus -> IO a) -> IO a
-submitExclusive awc action = do
+submitExclusive awc action = mask $ \restore -> do
   respVar <- newEmptyMVar
   -- Combine alive check with exclusive signal in one STM transaction.
   signaled <- atomically $ do
@@ -293,14 +296,13 @@ submitExclusive awc action = do
           -- We now have exclusive access to the WireConn.
           -- Reader is blocked on empty awcPending.
           -- Writer is blocked waiting for us to signal done.
-          a <- action (awcWire awc) (awcTxStatus awc)
-
-          -- Signal done: writer is waiting on takeTMVar (awcExclusive).
-          -- We put a dummy MVar, writer takes it and discards.
-          doneVar <- newEmptyMVar
-          atomically $ putTMVar (awcExclusive awc) doneVar
-          putMVar doneVar (Right RespParsed)
-
+          let signalDone = do
+                doneVar <- newEmptyMVar
+                atomically $ putTMVar (awcExclusive awc) doneVar
+                putMVar doneVar (Right RespParsed)
+          a <- restore (action (awcWire awc) (awcTxStatus awc))
+                 `onException` signalDone
+          signalDone
           pure a
 
 -- | Extract messages and collector from a request (used by fast path).
@@ -554,7 +556,7 @@ readerThread ac = go `catch` onDeath
       msg <- recvAndDispatch
       case msg of
         CloseComplete -> pure ()
-        ErrorResponse _ -> pure ()
+        ErrorResponse err -> throwIO (QueryError err)
         other -> throwIO (ProtocolError ("Expected CloseComplete, got: " <> BS8.pack (show other)))
 
     collectBatchLoop :: Int -> IO [[Vector (Maybe ByteString)]]
