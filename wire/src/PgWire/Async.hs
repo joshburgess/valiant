@@ -256,7 +256,9 @@ submitRequest awc req = do
     Just True -> do
       -- Fast path: send directly, enqueue pending for reader
       let (msgs, collector) = requestToMsgs req
+          releaseLock = atomically $ putTMVar (awcSendLock awc) ()
       sendFrontendMsgs (awcWire awc) msgs
+        `onException` releaseLock
       -- Enqueue pending and release lock atomically so another fast-path
       -- caller cannot send and enqueue before our pending is visible to
       -- the reader — preserving the FIFO invariant.

@@ -96,7 +96,7 @@ withTransactionLevel level pool action =
   withResource pool $ \conn -> mask $ \restore -> do
     _ <- simpleQuery conn (beginStatement level)
     result <- restore (action (Transaction conn)) `onException` rollback conn
-    _ <- simpleQuery conn "COMMIT"
+    _ <- simpleQuery conn "COMMIT" `onException` rollback conn
     pure result
 
 -- | Run an action inside a transaction on an existing connection.
@@ -117,7 +117,7 @@ withTransactionLevelConn :: IsolationLevel -> Connection -> (Transaction -> IO a
 withTransactionLevelConn level conn action = mask $ \restore -> do
   _ <- simpleQuery conn (beginStatement level)
   result <- restore (action (Transaction conn)) `onException` rollback conn
-  _ <- simpleQuery conn "COMMIT"
+  _ <- simpleQuery conn "COMMIT" `onException` rollback conn
   pure result
 
 -- | Full transaction mode configuration, bundling isolation level,
@@ -163,7 +163,7 @@ withTransactionModeConn :: TransactionMode -> Connection -> (Transaction -> IO a
 withTransactionModeConn mode conn action = mask $ \restore -> do
   _ <- simpleQuery conn (beginModeStatement mode)
   result <- restore (action (Transaction conn)) `onException` rollback conn
-  _ <- simpleQuery conn "COMMIT"
+  _ <- simpleQuery conn "COMMIT" `onException` rollback conn
   pure result
 
 -- | Run an action inside a @READ ONLY@ transaction. Postgres guarantees

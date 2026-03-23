@@ -41,6 +41,7 @@ import Data.ByteString.Char8 qualified as BS8
 import Data.Int (Int32, Int64)
 import Data.Word (Word32)
 import PgWire.Connection (Connection, escapeLiteral, simpleQuery)
+import PgWire.Error (HsqlxError (..), throwHsqlx)
 
 -- | A large object file descriptor, returned by 'loOpen'.
 newtype LoFd = LoFd { unLoFd :: Int32 }
@@ -66,8 +67,8 @@ loCreate conn = do
   case rows of
     [[Just oidBs]] -> case BS8.readInt oidBs of
       Just (n, _) -> pure (fromIntegral n)
-      Nothing -> fail "loCreate: could not parse OID"
-    _ -> fail "loCreate: unexpected result"
+      Nothing -> throwHsqlx (DecodeError "loCreate: could not parse OID")
+    _ -> throwHsqlx (DecodeError "loCreate: unexpected result")
 
 -- | Delete a large object.
 loUnlink :: Connection -> Word32 -> IO ()
@@ -84,8 +85,8 @@ loOpen conn oid mode = do
   case rows of
     [[Just fdBs]] -> case BS8.readInt fdBs of
       Just (n, _) -> pure (LoFd (fromIntegral n))
-      Nothing -> fail "loOpen: could not parse fd"
-    _ -> fail "loOpen: unexpected result"
+      Nothing -> throwHsqlx (DecodeError "loOpen: could not parse fd")
+    _ -> throwHsqlx (DecodeError "loOpen: unexpected result")
 
 -- | Close a large object file descriptor.
 loClose :: Connection -> LoFd -> IO ()
@@ -107,7 +108,7 @@ loRead conn (LoFd fd) n = do
     ("SELECT loread(" <> BS8.pack (show fd) <> ", " <> BS8.pack (show n) <> ")")
   case rows of
     [[Just bs]] -> pure (unescapeBytea bs)
-    _ -> fail "loRead: unexpected result"
+    _ -> throwHsqlx (DecodeError "loRead: unexpected result")
 
 -- | Write bytes to a large object. Returns number of bytes written.
 loWrite :: Connection -> LoFd -> ByteString -> IO Int32
@@ -118,8 +119,8 @@ loWrite conn (LoFd fd) bs = do
   case rows of
     [[Just nBs]] -> case BS8.readInt nBs of
       Just (n, _) -> pure (fromIntegral n)
-      Nothing -> fail "loWrite: could not parse result"
-    _ -> fail "loWrite: unexpected result"
+      Nothing -> throwHsqlx (DecodeError "loWrite: could not parse result")
+    _ -> throwHsqlx (DecodeError "loWrite: unexpected result")
 
 -- | Seek to a position in a large object. Returns the new position.
 loSeek :: Connection -> LoFd -> Int64 -> Int32 -> IO Int64
@@ -129,8 +130,8 @@ loSeek conn (LoFd fd) offset whence = do
   case rows of
     [[Just posBs]] -> case BS8.readInteger posBs of
       Just (n, _) -> pure (fromIntegral n)
-      Nothing -> fail "loSeek: could not parse position"
-    _ -> fail "loSeek: unexpected result"
+      Nothing -> throwHsqlx (DecodeError "loSeek: could not parse position")
+    _ -> throwHsqlx (DecodeError "loSeek: unexpected result")
 
 -- | Get the current position in a large object.
 loTell :: Connection -> LoFd -> IO Int64
@@ -139,8 +140,8 @@ loTell conn (LoFd fd) = do
   case rows of
     [[Just posBs]] -> case BS8.readInteger posBs of
       Just (n, _) -> pure (fromIntegral n)
-      Nothing -> fail "loTell: could not parse position"
-    _ -> fail "loTell: unexpected result"
+      Nothing -> throwHsqlx (DecodeError "loTell: could not parse position")
+    _ -> throwHsqlx (DecodeError "loTell: unexpected result")
 
 -- | Truncate a large object to the given length.
 loTruncate :: Connection -> LoFd -> Int64 -> IO ()
@@ -157,8 +158,8 @@ loImport conn path = do
   case rows of
     [[Just oidBs]] -> case BS8.readInt oidBs of
       Just (n, _) -> pure (fromIntegral n)
-      Nothing -> fail "loImport: could not parse OID"
-    _ -> fail "loImport: unexpected result"
+      Nothing -> throwHsqlx (DecodeError "loImport: could not parse OID")
+    _ -> throwHsqlx (DecodeError "loImport: unexpected result")
 
 -- | Export a large object to a file on the server filesystem.
 loExport :: Connection -> Word32 -> ByteString -> IO ()
