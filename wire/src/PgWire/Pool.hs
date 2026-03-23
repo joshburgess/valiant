@@ -43,6 +43,7 @@ import Data.Map.Strict qualified as Map
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Data.Time (NominalDiffTime, UTCTime, addUTCTime, diffUTCTime, getCurrentTime)
+import Data.HashPSQ qualified as PSQ
 import PgWire.Async (AsyncWireConn (..))
 import PgWire.Connection (Connection (..), close, connectString, simpleQuery)
 import PgWire.Error (HsqlxError (..), throwHsqlx)
@@ -477,16 +478,23 @@ recycleCheck pool entry now = case poolRecyclingMethod (pConfig pool) of
         lastUsed <- readIORef (peLastUsed entry)
         if diffUTCTime now lastUsed <= poolHealthCheckAge (pConfig pool)
           then pure True
-          else checkHealth (peConn entry)
+          else checkHealthWithTimeout (poolAcquireTimeout (pConfig pool)) (peConn entry)
   RecycleClean -> do
     alive <- readTVarIO (awcAlive (connAsync (peConn entry)))
     if not alive
       then pure False
       else do
-        result <- try @SomeException (simpleQuery (peConn entry) "DISCARD ALL")
-        pure $ case result of
-          Right _ -> True
-          Left _ -> False
+        let timeoutSecs = poolAcquireTimeout (pConfig pool)
+            timeoutMicros = round (timeoutSecs * 1000000) :: Int
+        result <- race (threadDelay timeoutMicros)
+                       (try @SomeException (simpleQuery (peConn entry) "DISCARD ALL"))
+        case result of
+          Right (Right _) -> do
+            -- DISCARD ALL deallocates all prepared statements on the server,
+            -- so the client-side cache must be cleared to stay in sync.
+            writeIORef (connStmtCache (peConn entry)) PSQ.empty
+            pure True
+          _ -> pure False
 
 createConnection :: Pool -> IO Connection
 createConnection pool = do
@@ -621,12 +629,15 @@ safeClose :: Connection -> IO ()
 safeClose conn = close conn `catch` \(_ :: SomeException) -> pure ()
 
 -- | Lightweight health check: send an empty query and see if we get a response.
-checkHealth :: Connection -> IO Bool
-checkHealth conn = do
-  result <- try @SomeException (simpleQuery conn "")
+-- Times out after the given duration to prevent a hung backend from blocking acquire.
+checkHealthWithTimeout :: NominalDiffTime -> Connection -> IO Bool
+checkHealthWithTimeout timeout conn = do
+  let timeoutMicros = round (timeout * 1000000) :: Int
+  result <- race (threadDelay timeoutMicros) (try @SomeException (simpleQuery conn ""))
   pure $ case result of
-    Right _ -> True
-    Left _ -> False
+    Left () -> False    -- timed out
+    Right (Right _) -> True
+    Right (Left _) -> False
 
 -- | Run a lifecycle hook, catching and ignoring exceptions so a hook
 -- failure doesn't break the pool.

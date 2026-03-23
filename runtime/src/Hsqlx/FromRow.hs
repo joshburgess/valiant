@@ -9,6 +9,7 @@
 module Hsqlx.FromRow
   ( FromRow (..)
   , DecodeColumn (..)
+  , GFromRow (..)
   ) where
 
 import Data.ByteString (ByteString)

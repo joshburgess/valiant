@@ -184,6 +184,7 @@ module Hsqlx
   , loUnlink
   , loOpen
   , loClose
+  , withLargeObject
   , loRead
   , loWrite
   , loSeek
@@ -263,6 +264,7 @@ module Hsqlx
     -- for tuples up to 6 elements, 'Maybe' for nullable columns, and
     -- @()@ for commands that return no rows.
   , FromRow (..)
+  , FromRowStrict (..)
   , DecodeColumn (..)
 
     -- * Parameter encoding
@@ -343,8 +345,9 @@ import Hsqlx.Error (ConstraintViolation (..), catchConstraintViolation, constrai
 import Hsqlx.Execute (execute, executeBatch, executeMany, executeReturning, executeReturningMany, fetchAll, fetchAllFast, fetchAllVec, fetchAllWith, fetchBatchAll, fetchBatchOne, fetchExists, fetchFirst, fetchOne, fetchOneFast, fetchOneOr, fetchOneOrThrow, fetchScalar, forEach, rawExecute, rawFetchAll, rawFetchOne)
 import Hsqlx.FromRowFast (FromRowFast (..), DecodeColumnFast (..))
 import Hsqlx.Fold (RowFold (..), executeWithFold)
-import Hsqlx.LargeObject (LoFd (..), LoMode (..), loClose, loCreate, loExport, loImport, loOpen, loRead, loSeek, loTell, loTruncate, loUnlink, loWrite)
+import Hsqlx.LargeObject (LoFd (..), LoMode (..), loClose, loCreate, loExport, loImport, loOpen, loRead, loSeek, loTell, loTruncate, loUnlink, loWrite, withLargeObject)
 import Hsqlx.FromRow (DecodeColumn (..), FromRow (..))
+import Hsqlx.FromRowStrict (FromRowStrict (..))
 import Hsqlx.Logging (LogEvent (..), LogLevel (..), Logger, nullLogger, poolLoggerFromLogger, stderrLogger)
 import Hsqlx.NamedParams (NamedStatement, ToNamedParams (..), mkStatementNamed)
 import Hsqlx.Notify (Notification (..), listen, unlisten, waitForNotification, waitForNotificationTimeout)

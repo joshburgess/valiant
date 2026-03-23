@@ -50,6 +50,7 @@ library
     Hsqlx.Fold
     Hsqlx.FromRow
     Hsqlx.FromRowFast
+    Hsqlx.FromRowStrict
     Hsqlx.LargeObject
     Hsqlx.Logging
     Hsqlx.NamedParams
