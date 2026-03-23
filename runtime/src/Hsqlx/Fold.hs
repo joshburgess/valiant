@@ -18,6 +18,7 @@ module Hsqlx.Fold
   , executeWithFold
   ) where
 
+import Control.Exception (SomeException, catch, throwIO)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
@@ -61,6 +62,13 @@ executeWithFold conn stmt params (RowFold z0 step) = do
       , Sync
       ]
     collectFold wc txRef (stmtDecode stmt) z0 step
+      `catch` \(e :: SomeException) -> do
+        -- Drain remaining messages up to ReadyForQuery so the connection
+        -- is left in a clean state after a fold exception (e.g., decode
+        -- error or user step function throwing).
+        drainUntilReady wc txRef
+          `catch` \(_ :: SomeException) -> pure ()
+        throwIO e
 
 collectFold :: WireConn -> IORef TxStatus -> (Vector (Maybe ByteString) -> Either String r) -> b -> (b -> r -> b) -> IO b
 collectFold wc txRef decode = go
@@ -80,3 +88,12 @@ collectFold wc txRef decode = go
         ErrorResponse err -> throwHsqlx (QueryError err)
         NoticeResponse _ -> go acc step'
         other -> throwHsqlx (ProtocolError ("Unexpected in fold: " <> BS8.pack (show other)))
+
+-- | Drain messages until ReadyForQuery, updating transaction status.
+-- Used for cleanup after fold exceptions.
+drainUntilReady :: WireConn -> IORef TxStatus -> IO ()
+drainUntilReady wc txRef = do
+  msg <- recvBackendMsg wc
+  case msg of
+    ReadyForQuery status -> writeIORef txRef status
+    _ -> drainUntilReady wc txRef

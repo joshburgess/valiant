@@ -135,24 +135,22 @@ copyExceptionSpec = describe "COPY exception safety" $ do
 ------------------------------------------------------------------------
 
 cursorCleanupSpec :: Spec
-cursorCleanupSpec = describe "Cursor cleanup on exception" $ do
-  it "connection is usable after exception during cursor streaming" $ do
-    withTestPool $ \pool -> do
-      withResource pool $ \conn -> withSchema conn $
-        insertTestUsers conn
+cursorCleanupSpec = describe "Fold cleanup on exception" $ do
+  it "connection is usable after exception during fold" $ do
+    withTestConnection $ \conn -> withSchema conn $ do
+      insertTestUsers conn
 
-      -- Use executeWithFold which uses exclusive mode.
-      -- Throw mid-fold and verify the connection recovers.
-      result <- try @SomeException $ withTransaction pool $ \tx ->
-        executeWithFold (txConn tx) countQuery ()
-          (RowFold (0 :: Int) (\acc _ -> if acc >= 1 then error "mid-fold failure" else acc + 1))
+      -- executeWithFold uses exclusive mode. The fold step throws on the
+      -- first row, exercising the exception cleanup path (drain to
+      -- ReadyForQuery before releasing exclusive mode).
+      result <- try @SomeException $
+        executeWithFold conn countQuery ()
+          (RowFold (0 :: Int) (\_ _ -> error "mid-fold failure"))
       result `shouldSatisfy` isLeft
 
-      -- Connection should be returned to pool cleanly
-      withResource pool $ \conn -> do
-        (rows, _) <- simpleQuery conn "SELECT 1"
-        rows `shouldBe` [[Just "1"]]
-        dropSchema conn
+      -- Connection should still be usable after the fold exception
+      (rows, _) <- simpleQuery conn "SELECT 1"
+      rows `shouldBe` [[Just "1"]]
 
   where
     countQuery :: Statement () Int32

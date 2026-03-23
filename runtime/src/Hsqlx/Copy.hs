@@ -49,12 +49,11 @@ copyIn conn sql producer =
     waitCopyIn wc
     producer (\chunk -> sendFrontendMsg wc (CopyData chunk))
       `catch` \(e :: SomeException) -> do
-        -- Best-effort: send CopyFail and drain so the connection is usable.
-        -- If the wire is dead, ignore the cleanup failure and re-throw
-        -- the original exception.
+        -- Best-effort: send CopyFail and drain to ReadyForQuery so the
+        -- connection is usable. If the wire is dead, ignore the cleanup
+        -- failure and re-throw the original exception.
         (do sendFrontendMsg wc (CopyFail (BS8.pack (show e)))
-            _ <- collectCopyResult wc txRef
-            pure ()
+            drainToReady wc txRef
           ) `catch` \(_ :: SomeException) -> pure ()
         throwIO e
     sendFrontendMsg wc CopyDone
@@ -119,8 +118,7 @@ copyInBinary conn sql numCols producer =
     producer sendRow
       `catch` \(e :: SomeException) -> do
         (do sendFrontendMsg wc (CopyFail (BS8.pack (show e)))
-            _ <- collectCopyResult wc txRef
-            pure ()
+            drainToReady wc txRef
           ) `catch` \(_ :: SomeException) -> pure ()
         throwIO e
     sendFrontendMsg wc (CopyData binaryCopyTrailer)
@@ -193,3 +191,14 @@ collectCopyResult wc txRef = go 0
        in case parts of
             [_, numStr] -> maybe 0 (fromIntegral . fst) (BS8.readInt numStr)
             _ -> 0
+
+-- | Drain messages until ReadyForQuery, ignoring errors.
+-- Used after CopyFail to ensure the connection is in a clean state.
+drainToReady :: WireConn -> IORef TxStatus -> IO ()
+drainToReady wc txRef = go
+  where
+    go = do
+      msg <- recvBackendMsg wc
+      case msg of
+        ReadyForQuery status -> writeIORef txRef status
+        _ -> go
