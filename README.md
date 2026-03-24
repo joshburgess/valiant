@@ -135,7 +135,7 @@ pipelined execution, async sender/receiver split, and zero unnecessary copies.
 
 Benchmarks against [hasql](https://hackage.haskell.org/package/hasql)
 (libpq FFI, binary) and [postgresql-simple](https://hackage.haskell.org/package/postgresql-simple)
-(libpq FFI, text). Single connection, Docker Postgres 16.
+(libpq FFI, text). Single connection, native Postgres 16.
 
 **Reads** (Linux, Postgres 16, Unix socket, [CI-verified](docs/benchmark-results/)):
 
@@ -207,8 +207,13 @@ hsqlx is a multi-package Cabal project:
 | `hsqlx-cli` | CLI tool (`hsqlx prepare`, `check`, `types`, `generate`, `watch`) |
 | `hsqlx-plugin` | GHC source plugin for compile-time query validation |
 | `hsqlx-conduit` | Conduit streaming adapter |
+| `hsqlx-pipes` | Pipes streaming adapter |
 | `hsqlx-streaming` | `streaming` library adapter |
 | `hsqlx-streamly` | Streamly streaming adapter |
+| `hsqlx-bluefin` | Bluefin effect system adapter |
+| `hsqlx-effectful` | Effectful effect system adapter |
+| `hsqlx-fused-effects` | Fused-effects effect system adapter |
+| `hsqlx-mtl` | MTL monad transformer adapter |
 | `hsqlx-example` | Example REST API using hsqlx + scotty |
 | `bench-compare` | Comparative benchmarks against hasql and postgresql-simple |
 
@@ -226,10 +231,15 @@ hsqlx/
 │   └── Hsqlx/CLI/        # Commands, cache, type map, discovery, nullability
 ├── plugin/               # GHC source plugin
 │   └── src/Hsqlx/Plugin/ # AST traversal, verification, error messages
-├── adapters/             # Streaming library adapters
+├── adapters/             # Streaming and effect system adapters (8 packages)
 │   ├── hsqlx-conduit/    # Conduit adapter
+│   ├── hsqlx-pipes/      # Pipes adapter
 │   ├── hsqlx-streaming/  # streaming library adapter
-│   └── hsqlx-streamly/   # Streamly adapter
+│   ├── hsqlx-streamly/   # Streamly adapter
+│   ├── hsqlx-bluefin/    # Bluefin effect system adapter
+│   ├── hsqlx-effectful/  # Effectful effect system adapter
+│   ├── hsqlx-fused-effects/ # Fused-effects adapter
+│   └── hsqlx-mtl/        # MTL monad transformer adapter
 ├── example/              # Example REST API (scotty)
 ├── bench-compare/        # Comparative benchmarks vs hasql, pg-simple
 ├── scripts/              # pg-setup.sh, pg-teardown.sh

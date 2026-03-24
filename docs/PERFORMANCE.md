@@ -6,8 +6,13 @@ that make it fast, and the optimization journey.
 
 ## Benchmark results
 
-All benchmarks run on the same machine against Docker Postgres 16 on localhost.
-Single connection, no connection pool overhead. Compared against
+All benchmarks in this section run on a local machine against Docker
+Postgres 16 (localhost TCP, fsync=off, synchronous_commit=off, tmpfs).
+Single connection, no connection pool overhead. For CI-verified numbers
+(Linux, Unix socket) see the README table. For detailed Apple
+Silicon/macOS results see
+[benchmark-results/full-results.md](benchmark-results/full-results.md).
+Compared against
 [hasql](https://hackage.haskell.org/package/hasql) (libpq FFI, binary format),
 [postgresql-simple](https://hackage.haskell.org/package/postgresql-simple)
 (libpq FFI, text format), and

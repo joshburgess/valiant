@@ -52,6 +52,7 @@ example/
 │   │   ├── find_by_id.sql
 │   │   ├── list_all.sql
 │   │   ├── insert.sql
+│   │   ├── insert_batch.sql
 │   │   └── delete.sql
 │   └── posts/
 │       ├── find_by_id.sql

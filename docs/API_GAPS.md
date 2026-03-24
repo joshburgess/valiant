@@ -3,7 +3,7 @@
 Competitive analysis of hsqlx's public API against hasql, postgresql-simple,
 and the higher-level type-safe libraries (rel8, beam, opaleye, squeal).
 
-Last updated: 2026-03-17
+Last updated: 2026-03-24
 
 ## Methodology
 
@@ -23,111 +23,32 @@ error handling, and type codec** sides, not query construction.
 
 These are production blockers or things users will hit immediately.
 
-### 1.1 Constraint Violation Helpers
+### ~~1.1 Constraint Violation Helpers~~ DONE
 
-**Gap:** We expose raw `QueryError PgError` with no structured helpers.
-Every production app needs to catch unique constraint violations, foreign
-key violations, etc.
+Implemented in `Hsqlx.Error` with `ConstraintViolation` ADT, `sqlState`,
+`isUniqueViolation`, `isSerializationError`, etc.
 
-**postgresql-simple provides:**
-```haskell
-data ConstraintViolation
-  = NotNullViolation ByteString
-  | ForeignKeyViolation ByteString
-  | UniqueViolation ByteString
-  | CheckViolation ByteString
-  | ExclusionViolation ByteString
+### ~~1.2 Transaction Retry on Serialization Failure~~ DONE
 
-constraintViolation  :: SqlError -> Maybe ConstraintViolation
-constraintViolationE :: SqlError -> Maybe (SqlError, ConstraintViolation)
-catchViolation       :: (SqlError -> ConstraintViolation -> IO a) -> IO a -> IO a
-isSerializationError      :: SqlError -> Bool
-isNoActiveTransactionError :: SqlError -> Bool
-isFailedTransactionError  :: SqlError -> Bool
-```
+Implemented as `withTransactionRetry` and `withTransactionRetryIf` in
+`Hsqlx.Transaction`.
 
-**Recommendation:** Add `Hsqlx.Error` module with:
-- `ConstraintViolation` ADT
-- `constraintViolation :: HsqlxError -> Maybe ConstraintViolation`
-- `catchConstraintViolation :: (HsqlxError -> ConstraintViolation -> IO a) -> IO a -> IO a`
-- `sqlState :: HsqlxError -> Maybe ByteString`
-- `isUniqueViolation`, `isForeignKeyViolation`, `isSerializationError`, etc.
-- Pattern synonyms or SQLSTATE constants for common error codes
+### ~~1.3 Vector Return Variants~~ DONE
 
-### 1.2 Transaction Retry on Serialization Failure
+Implemented as `fetchAllVec` in `Hsqlx.Execute`.
 
-**Gap:** No built-in retry mechanism for serializable transactions.
+### ~~1.4 forEach (Streaming Callback)~~ DONE
 
-**postgresql-simple provides:**
-```haskell
-withTransactionModeRetry :: TransactionMode -> (SqlError -> Bool) -> Connection -> IO a -> IO a
-```
-The predicate-based design is more flexible than hardcoding serialization errors.
+Implemented as `forEach` in `Hsqlx.Execute`.
 
-**hasql-transaction** automatically retries on SQLSTATE 40001 when using
-`Serializable` isolation.
+### ~~1.5 Batch INSERT ... RETURNING (Pipelined)~~ DONE
 
-**Recommendation:** Add:
-- `withTransactionRetry :: Int -> Pool -> (Transaction -> IO a) -> IO a`
-- `withTransactionLevelRetry :: IsolationLevel -> Int -> Pool -> (Transaction -> IO a) -> IO a`
-- `withTransactionRetryIf :: (HsqlxError -> Bool) -> Int -> Pool -> (Transaction -> IO a) -> IO a`
-- Corresponding `*M` variants for the Hsqlx monad
+Implemented as `executeReturningMany` in `Hsqlx.Execute`.
 
-### 1.3 Vector Return Variants
+### ~~1.6 Connection-Level Transaction~~ DONE
 
-**Gap:** All query functions return `[r]`. Building a list then converting
-to Vector is wasteful for large result sets.
-
-**hasql** returns `Vector` by default via `rowVector :: Row a -> Result (Vector a)`.
-**postgresql-simple** has a dedicated `Database.PostgreSQL.Simple.Vector` module
-with `query`, `query_`, `returning`, etc. returning `Vector r`.
-
-**Recommendation:** Add:
-- `fetchAllVec :: Connection -> Statement p r -> p -> IO (Vector r)`
-- `fetchAllVecM :: Statement p r -> p -> Hsqlx (Vector r)`
-- Internally, decode directly into a mutable vector instead of building a list
-
-### 1.4 forEach (Streaming Callback)
-
-**Gap:** We have `RowFold` for constant-memory processing and cursors for
-batched streaming, but no simple callback interface.
-
-**postgresql-simple provides:**
-```haskell
-forEach  :: (ToRow q, FromRow r) => Connection -> Query -> q -> (r -> IO ()) -> IO ()
-forEach_ :: FromRow r => Connection -> Query -> (r -> IO ()) -> IO ()
-```
-
-**Recommendation:** Add:
-- `forEach :: Connection -> Statement p r -> p -> (r -> IO ()) -> IO ()`
-- `forEachM :: Statement p r -> p -> (r -> IO ()) -> Hsqlx ()`
-
-### 1.5 Batch INSERT ... RETURNING (Pipelined)
-
-**Gap:** We have `executeReturning` for a single parameter set, and
-`executeBatch` for batch execution without RETURNING. No way to do a
-pipelined batch insert that collects RETURNING results.
-
-**All four higher-level libraries** (rel8, beam, opaleye, squeal) support
-RETURNING on bulk inserts. beam-postgres even has `streamingRunInsertReturning`.
-
-**Recommendation:** Add:
-- `executeReturningMany :: Connection -> Statement p r -> [p] -> IO (Int64, [r])`
-- Pipelined: send N Bind+Execute pairs, collect all RETURNING rows
-- `executeReturningManyM` variant
-
-### 1.6 Connection-Level Transaction
-
-**Gap:** Our transaction functions take `Pool`, not `Connection`. Users who
-already have a connection (from `withResource`) cannot easily start a
-transaction without going through the pool again.
-
-**postgresql-simple** takes `Connection` for all transaction functions.
-
-**Recommendation:** Add:
-- `withTransactionConn :: Connection -> (Transaction -> IO a) -> IO a`
-- `withTransactionLevelConn :: IsolationLevel -> Connection -> (Transaction -> IO a) -> IO a`
-- Keep the `Pool`-based variants as the primary API
+Implemented as `withTransactionConn` and `withTransactionModeConn` in
+`Hsqlx.Transaction`.
 
 ---
 
@@ -135,102 +56,40 @@ transaction without going through the pool again.
 
 Ergonomics and completeness for production use.
 
-### 2.1 hstore Binary Codec
+### ~~2.1 hstore Binary Codec~~ DONE
 
-**Gap:** No hstore support. postgresql-simple has full support with
-`HStoreMap`, `HStoreList`, `ToHStore`, `ToHStoreText`.
+Implemented in `Hsqlx.Binary.HStore`.
 
-**Recommendation:** Add `Hsqlx.Binary.HStore` with `PgHStore` type
-(newtype over `Map Text Text`), PgEncode/PgDecode instances. Register
-OID in CLI type map.
+### ~~2.2 macaddr / macaddr8 Binary Codec~~ DONE
 
-### 2.2 macaddr / macaddr8 Binary Codec
+Implemented in `Hsqlx.Binary.MacAddr`.
 
-**Gap:** No MAC address support. Pairs naturally with inet/cidr we just added.
+### ~~2.3 Timestamp Infinity Support~~ DONE
 
-**Recommendation:** Add `PgMacAddr` type with 6-byte (macaddr, OID 829)
-and 8-byte (macaddr8, OID 774) codecs.
+Implemented in `Hsqlx.Binary.Unbounded`.
 
-### 2.3 Timestamp Infinity Support
+### ~~2.4 Convenience Query Functions~~ DONE
 
-**Gap:** PostgreSQL supports `-infinity` and `infinity` as valid timestamp
-and date values. Our binary codecs will decode these as extreme dates
-rather than representing them distinctly.
+Implemented as `fetchOneOr`, `fetchOneOrThrow`, `fetchFirst` in
+`Hsqlx.Execute`.
 
-**postgresql-simple provides:**
-```haskell
-data Unbounded a = NegInfinity | Finite a | PosInfinity
-type Date = Unbounded Day
-type UTCTimestamp = Unbounded UTCTime
-```
+### ~~2.5 TransactionMode Record and Deferrable Transactions~~ DONE
 
-**Recommendation:** Add `Unbounded a` type or `PgTimestamp` / `PgDate`
-wrappers that can represent infinity. The binary format uses sentinel
-values (INT64_MIN for -infinity, INT64_MAX for infinity).
+Implemented as `TransactionMode` record with `withTransactionMode` and
+`withTransactionModeConn` in `Hsqlx.Transaction`.
 
-### 2.4 Convenience Query Functions
+### ~~2.6 Advisory Lock Helpers~~ DONE
 
-**Gap:** Missing common patterns that reduce boilerplate.
+Implemented in `Hsqlx.Advisory` with session-scoped, transaction-scoped,
+and try variants. Soundness-audited (#5, #19).
 
-**Recommendation:** Add:
-- `fetchOneOr :: Connection -> Statement p r -> p -> r -> IO r` — return default on no rows
-- `fetchFirst :: Connection -> Statement p r -> p -> IO (Maybe r)` — first row of multi-row query
-- Both with `*M` monad variants
+### ~~2.7 Pool from Connection String~~ DONE
 
-### 2.5 TransactionMode Record and Deferrable Transactions
+Implemented as `newPoolFromString` in `Hsqlx`.
 
-**Gap:** No support for `BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY DEFERRABLE`.
-This is important for long-running analytics queries on replicas — PostgreSQL
-guarantees a consistent snapshot without risk of serialization failure.
+### ~~2.8 SQLSTATE Accessor on Errors~~ DONE
 
-**squeal-postgresql** has the most complete model: `IsolationLevel` ×
-`AccessMode` × `DeferrableMode`.
-
-**postgresql-simple provides:**
-```haskell
-data TransactionMode = TransactionMode
-  { isolationLevel :: IsolationLevel
-  , readWriteMode  :: ReadWriteMode
-  }
-```
-
-**Recommendation:** Add `TransactionMode` record:
-```haskell
-data TransactionMode = TransactionMode
-  { tmIsolation  :: IsolationLevel
-  , tmReadOnly   :: Bool
-  , tmDeferrable :: Bool
-  }
-```
-With `withTransactionMode :: TransactionMode -> Pool -> (Transaction -> IO a) -> IO a`
-
-### 2.6 Advisory Lock Helpers
-
-**Gap:** `SELECT pg_advisory_xact_lock(key)` is a standard production
-pattern for distributed coordination.
-
-**Recommendation:** Add:
-- `withAdvisoryLock :: Connection -> Int64 -> IO a -> IO a`
-- `withAdvisoryLockTry :: Connection -> Int64 -> IO a -> IO (Maybe a)`
-- Transaction-scoped variants that use `pg_advisory_xact_lock`
-
-### 2.7 Pool from Connection String
-
-**Gap:** Must construct `PoolConfig` record manually. Common to just have
-a connection string.
-
-**Recommendation:** Add:
-- `newPoolFromString :: ByteString -> IO Pool` — uses `defaultPoolConfig` + string
-- `newPoolFromStringWith :: ByteString -> (PoolConfig -> PoolConfig) -> IO Pool`
-
-### 2.8 SQLSTATE Accessor on Errors
-
-**Gap:** `HsqlxError` exposes `QueryError PgError` but there's no easy
-way to extract the SQLSTATE code for programmatic error handling.
-
-**Recommendation:** Add:
-- `sqlState :: HsqlxError -> Maybe ByteString`
-- `pgErrorField :: HsqlxError -> (PgError -> a) -> Maybe a`
+Implemented as `sqlState` in `Hsqlx.Error`.
 
 ---
 
@@ -238,30 +97,24 @@ way to extract the SQLSTATE code for programmatic error handling.
 
 Nice to have, uncommon use cases.
 
-### 3.1 Large Object Support
+### ~~3.1 Large Object Support~~ DONE
 
-postgresql-simple has a complete large objects API: `loCreat`, `loOpen`,
-`loRead`, `loWrite`, `loSeek`, `loTell`, `loTruncate`, `loClose`,
-`loUnlink`, `loImport`, `loExport`. Uncommon in modern applications but
-some legacy systems depend on it.
+Implemented in `Hsqlx.LargeObject` with `withLargeObject` bracket,
+import/export, streaming. Soundness-audited (#6, #9, #20, #27).
 
 ### 3.2 Geometric Type Codecs
 
-`point` (OID 600), `line`, `box`, `path`, `polygon`, `circle`. Uncommon
-outside GIS applications, and PostGIS users typically use extension types.
+`point` (OID 600) is implemented in `Hsqlx.Binary.Point`. Remaining
+types (`line`, `box`, `path`, `polygon`, `circle`) are uncommon outside
+GIS applications, and PostGIS users typically use extension types.
 
-### 3.3 ZonedTime for timestamptz
+### ~~3.3 ZonedTime for timestamptz~~ DONE
 
-hasql and postgresql-simple both support `ZonedTime` as an alternative
-decode target for `timestamptz`. We only map to `UTCTime`. Adding
-`ZonedTime` as an alternative would help users who need timezone-aware
-display without manual conversion.
+Implemented in `Hsqlx.Binary.Encode`/`Decode`.
 
-### 3.4 timetz Type
+### ~~3.4 timetz Type~~ DONE
 
-hasql supports `(TimeOfDay, TimeZone)` for the PG `timetz` type. This
-type is uncommon (the PostgreSQL docs recommend against it) but exists
-in some schemas.
+Implemented as `(TimeOfDay, TimeZone)` in `Hsqlx.Binary.Encode`/`Decode`.
 
 ### 3.5 Dynamic Statement Builder
 
@@ -275,11 +128,11 @@ but some use cases genuinely need dynamic SQL composition.
 PG `money` type (OID 790). Uncommon — the PostgreSQL docs recommend
 using `numeric` instead. Users can `CAST(amount AS numeric)` in SQL.
 
-### 3.7 Conduit / Streaming Library Integration
+### ~~3.7 Conduit / Streaming Library Integration~~ DONE
 
-beam-postgres provides `streamingRunSelect` via Conduit. We have
-`RowFold` and cursors which cover the use case differently (and arguably
-better for most cases), but some users prefer streaming abstractions.
+8 adapter packages: hsqlx-conduit, hsqlx-pipes, hsqlx-streaming,
+hsqlx-streamly, hsqlx-bluefin, hsqlx-effectful, hsqlx-fused-effects,
+hsqlx-mtl.
 
 ### 3.8 Tuples Beyond 10
 
@@ -320,6 +173,12 @@ Features where hsqlx matches or exceeds all competitors:
 | SCRAM-SHA-256 auth | Required by modern PostgreSQL |
 | No C dependencies | Pure Haskell — no libpq, no system deps |
 | Structured error messages | 9 error types with column-by-column diagnostics |
+| hstore codec | `Hsqlx.Binary.HStore` |
+| macaddr / macaddr8 codec | `Hsqlx.Binary.MacAddr` |
+| Timestamp infinity | `Hsqlx.Binary.Unbounded` |
+| Advisory locks | Session-scoped, transaction-scoped, try variants |
+| Large objects | `withLargeObject` bracket, import/export, streaming |
+| Streaming adapters | 8 packages: conduit, pipes, streaming, streamly, bluefin, effectful, fused-effects, mtl |
 
 ---
 
@@ -332,16 +191,16 @@ Features where hsqlx matches or exceeds all competitors:
 | Pipelined batching | **Yes** | Yes (Pipeline) | No | |
 | Connection pool | **Built-in** | Separate pkg | No | |
 | Transactions | **Built-in** | Separate pkg | Built-in | |
-| Transaction retry | **No** | Auto (serializable) | Yes | Gap |
-| Constraint violation helpers | **No** | No | Yes | Gap |
-| Vector result return | **No** | Yes (default) | Yes (module) | Gap |
-| forEach callback | **No** | No | Yes | Gap |
-| Batch RETURNING | **No** | No | Yes (`returning`) | Gap |
-| Connection-level txn | **No** | Yes | Yes | Gap |
-| hstore codec | **No** | No | Yes | Gap |
-| macaddr codec | **No** | No | No | |
-| Timestamp infinity | **No** | No | Yes | Gap |
-| Large objects | **No** | No | Yes | |
+| Transaction retry | **Yes** | Auto (serializable) | Yes | |
+| Constraint violation helpers | **Yes** | No | Yes | |
+| Vector result return | **Yes** | Yes (default) | Yes (module) | |
+| forEach callback | **Yes** | No | Yes | |
+| Batch RETURNING | **Yes** | No | Yes (`returning`) | |
+| Connection-level txn | **Yes** | Yes | Yes | |
+| hstore codec | **Yes** | No | Yes | |
+| macaddr codec | **Yes** | No | No | |
+| Timestamp infinity | **Yes** | No | Yes | |
+| Large objects | **Yes** | No | Yes | |
 | inet/cidr | **Yes** | Yes (iproute) | No | |
 | Generic row derivation | **Yes** | No (manual) | No (manual) | |
 | Streaming cursors | **Yes** | Manual only | Yes (fold) | |

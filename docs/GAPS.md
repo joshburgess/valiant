@@ -4,7 +4,7 @@ This document tracks features missing from the hsqlx/pg-wire
 implementation, performance improvements, and architectural changes
 planned for future releases.
 
-Last updated: 2026-03-17
+Last updated: 2026-03-24
 
 ---
 
@@ -415,70 +415,11 @@ strictly more powerful than a C callback table.
 
 ---
 
-## Medium Priority: Features
-
-### Connection pool optimization
-
-**Status:** The current pool (`PgWire.Pool`) is functional but basic.
-
-**Impact:** Production workloads need more sophisticated pool behavior:
-configurable min/max connections, connection warm-up, better metrics
-and observability, stricter resource lifecycle management.
-
-**Inspiration:** `deadpool-postgres` (Rust) for API design and
-lifecycle management patterns.
-
-**Effort:** Medium-large.
-
----
-
-### Mock server for testing
-
-**Status:** All tests run against real Postgres.
-
-**Impact:** Slower tests, harder to test edge cases.
-
-**Implementation:** Build a minimal Postgres-protocol fake server using
-the same `pg-wire` codec library. Enables QuickCheck fuzzing of the
-client against malformed/unexpected server responses.
-
-**Effort:** Medium-large.
-
----
-
-### Conduit/streaming integration
-
-Optional extension packages (`hsqlx-conduit`, `hsqlx-streaming`) for
-integration with streaming ecosystems. Core library stays
-dependency-minimal with `RowFold`.
-
-**Effort:** Small per adapter.
-
----
-
-### GHC plugin port to 9.10
-
-The GHC source plugin currently requires GHC 9.4. Needs CPP
-conditionals or `ghc-tcplugin-api` for the GHC API changes in 9.6-9.10.
-
-**Effort:** Medium.
-
----
-
 ## Nice to Have
 
 ### GSSAPI/SSPI authentication
 
 Rarely needed outside enterprise. Requires the `gssapi` package.
-
-### Large object API
-
-`lo_create`/`lo_read`/`lo_write`. Rarely used in modern applications.
-
-### Pre-allocated receive buffer
-
-Replace `recvExact`'s list accumulation with a pre-allocated
-`MutableByteArray` or ring buffer.
 
 ### Unboxed vectors for fixed-size result columns
 
@@ -493,7 +434,8 @@ per-value heap allocation.
 - GHC plugin 9.6/9.8/9.10 (done: CPP conditionals)
 - Mock server (done: PgWire.MockServer)
 - Pre-allocated receive buffer (done: 32KB chunks, Builder accumulation)
-- Conduit/pipes/streaming/streamly integration (done: 4 adapter packages)
+- Conduit/pipes/streaming/streamly/bluefin/effectful/fused-effects/mtl integration (done: 8 adapter packages)
+- Large object API (done: `Hsqlx.LargeObject` with bracket, import/export, streaming)
 
 ---
 
