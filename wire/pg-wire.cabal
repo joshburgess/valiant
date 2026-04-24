@@ -104,6 +104,7 @@ test-suite pg-wire-test
     PgWire.Pool.ConfigSpec
     PgWire.Pool.NoThunksSpec
     PgWire.Pool.PropertySpec
+    PgWire.Pool.StateMachineSpec
     PgWire.Protocol.BuildersSpec
     PgWire.Protocol.FuzzSpec
     PgWire.Protocol.OidSpec
