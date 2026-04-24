@@ -1,6 +1,6 @@
 # Performance
 
-hsqlx implements its own PostgreSQL wire protocol in pure Haskell with binary
+valiant implements its own PostgreSQL wire protocol in pure Haskell with binary
 format encoding. This document covers the benchmark results, the techniques
 that make it fast, and the optimization journey.
 
@@ -21,21 +21,21 @@ Compared against
 
 ### Read performance
 
-| Rows | hsqlx | hasql | pg-simple | persistent | vs hasql | vs persistent |
+| Rows | valiant | hasql | pg-simple | persistent | vs hasql | vs persistent |
 |------|-------|-------|-----------|------------|----------|---------------|
 | 1 (by PK) | **0.94 ms** | 1.0 ms | 1.0 ms | 3.2 ms | **6% faster** | **3.4x faster** |
 | 1,000 | **4.7 ms** | 7.7 ms | 8.7 ms | 11.7 ms | **39% faster** | **2.5x faster** |
 | 5,000 | **20.8 ms** | 38.0 ms | 42.5 ms | 47.4 ms | **45% faster** | **2.3x faster** |
 | 10,000 | **37.2 ms** | 72.3 ms | 83.0 ms | 94.1 ms | **48% faster** | **2.5x faster** |
 
-hsqlx is the fastest Haskell PostgreSQL library for reads. The advantage
+valiant is the fastest Haskell PostgreSQL library for reads. The advantage
 grows with row count because the per-row decode overhead is lower.
 persistent adds ~2x overhead on single-row operations and ~10-15% over
 pg-simple on multi-row reads due to its monad transformer stack.
 
 ### Insert performance
 
-| Rows | hsqlx (pipelined) | hsqlx (seq) | hasql | pg-simple | persistent |
+| Rows | valiant (pipelined) | valiant (seq) | hasql | pg-simple | persistent |
 |------|-------------------|-------------|-------|-----------|------------|
 | 100 | **2.5 ms** | 104 ms | 111 ms | 118 ms | 106 ms |
 | 1,000 | **13.0 ms** | 1.14 s | 1.15 s | 1.12 s | ~1.1 s |
@@ -47,7 +47,7 @@ across all libraries (dominated by per-row round-trip time).
 
 ### Update performance (single UPDATE affecting N rows)
 
-| Rows | hsqlx | hasql | pg-simple | persistent |
+| Rows | valiant | hasql | pg-simple | persistent |
 |------|-------|-------|-----------|------------|
 | 100 | **1.5 ms** | 1.5 ms | 1.5 ms | 3.2 ms |
 | 1,000 | **4.7 ms** | 4.6 ms | 4.8 ms | ~6 ms |
@@ -125,7 +125,7 @@ Since we already benchmark hasql directly, rel8 can only be equal or
 slower at runtime.
 
 **postgresql-typed** ([hackage](https://hackage.haskell.org/package/postgresql-typed))
-is the closest conceptual competitor to hsqlx — it validates SQL at
+is the closest conceptual competitor to valiant — it validates SQL at
 compile time using Template Haskell. However, at runtime it uses
 `postgresql-libpq` (the same C FFI as hasql and postgresql-simple),
 so its execution numbers would be roughly equal to those libraries.
@@ -134,13 +134,13 @@ splices connect to the database during compilation), which makes
 benchmark integration impractical. The interesting comparison with
 postgresql-typed is architectural, not performance:
 
-| | hsqlx | postgresql-typed |
+| | valiant | postgresql-typed |
 |---|---|---|
 | Compile-time mechanism | GHC source plugin | Template Haskell |
-| DB at compile time | No (separate `hsqlx prepare` step) | Yes (TH connects during compilation) |
-| Offline builds | Yes (`.hsqlx/` cache) | No |
+| DB at compile time | No (separate `valiant prepare` step) | Yes (TH connects during compilation) |
+| Offline builds | Yes (`.valiant/` cache) | No |
 | Runtime driver | Pure Haskell (pg-wire) | libpq FFI |
-| CI friendly | Yes (`hsqlx check`, no DB needed) | Requires DB in CI build |
+| CI friendly | Yes (`valiant check`, no DB needed) | Requires DB in CI build |
 
 **esqueleto** ([hackage](https://hackage.haskell.org/package/esqueleto))
 is a type-safe SQL DSL built on persistent. It uses the same
@@ -148,15 +148,15 @@ is a type-safe SQL DSL built on persistent. It uses the same
 overhead is in query construction, not execution. The persistent
 benchmarks already capture the runtime cost.
 
-The fundamental reason these libraries cannot match hsqlx on reads is
-that they all use libpq (C FFI) for the wire protocol, while hsqlx
+The fundamental reason these libraries cannot match valiant on reads is
+that they all use libpq (C FFI) for the wire protocol, while valiant
 implements the protocol in pure Haskell with binary format decoding
 directly from the network buffer. No library built on libpq can avoid
-the FFI marshaling overhead that hsqlx eliminates.
+the FFI marshaling overhead that valiant eliminates.
 
 ---
 
-## Why hsqlx is fast
+## Why valiant is fast
 
 ### 1. Binary format decoding
 
@@ -166,7 +166,7 @@ requiring string parsing for every value — `"12345"` must be parsed into
 an integer. `hasql` uses binary format through `libpq`, but pays FFI
 marshaling costs moving data between C and Haskell heap.
 
-hsqlx decodes binary format directly from the network buffer in pure
+valiant decodes binary format directly from the network buffer in pure
 Haskell. No FFI boundary, no intermediate copies. An Int32 decode is
 4 bytes of direct indexing:
 
@@ -219,7 +219,7 @@ Neither hasql nor postgresql-simple expose pipelining.
 
 ### 4. Message coalescing and fused encoding
 
-When sending Bind+Execute+Sync (or any sequence of messages), hsqlx
+When sending Bind+Execute+Sync (or any sequence of messages), valiant
 fuses all protocol messages into a single `Builder`, materializes once
 via `buildFrontendMsgsConcat`, and sends with a single `send()` syscall.
 For a typical 3-message batch (~100 bytes), this eliminates 2
@@ -230,7 +230,7 @@ small messages.
 ### 5. Pre-computed message sizes
 
 The PostgreSQL wire protocol requires the message length before the
-payload. hsqlx computes each message's payload size from its fields
+payload. valiant computes each message's payload size from its fields
 without serializing (e.g., `cstringSize bs = BS.length bs + 1`), then
 writes tag + length + payload in a single `Builder` pass. This avoids
 the double-copy that would come from materializing the payload just to
@@ -239,7 +239,7 @@ measure its length.
 ### 6. Merged header recv
 
 Each backend message is `[tag: 1 byte] [length: 4 bytes] [payload]`.
-hsqlx reads the tag and length together in a single 5-byte recv call,
+valiant reads the tag and length together in a single 5-byte recv call,
 reducing syscalls from 3 to 2 per message.
 
 ### 7. Fused row collection and decoding
@@ -321,7 +321,7 @@ type family Nullable (a :: Type) :: Bool where
 └──────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────┐
-│  hsqlx                                            │
+│  valiant                                            │
 │                                                   │
 │  Haskell code                                     │
 │    ↓ direct ByteString operations                 │
@@ -333,7 +333,7 @@ type family Nullable (a :: Type) :: Bool where
 └──────────────────────────────────────────────────┘
 ```
 
-| | libpq (FFI) | hsqlx (pure Haskell) |
+| | libpq (FFI) | valiant (pure Haskell) |
 |---|---|---|
 | Single-row latency | Baseline | **Matching** (0.97ms vs 0.99ms) |
 | Multi-row throughput | Baseline | **2x faster** at 10K rows |
@@ -353,22 +353,22 @@ type family Nullable (a :: Type) :: Bool where
 ```bash
 # Start Postgres via docker-compose (tuned for benchmarks: tmpfs, fsync=off)
 docker compose up -d --wait
-export DATABASE_URL="postgres://hsqlx_test:hsqlx_test@localhost:5433/hsqlx_test"
+export DATABASE_URL="postgres://valiant_test:valiant_test@localhost:5433/valiant_test"
 
 # Codec benchmarks (pure, no database needed)
-cabal bench hsqlx-bench --benchmark-options='--match prefix codec'
+cabal bench valiant-bench --benchmark-options='--match prefix codec'
 
 # Single-thread query benchmarks
-cabal bench hsqlx-bench --benchmark-options='--match prefix query'
+cabal bench valiant-bench --benchmark-options='--match prefix query'
 
 # Concurrent benchmarks (the async split showcase — use -N for capabilities)
-cabal bench hsqlx-bench --benchmark-options='+RTS -N -RTS --match prefix concurrent'
+cabal bench valiant-bench --benchmark-options='+RTS -N -RTS --match prefix concurrent'
 
 # Pool benchmarks (contention, recycling methods)
-cabal bench hsqlx-bench --benchmark-options='+RTS -N -RTS --match prefix pool'
+cabal bench valiant-bench --benchmark-options='+RTS -N -RTS --match prefix pool'
 
 # All benchmarks
-cabal bench hsqlx-bench --benchmark-options='+RTS -N -RTS'
+cabal bench valiant-bench --benchmark-options='+RTS -N -RTS'
 
 # Comparative benchmarks vs hasql and postgresql-simple
 cabal run bench-compare
@@ -603,7 +603,7 @@ long.
   operations are streaming state machines that can't be multiplexed.
 
 **Reader error recovery.** Query errors (`ErrorResponse`) are per-request,
-not connection-fatal. The reader catches `HsqlxError`, drains to
+not connection-fatal. The reader catches `ValiantError`, drains to
 `ReadyForQuery`, delivers the error to the specific caller's MVar, and
 continues serving other requests. Without this fix, any query error
 would kill the reader thread and the entire connection.

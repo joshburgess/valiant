@@ -1,4 +1,4 @@
-# hsqlx vs asyncpg: Head-to-Head Benchmark Results
+# valiant vs asyncpg: Head-to-Head Benchmark Results
 
 Identical hardware, OS, Postgres, and connection type. The only variable
 is the database driver.
@@ -11,7 +11,7 @@ is the database driver.
 - **Connection:** Unix domain socket (`/var/run/postgresql`)
 - **Postgres tuning:** `synchronous_commit=off`, `fsync=off`, `max_connections=200`
 - **asyncpg:** Python 3.12 + asyncpg + uvloop, 10 connections, 10s per benchmark
-- **hsqlx:** GHC 9.10.3, -O2, criterion (5s time-limit), 10 connections via pool
+- **valiant:** GHC 9.10.3, -O2, criterion (5s time-limit), 10 connections via pool
 
 ## Results (Run 3 — March 2026, with fast-path send + binary pg_type)
 
@@ -20,9 +20,9 @@ is the database driver.
 | Driver | Queries/sec |
 |--------|------------|
 | asyncpg (uvloop) | 30,279/s |
-| **hsqlx (fast path)** | **~31,056/s** |
+| **valiant (fast path)** | **~31,056/s** |
 
-With the fast-path send optimization, **hsqlx matches asyncpg** on
+With the fast-path send optimization, **valiant matches asyncpg** on
 trivial queries. The fast path bypasses the writer thread's queue when
 there's no contention, eliminating ~30-40μs of coordination overhead.
 
@@ -31,9 +31,9 @@ there's no contention, eliminating ~30-40μs of coordination overhead.
 | Driver | Queries/sec | Rows/sec |
 |--------|------------|----------|
 | asyncpg | 2,819/s | 2.82M/s |
-| **hsqlx** | **3,091/s** | **3.09M/s** |
+| **valiant** | **3,091/s** | **3.09M/s** |
 
-**hsqlx is 10% faster.** Pure Haskell binary decoders with direct byte
+**valiant is 10% faster.** Pure Haskell binary decoders with direct byte
 indexing outperform asyncpg's Cython decoders on integer-heavy workloads.
 
 ### pg_type wide rows (~350 rows × 12 columns, mixed types)
@@ -41,7 +41,7 @@ indexing outperform asyncpg's Cython decoders on integer-heavy workloads.
 | Driver | Queries/sec |
 |--------|------------|
 | **asyncpg** | **1,499/s** |
-| hsqlx | ~1,163/s |
+| valiant | ~1,163/s |
 
 asyncpg is 29% faster on wide text-heavy rows. This gap is from asyncpg's
 Cython-compiled codec layer decoding 12 mixed-type columns per row
@@ -52,30 +52,30 @@ faster than pure Haskell.
 | Driver | Batches/sec | Inserts/sec |
 |--------|------------|-------------|
 | asyncpg | 22.7/s | 22,664/s |
-| hsqlx (sequential) | 18.0/s | 18,000/s |
-| **hsqlx (pipelined)** | **173.8/s** | **173,800/s** |
+| valiant (sequential) | 18.0/s | 18,000/s |
+| **valiant (pipelined)** | **173.8/s** | **173,800/s** |
 
 Sequential: asyncpg is 26% faster (uvloop's tighter event loop).
-**Pipelined: hsqlx is 7.7x faster than asyncpg** — asyncpg has no
+**Pipelined: valiant is 7.7x faster than asyncpg** — asyncpg has no
 equivalent to `executeBatch`, which sends all 1000 Bind+Execute pairs
 in a single network round-trip.
 
 ### Throughput (sustained, 10 connections)
 
-| Benchmark | asyncpg | hsqlx |
+| Benchmark | asyncpg | valiant |
 |-----------|---------|-------|
 | SELECT 1+1 (10 conns × 1000) | 30,279/s | **31,056/s** |
 | fetch 1000 rows (10 conns × 100) | 2,819/s | **3,084/s** |
 
 ## Summary
 
-| Benchmark | asyncpg | hsqlx | Winner |
+| Benchmark | asyncpg | valiant | Winner |
 |-----------|---------|-------|--------|
-| SELECT 1+1 throughput | 30,279/s | **31,056/s** | **hsqlx (1.03x)** |
-| fetch 1000 rows | 2,819/s | **3,091/s** | **hsqlx (1.10x)** |
+| SELECT 1+1 throughput | 30,279/s | **31,056/s** | **valiant (1.03x)** |
+| fetch 1000 rows | 2,819/s | **3,091/s** | **valiant (1.10x)** |
 | pg_type wide rows | **1,499/s** | 1,163/s | asyncpg (1.29x) |
 | batch insert (sequential) | **22.7/s** | 18.0/s | asyncpg (1.26x) |
-| **batch insert (pipelined)** | N/A | **173.8/s** | **hsqlx (7.7x)** |
+| **batch insert (pipelined)** | N/A | **173.8/s** | **valiant (7.7x)** |
 
 ## Analysis
 
@@ -85,7 +85,7 @@ has lower per-iteration overhead than GHC's green thread scheduler.
 asyncpg's Cython-compiled protocol layer also eliminates Python
 interpreter overhead on the hot path.
 
-**Where hsqlx wins:** Batch write operations via pipelining — a
+**Where valiant wins:** Batch write operations via pipelining — a
 protocol-level optimization that asyncpg doesn't expose. This is the
 single biggest performance win for real applications that do bulk
 inserts, updates, or deletes.
@@ -110,4 +110,4 @@ Actions → Benchmarks → Run workflow → mode: asyncpg-compare
 ```
 
 The asyncpg benchmark script is at `bench-compare/asyncpg-bench.py`.
-The hsqlx benchmarks are in `runtime/bench/BenchAsyncpgCompare.hs`.
+The valiant benchmarks are in `runtime/bench/BenchAsyncpgCompare.hs`.

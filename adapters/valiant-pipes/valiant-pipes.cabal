@@ -1,0 +1,56 @@
+cabal-version:   3.0
+name:            valiant-pipes
+version:         0.1.0.0
+synopsis:        Pipes streaming adapter for valiant
+description:
+  Stream PostgreSQL query results using the @pipes@ library.
+  Provides cursor-based and fold-based producers as
+  @Producer r IO ()@ values.
+license:         BSD-3-Clause
+license-file:    ../../LICENSE
+build-type:      Simple
+
+common warnings
+  ghc-options: -Wall -Wcompat -Werror -Wno-unticked-promoted-constructors -funbox-strict-fields -fspecialise-aggressively
+
+library
+  import:           warnings
+  hs-source-dirs:   src
+  default-language: GHC2021
+  default-extensions:
+    DerivingStrategies
+    OverloadedStrings
+    StrictData
+
+  exposed-modules:
+    Valiant.Pipes
+
+  build-depends:
+    , base            >=4.17 && <5
+    , bytestring      >=0.11 && <0.13
+    , valiant
+    , pg-wire
+    , pipes           >=4.3  && <4.4
+    , vector          >=0.12 && <0.14
+
+test-suite valiant-pipes-test
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Main.hs
+  default-language: GHC2021
+  default-extensions:
+    OverloadedStrings
+
+  other-modules:
+    TestSupport
+
+  build-depends:
+    , base            >=4.17 && <5
+    , bytestring
+    , hspec           >=2.11 && <2.12
+    , valiant
+    , valiant-pipes
+    , pg-wire
+    , pipes
+    , text

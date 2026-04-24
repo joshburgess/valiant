@@ -6,7 +6,7 @@ import Data.IORef
 import Data.Text (Text)
 import Data.Maybe (isJust)
 import Data.Vector qualified as V
-import Hsqlx
+import Valiant
 import PgWire.Connection
 import PgWire.Connection.Config (parseConnString)
 import PgWire.Protocol.Backend (TxStatus (..))

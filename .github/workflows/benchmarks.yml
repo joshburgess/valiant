@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Benchmark mode: all | codec | query | concurrent | pool | asyncpg-compare | asyncpg-hsqlx | asyncpg-baseline | comparative | quick'
+        description: 'Benchmark mode: all | codec | query | concurrent | pool | asyncpg-compare | asyncpg-valiant | asyncpg-baseline | comparative | quick'
         required: false
         default: 'all'
 
@@ -45,7 +45,7 @@ jobs:
       - name: Build benchmarks
         run: |
           cabal update
-          cabal build hsqlx-bench bench-compare -O2
+          cabal build valiant-bench bench-compare -O2
       - name: Save build artifacts
         uses: actions/cache/save@v4
         with:
@@ -78,7 +78,7 @@ jobs:
           restore-keys: bench-${{ runner.os }}-${{ env.GHC_VERSION }}-
       - name: Run codec benchmarks
         run: |
-          cabal bench hsqlx-bench --benchmark-options='--match prefix codec --time-limit 3 --csv codec.csv' 2>&1 | tee codec-output.txt
+          cabal bench valiant-bench --benchmark-options='--match prefix codec --time-limit 3 --csv codec.csv' 2>&1 | tee codec-output.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -111,8 +111,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-16
           sudo systemctl start postgresql
-          sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
-          sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
+          sudo -u postgres psql -c "CREATE USER valiant_test WITH PASSWORD 'valiant_test' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE valiant_test OWNER valiant_test;"
           PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" | xargs)
           sudo sed -i '1s/^/local all all trust\n/' "$PG_HBA"
           sudo -u postgres psql -c "ALTER SYSTEM SET synchronous_commit = 'off';"
@@ -120,9 +120,9 @@ jobs:
           sudo systemctl restart postgresql
       - name: Run query benchmarks
         env:
-          DATABASE_URL: postgres://hsqlx_test:hsqlx_test@/hsqlx_test?host=/var/run/postgresql
+          DATABASE_URL: postgres://valiant_test:valiant_test@/valiant_test?host=/var/run/postgresql
         run: |
-          cabal bench hsqlx-bench --benchmark-options='--match prefix query --time-limit 3 --csv query.csv' 2>&1 | tee query-output.txt
+          cabal bench valiant-bench --benchmark-options='--match prefix query --time-limit 3 --csv query.csv' 2>&1 | tee query-output.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -155,8 +155,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-16
           sudo systemctl start postgresql
-          sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
-          sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
+          sudo -u postgres psql -c "CREATE USER valiant_test WITH PASSWORD 'valiant_test' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE valiant_test OWNER valiant_test;"
           PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" | xargs)
           sudo sed -i '1s/^/local all all trust\n/' "$PG_HBA"
           sudo -u postgres psql -c "ALTER SYSTEM SET synchronous_commit = 'off';"
@@ -165,9 +165,9 @@ jobs:
           sudo systemctl restart postgresql
       - name: Run concurrent benchmarks
         env:
-          DATABASE_URL: postgres://hsqlx_test:hsqlx_test@/hsqlx_test?host=/var/run/postgresql
+          DATABASE_URL: postgres://valiant_test:valiant_test@/valiant_test?host=/var/run/postgresql
         run: |
-          cabal bench hsqlx-bench --benchmark-options='+RTS -N -RTS --match prefix concurrent --time-limit 2 --csv concurrent.csv' 2>&1 | tee concurrent-output.txt
+          cabal bench valiant-bench --benchmark-options='+RTS -N -RTS --match prefix concurrent --time-limit 2 --csv concurrent.csv' 2>&1 | tee concurrent-output.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -200,8 +200,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-16
           sudo systemctl start postgresql
-          sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
-          sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
+          sudo -u postgres psql -c "CREATE USER valiant_test WITH PASSWORD 'valiant_test' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE valiant_test OWNER valiant_test;"
           PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" | xargs)
           sudo sed -i '1s/^/local all all trust\n/' "$PG_HBA"
           sudo -u postgres psql -c "ALTER SYSTEM SET synchronous_commit = 'off';"
@@ -210,9 +210,9 @@ jobs:
           sudo systemctl restart postgresql
       - name: Run pool benchmarks
         env:
-          DATABASE_URL: postgres://hsqlx_test:hsqlx_test@/hsqlx_test?host=/var/run/postgresql
+          DATABASE_URL: postgres://valiant_test:valiant_test@/valiant_test?host=/var/run/postgresql
         run: |
-          cabal bench hsqlx-bench --benchmark-options='+RTS -N -RTS --match prefix pool --time-limit 2 --csv pool.csv' 2>&1 | tee pool-output.txt
+          cabal bench valiant-bench --benchmark-options='+RTS -N -RTS --match prefix pool --time-limit 2 --csv pool.csv' 2>&1 | tee pool-output.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -221,10 +221,10 @@ jobs:
             pool.csv
             pool-output.txt
 
-  # ── asyncpg-hsqlx benchmarks (hsqlx, same query patterns) ────────
-  asyncpg-hsqlx:
+  # ── asyncpg-valiant benchmarks (valiant, same query patterns) ────────
+  asyncpg-valiant:
     needs: build
-    if: contains(fromJSON('["all", "asyncpg-compare", "asyncpg-hsqlx"]'), github.event.inputs.mode || 'all')
+    if: contains(fromJSON('["all", "asyncpg-compare", "asyncpg-valiant"]'), github.event.inputs.mode || 'all')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -245,23 +245,23 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-16
           sudo systemctl start postgresql
-          sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
-          sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
+          sudo -u postgres psql -c "CREATE USER valiant_test WITH PASSWORD 'valiant_test' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE valiant_test OWNER valiant_test;"
           PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" | xargs)
           sudo sed -i '1s/^/local all all trust\n/' "$PG_HBA"
           sudo -u postgres psql -c "ALTER SYSTEM SET synchronous_commit = 'off';"
           sudo -u postgres psql -c "ALTER SYSTEM SET fsync = 'off';"
           sudo -u postgres psql -c "ALTER SYSTEM SET max_connections = '200';"
           sudo systemctl restart postgresql
-      - name: Run asyncpg-hsqlx benchmarks (hsqlx)
+      - name: Run asyncpg-valiant benchmarks (valiant)
         env:
-          DATABASE_URL: postgres://hsqlx_test:hsqlx_test@/hsqlx_test?host=/var/run/postgresql
+          DATABASE_URL: postgres://valiant_test:valiant_test@/valiant_test?host=/var/run/postgresql
         run: |
-          cabal bench hsqlx-bench --benchmark-options='+RTS -N -RTS --match prefix asyncpg-compare --time-limit 5 --csv asyncpg-compare.csv' 2>&1 | tee asyncpg-compare-output.txt
+          cabal bench valiant-bench --benchmark-options='+RTS -N -RTS --match prefix asyncpg-compare --time-limit 5 --csv asyncpg-compare.csv' 2>&1 | tee asyncpg-compare-output.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: bench-asyncpg-hsqlx
+          name: bench-asyncpg-valiant
           path: |
             asyncpg-compare.csv
             asyncpg-compare-output.txt
@@ -290,8 +290,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-16 libpq-dev
           sudo systemctl start postgresql
-          sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
-          sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
+          sudo -u postgres psql -c "CREATE USER valiant_test WITH PASSWORD 'valiant_test' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE valiant_test OWNER valiant_test;"
           PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" | xargs)
           sudo sed -i '1s/^/local all all trust\n/' "$PG_HBA"
           sudo -u postgres psql -c "ALTER SYSTEM SET synchronous_commit = 'off';"
@@ -299,7 +299,7 @@ jobs:
           sudo systemctl restart postgresql
       - name: Run comparative benchmarks
         env:
-          DATABASE_URL: postgres://hsqlx_test:hsqlx_test@/hsqlx_test?host=/var/run/postgresql
+          DATABASE_URL: postgres://valiant_test:valiant_test@/valiant_test?host=/var/run/postgresql
         run: |
           BENCH_MODE=quick cabal run bench-compare -- --time-limit 3 --csv comparative.csv 2>&1 | tee comparative-output.txt
       - uses: actions/upload-artifact@v4
@@ -323,8 +323,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-16
           sudo systemctl start postgresql
-          sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
-          sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
+          sudo -u postgres psql -c "CREATE USER valiant_test WITH PASSWORD 'valiant_test' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE valiant_test OWNER valiant_test;"
           PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" | xargs)
           sudo sed -i '1s/^/local all all trust\n/' "$PG_HBA"
           sudo -u postgres psql -c "ALTER SYSTEM SET synchronous_commit = 'off';"
@@ -337,7 +337,7 @@ jobs:
           pip3 install --break-system-packages asyncpg uvloop
       - name: Run asyncpg benchmarks
         env:
-          DATABASE_URL: postgres://hsqlx_test@/hsqlx_test?host=/var/run/postgresql
+          DATABASE_URL: postgres://valiant_test@/valiant_test?host=/var/run/postgresql
         run: |
           python3 bench-compare/asyncpg-bench.py "$DATABASE_URL" 2>&1 | tee asyncpg-baseline-output.txt
       - uses: actions/upload-artifact@v4
@@ -348,7 +348,7 @@ jobs:
 
   # ── Summary ──────────────────────────────────────────────────────
   summary:
-    needs: [codec, query, concurrent, pool, asyncpg-hsqlx, asyncpg-baseline, comparative]
+    needs: [codec, query, concurrent, pool, asyncpg-valiant, asyncpg-baseline, comparative]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 60

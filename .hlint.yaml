@@ -1,4 +1,4 @@
-# HLint configuration for hsqlx
+# HLint configuration for valiant
 # Run: hlint runtime/src/ wire/src/ plugin/src/ src/ adapters/
 
 # ── Hint groups ─────────────────────────────────────────────────────
@@ -15,7 +15,7 @@
 
 # ── Module-scoped ignores ───────────────────────────────────────────
 # Performance-critical modules: don't change evaluation semantics
-- ignore: {name: "Eta reduce", within: [Hsqlx.Transaction, Hsqlx.Execute, Hsqlx.FromRow, Hsqlx.FromRowFast]}
+- ignore: {name: "Eta reduce", within: [Valiant.Transaction, Valiant.Execute, Valiant.FromRow, Valiant.FromRowFast]}
 - ignore: {name: "Avoid lambda", within: [PgWire.Pool, PgWire.Wire, PgWire.MockServer, PgWire.Async, PgWire.Connection.Config]}
 - ignore: {name: "Use fewer imports", within: [PgWire.Wire]}
 
@@ -29,10 +29,10 @@
   - {name: traceM, within: [], message: "Remove debug traceM"}
 
   # Partial functions (use safe alternatives)
-  - {name: "Data.List.nub", within: [Hsqlx.CLI.Discover, Hsqlx.CLI.Command.Generate], message: "Use nubOrd from containers or Data.List.nub is O(n^2)"}
+  - {name: "Data.List.nub", within: [Valiant.CLI.Discover, Valiant.CLI.Command.Generate], message: "Use nubOrd from containers or Data.List.nub is O(n^2)"}
 
   # Unsafe functions (allowed only in specific modules)
-  - {name: unsafePerformIO, within: [Hsqlx.Streaming, Hsqlx.Binary.Inet, PgWire.Async, Hsqlx.Conduit, Hsqlx.Pipes, Hsqlx.Stream, Hsqlx.Streamly, Hsqlx.Transaction, BenchQuery, BenchConcurrent, BenchPool, BenchAsyncpgCompare]}
+  - {name: unsafePerformIO, within: [Valiant.Streaming, Valiant.Binary.Inet, PgWire.Async, Valiant.Conduit, Valiant.Pipes, Valiant.Stream, Valiant.Streamly, Valiant.Transaction, BenchQuery, BenchConcurrent, BenchPool, BenchAsyncpgCompare]}
   - {name: unsafeCoerce, within: []}
 
 # ── Import alias consistency ────────────────────────────────────────

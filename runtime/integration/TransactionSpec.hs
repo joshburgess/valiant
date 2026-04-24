@@ -1,7 +1,7 @@
 module TransactionSpec (spec) where
 
 import Control.Exception (SomeException, try)
-import Hsqlx
+import Valiant
 import TestSupport
 import Test.Hspec
 

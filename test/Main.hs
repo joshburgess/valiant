@@ -1,22 +1,22 @@
 module Main where
 
-import Hsqlx.CLI.CacheSpec qualified as CacheSpec
-import Hsqlx.CLI.CustomTypesSpec qualified as CustomTypesSpec
-import Hsqlx.CLI.DiscoverSpec qualified as DiscoverSpec
-import Hsqlx.CLI.ErrorSpec qualified as ErrorSpec
-import Hsqlx.CLI.HashSpec qualified as HashSpec
-import Hsqlx.CLI.NamedParamsSpec qualified as NamedParamsSpec
-import Hsqlx.CLI.SqlMetadataSpec qualified as SqlMetadataSpec
-import Hsqlx.CLI.TypeMapSpec qualified as TypeMapSpec
+import Valiant.CLI.CacheSpec qualified as CacheSpec
+import Valiant.CLI.CustomTypesSpec qualified as CustomTypesSpec
+import Valiant.CLI.DiscoverSpec qualified as DiscoverSpec
+import Valiant.CLI.ErrorSpec qualified as ErrorSpec
+import Valiant.CLI.HashSpec qualified as HashSpec
+import Valiant.CLI.NamedParamsSpec qualified as NamedParamsSpec
+import Valiant.CLI.SqlMetadataSpec qualified as SqlMetadataSpec
+import Valiant.CLI.TypeMapSpec qualified as TypeMapSpec
 import Test.Hspec
 
 main :: IO ()
 main = hspec $ do
-  describe "Hsqlx.CLI.Hash" HashSpec.spec
-  describe "Hsqlx.CLI.TypeMap" TypeMapSpec.spec
-  describe "Hsqlx.CLI.Cache" CacheSpec.spec
-  describe "Hsqlx.CLI.Discover" DiscoverSpec.spec
-  describe "Hsqlx.CLI.Error" ErrorSpec.spec
-  describe "Hsqlx.CLI.SqlMetadata" SqlMetadataSpec.spec
-  describe "Hsqlx.CLI.NamedParams" NamedParamsSpec.spec
-  describe "Hsqlx.CLI.CustomTypes" CustomTypesSpec.spec
+  describe "Valiant.CLI.Hash" HashSpec.spec
+  describe "Valiant.CLI.TypeMap" TypeMapSpec.spec
+  describe "Valiant.CLI.Cache" CacheSpec.spec
+  describe "Valiant.CLI.Discover" DiscoverSpec.spec
+  describe "Valiant.CLI.Error" ErrorSpec.spec
+  describe "Valiant.CLI.SqlMetadata" SqlMetadataSpec.spec
+  describe "Valiant.CLI.NamedParams" NamedParamsSpec.spec
+  describe "Valiant.CLI.CustomTypes" CustomTypesSpec.spec

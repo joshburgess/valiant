@@ -1,0 +1,45 @@
+{
+    "columns": [
+        {
+            "haskell_module": "Data.Int",
+            "haskell_type": "Int32",
+            "name": "id",
+            "nullable": false,
+            "pg_enum_labels": null,
+            "pg_oid": 23,
+            "pg_type_category": null,
+            "pg_type_name": "int4",
+            "source_column_number": 1,
+            "source_table_oid": 17599
+        }
+    ],
+    "database_url_hash": "62b373881bcc8dbafdfdc488ef1e8525e82a3586660ccaf97bef16bbbffae48d",
+    "file": "users/insert.sql",
+    "valiant_version": "0.1.0",
+    "parameters": [
+        {
+            "haskell_module": "Data.Text",
+            "haskell_type": "Text",
+            "index": 1,
+            "name": null,
+            "pg_enum_labels": null,
+            "pg_oid": 25,
+            "pg_type_category": null,
+            "pg_type_name": "text"
+        },
+        {
+            "haskell_module": "Data.Text",
+            "haskell_type": "Text",
+            "index": 2,
+            "name": null,
+            "pg_enum_labels": null,
+            "pg_oid": 25,
+            "pg_type_category": null,
+            "pg_type_name": "text"
+        }
+    ],
+    "prepared_at": "2026-03-17T16:39:12.0279Z",
+    "sql": "INSERT INTO users (name, email)\nVALUES ($1, $2)\nRETURNING id\n",
+    "sql_hash": "fb918ebdc6e72531aec8e5ba390ca0743b29905a9da100328e6bdf4ad7effd11",
+    "statement_type": "insert"
+}

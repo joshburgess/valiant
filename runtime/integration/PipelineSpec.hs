@@ -2,7 +2,7 @@ module PipelineSpec (spec) where
 
 import Data.Int (Int32, Int64)
 import Data.Text (Text)
-import Hsqlx
+import Valiant
 import PgWire.Protocol.Oid (oidInt4)
 import TestSupport
 import Test.Hspec

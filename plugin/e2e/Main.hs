@@ -1,6 +1,6 @@
 -- | If this compiles, the plugin is working: queryFile calls were
 -- rewritten to mkStatement, and type signatures were validated
--- against the .hsqlx/ cache.
+-- against the .valiant/ cache.
 module Main where
 
 import PluginE2E

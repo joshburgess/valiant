@@ -1,0 +1,55 @@
+{
+    "columns": [
+        {
+            "haskell_module": "Data.Int",
+            "haskell_type": "Int32",
+            "name": "id",
+            "nullable": false,
+            "pg_enum_labels": null,
+            "pg_oid": 23,
+            "pg_type_category": null,
+            "pg_type_name": "int4",
+            "source_column_number": 1,
+            "source_table_oid": 17609
+        }
+    ],
+    "database_url_hash": "62b373881bcc8dbafdfdc488ef1e8525e82a3586660ccaf97bef16bbbffae48d",
+    "file": "posts/insert.sql",
+    "valiant_version": "0.1.0",
+    "parameters": [
+        {
+            "haskell_module": "Data.Int",
+            "haskell_type": "Int32",
+            "index": 1,
+            "name": null,
+            "pg_enum_labels": null,
+            "pg_oid": 23,
+            "pg_type_category": null,
+            "pg_type_name": "int4"
+        },
+        {
+            "haskell_module": "Data.Text",
+            "haskell_type": "Text",
+            "index": 2,
+            "name": null,
+            "pg_enum_labels": null,
+            "pg_oid": 25,
+            "pg_type_category": null,
+            "pg_type_name": "text"
+        },
+        {
+            "haskell_module": "Data.Text",
+            "haskell_type": "Text",
+            "index": 3,
+            "name": null,
+            "pg_enum_labels": null,
+            "pg_oid": 25,
+            "pg_type_category": null,
+            "pg_type_name": "text"
+        }
+    ],
+    "prepared_at": "2026-03-17T16:39:12.010515Z",
+    "sql": "INSERT INTO posts (author_id, title, body)\nVALUES ($1, $2, $3)\nRETURNING id\n",
+    "sql_hash": "159c8f16c41c6eb06441d45940b157b79866d2ed93ac70c052913bfe022c597b",
+    "statement_type": "insert"
+}

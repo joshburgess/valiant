@@ -1,7 +1,7 @@
 # asyncpg Benchmark Methodology & Comparison Guide
 
 How asyncpg (Python) produces its benchmark numbers, and how to
-replicate the methodology for hsqlx to get directly comparable results.
+replicate the methodology for valiant to get directly comparable results.
 
 ## asyncpg's Setup
 
@@ -57,7 +57,7 @@ These are **geometric means** across all 7 benchmarks, not individual numbers.
 
 ---
 
-## How to Replicate for hsqlx
+## How to Replicate for valiant
 
 ### Option A: GitHub Actions (automated, reproducible)
 
@@ -76,7 +76,7 @@ patterns:
 - `generate_series(1, 1000)` (benchmark #2)
 - `pg_type` wide rows (benchmark #1)
 - Sequential batch insert 1000 (benchmark #6)
-- Pipelined batch insert 1000 (hsqlx advantage)
+- Pipelined batch insert 1000 (valiant advantage)
 
 ### Option B: Bare-Metal Linux (authoritative)
 
@@ -90,16 +90,16 @@ For numbers directly comparable to asyncpg's published results:
 sudo apt install postgresql-16
 sudo systemctl start postgresql
 sudo -u postgres createuser -s $USER
-createdb hsqlx_bench
+createdb valiant_bench
 
 # 3. Connect via Unix socket
-export DATABASE_URL="postgres://$USER@/hsqlx_bench?host=/var/run/postgresql"
+export DATABASE_URL="postgres://$USER@/valiant_bench?host=/var/run/postgresql"
 
 # 4. Build with -O2
-cabal build hsqlx-bench -O2
+cabal build valiant-bench -O2
 
 # 5. Run the asyncpg comparison benchmarks
-cabal bench hsqlx-bench \
+cabal bench valiant-bench \
   --benchmark-options='+RTS -N -RTS --match prefix asyncpg-compare --time-limit 10'
 
 # 6. Run with 10 concurrent connections (matching asyncpg's setup)
@@ -119,10 +119,10 @@ cd pgbench
 # 2. Run asyncpg benchmark (uses temp Postgres cluster)
 python bench.py --concurrency-levels 10 --duration 30 --warmup-time 5
 
-# 3. Run hsqlx benchmarks on the same machine
-cd /path/to/hsqlx
+# 3. Run valiant benchmarks on the same machine
+cd /path/to/valiant
 export DATABASE_URL="postgres://..."
-cabal bench hsqlx-bench \
+cabal bench valiant-bench \
   --benchmark-options='+RTS -N -RTS --match prefix asyncpg-compare --time-limit 30'
 
 # 4. Compare the numbers
@@ -134,16 +134,16 @@ cabal bench hsqlx-bench \
 
 On equivalent hardware with Unix sockets:
 
-| Benchmark | asyncpg (expected) | hsqlx (expected) | Notes |
+| Benchmark | asyncpg (expected) | valiant (expected) | Notes |
 |-----------|-------------------|------------------|-------|
 | SELECT 1+1 | ~20,000 q/s | ~15,000-20,000 q/s | Minimal overhead, both near wire speed |
-| generate_series 1000 | ~1,500 q/s | ~1,500-2,000 q/s | hsqlx binary decode may be faster |
+| generate_series 1000 | ~1,500 q/s | ~1,500-2,000 q/s | valiant binary decode may be faster |
 | pg_type 350 rows | ~800 q/s | ~600-1,000 q/s | Wide rows, text decode |
 | batch insert 1000 (seq) | ~30 q/s | ~30 q/s | Both limited by round-trip |
-| batch insert 1000 (pipelined) | N/A | ~300-500 q/s | **hsqlx-only feature** |
+| batch insert 1000 (pipelined) | N/A | ~300-500 q/s | **valiant-only feature** |
 
 asyncpg's Cython-compiled codec layer gives it an edge on decode-heavy
-workloads. hsqlx's pipelined batch execution gives it an edge on writes.
+workloads. valiant's pipelined batch execution gives it an edge on writes.
 On minimal-overhead queries (SELECT 1+1), both should be near identical.
 
 ---

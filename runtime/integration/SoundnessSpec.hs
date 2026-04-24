@@ -7,7 +7,7 @@ module SoundnessSpec (spec) where
 import Control.Exception (SomeException, try)
 import Data.ByteString.Char8 qualified as BS8
 import Data.Int (Int32)
-import Hsqlx
+import Valiant
 import PgWire.Connection.Config (parseConnString)
 import TestSupport
 import Test.Hspec

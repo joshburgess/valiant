@@ -1,16 +1,16 @@
 -- | Query definitions for the example app.
 --
--- Each binding references a @.sql@ file via 'queryFile'. The hsqlx GHC
+-- Each binding references a @.sql@ file via 'queryFile'. The valiant GHC
 -- plugin rewrites these to 'mkStatement' calls at compile time and
 -- validates that the type signatures match the Postgres schema.
 --
--- Run @hsqlx prepare@ whenever the SQL files or database schema change.
+-- Run @valiant prepare@ whenever the SQL files or database schema change.
 module Queries where
 
 import Data.Int (Int32, Int64)
 import Data.Text (Text)
 import Data.Time (UTCTime)
-import Hsqlx (Statement, queryFile)
+import Valiant (Statement, queryFile)
 
 -- Users ---------------------------------------------------------------------
 

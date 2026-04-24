@@ -1,13 +1,13 @@
 {-# LANGUAGE DeriveGeneric #-}
 
--- | Example REST API using hsqlx + scotty.
+-- | Example REST API using valiant + scotty.
 --
 -- Demonstrates: connection pooling, typed queries, transactions,
 -- pipelined batch inserts, and JSON serialization.
 --
 -- Run:
 --   eval $(scripts/pg-setup.sh)
---   cabal run hsqlx-example
+--   cabal run valiant-example
 --   curl http://localhost:3000/users
 module Main where
 
@@ -16,7 +16,7 @@ import Data.ByteString.Char8 qualified as BS8
 import Data.Int (Int32, Int64)
 import Data.Text (Text)
 import Data.Time (UTCTime)
-import Hsqlx
+import Valiant
 import Network.HTTP.Types.Status (status201, status404)
 import Queries
 import System.Environment (lookupEnv)
@@ -28,7 +28,7 @@ main = do
     Just url -> pure (BS8.pack url)
     Nothing -> do
       putStrLn "DATABASE_URL not set, using default"
-      pure "postgres://hsqlx_test:hsqlx_test@localhost:5433/hsqlx_test"
+      pure "postgres://valiant_test:valiant_test@localhost:5433/valiant_test"
 
   -- Create connection pool
   pool <- newPool defaultPoolConfig
@@ -56,7 +56,7 @@ main = do
       \)"
     pure ()
 
-  putStrLn "hsqlx example API running on http://localhost:3000"
+  putStrLn "valiant example API running on http://localhost:3000"
   putStrLn ""
   putStrLn "  GET    /users              - list all users"
   putStrLn "  GET    /users/:id          - get user by id"

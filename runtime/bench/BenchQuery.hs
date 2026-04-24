@@ -7,7 +7,7 @@ import Data.Int (Int32, Int64)
 import Data.IORef
 import Data.Text (Text)
 import Data.Text qualified as T
-import Hsqlx
+import Valiant
 import System.IO.Unsafe (unsafePerformIO)
 import TestSupport
 

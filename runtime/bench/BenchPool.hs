@@ -5,7 +5,7 @@ module BenchPool (benchmarks) where
 
 import Control.Concurrent.Async (mapConcurrently)
 import Criterion.Main
-import Hsqlx
+import Valiant
 import TestSupport (requireDatabaseUrl)
 
 benchmarks :: [Benchmark]

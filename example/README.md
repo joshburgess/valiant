@@ -1,6 +1,6 @@
-# hsqlx example — REST API
+# valiant example — REST API
 
-A small REST API demonstrating hsqlx with [scotty](https://hackage.haskell.org/package/scotty).
+A small REST API demonstrating valiant with [scotty](https://hackage.haskell.org/package/scotty).
 
 ## Features demonstrated
 
@@ -18,7 +18,7 @@ A small REST API demonstrating hsqlx with [scotty](https://hackage.haskell.org/p
 eval $(scripts/pg-setup.sh)
 
 # Run the server
-cabal run hsqlx-example
+cabal run valiant-example
 
 # In another terminal:
 curl -X POST http://localhost:3000/seed
@@ -59,7 +59,7 @@ example/
 │       ├── list_recent.sql
 │       ├── insert.sql
 │       └── publish.sql
-└── hsqlx-example.cabal
+└── valiant-example.cabal
 ```
 
 ## Notes
@@ -68,6 +68,6 @@ This example uses `mkStatement` directly instead of `queryFile` because
 it doesn't require the GHC plugin to compile. In a real project, you would:
 
 1. Write `.sql` files in `sql/`
-2. Run `hsqlx prepare` to validate them against your database
+2. Run `valiant prepare` to validate them against your database
 3. Use `queryFile "users/find_by_id.sql"` with the plugin enabled
 4. The plugin verifies types at compile time and rewrites to `mkStatement`

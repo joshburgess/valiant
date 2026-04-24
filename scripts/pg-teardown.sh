@@ -3,7 +3,7 @@ set -euo pipefail
 
 # pg-teardown.sh — Stop and remove the Docker Postgres test container.
 
-CONTAINER_NAME="${HSQLX_TEST_CONTAINER:-hsqlx-test-pg}"
+CONTAINER_NAME="${VALIANT_TEST_CONTAINER:-valiant-test-pg}"
 
 if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER_NAME}$"; then
   echo "Stopping and removing ${CONTAINER_NAME}..." >&2

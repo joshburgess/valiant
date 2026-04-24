@@ -1,0 +1,48 @@
+{
+    "columns": [
+        {
+            "haskell_module": "Data.Int",
+            "haskell_type": "Int32",
+            "name": "id",
+            "nullable": false,
+            "pg_enum_labels": null,
+            "pg_oid": 23,
+            "pg_type_category": null,
+            "pg_type_name": "int4",
+            "source_column_number": 1,
+            "source_table_oid": 17599
+        },
+        {
+            "haskell_module": "Data.Text",
+            "haskell_type": "Text",
+            "name": "name",
+            "nullable": false,
+            "pg_enum_labels": null,
+            "pg_oid": 25,
+            "pg_type_category": null,
+            "pg_type_name": "text",
+            "source_column_number": 2,
+            "source_table_oid": 17599
+        },
+        {
+            "haskell_module": "Data.Text",
+            "haskell_type": "Maybe Text",
+            "name": "email",
+            "nullable": true,
+            "pg_enum_labels": null,
+            "pg_oid": 25,
+            "pg_type_category": null,
+            "pg_type_name": "text",
+            "source_column_number": 3,
+            "source_table_oid": 17599
+        }
+    ],
+    "database_url_hash": "62b373881bcc8dbafdfdc488ef1e8525e82a3586660ccaf97bef16bbbffae48d",
+    "file": "users/list_all.sql",
+    "valiant_version": "0.1.0",
+    "parameters": [],
+    "prepared_at": "2026-03-17T16:39:12.036522Z",
+    "sql": "SELECT id, name, email\nFROM users\nORDER BY id\n",
+    "sql_hash": "d5ce33ad9affc5478e0f884ceb6e7167d2373a76b479b5f5601ac5c7450b1f19",
+    "statement_type": "select"
+}

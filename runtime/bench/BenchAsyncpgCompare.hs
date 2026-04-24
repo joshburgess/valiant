@@ -14,7 +14,7 @@ import Data.Int (Int16, Int32)
 import Data.IORef
 import Data.Text (Text)
 import Data.Text qualified as T
-import Hsqlx
+import Valiant
 import System.IO.Unsafe (unsafePerformIO)
 import TestSupport (requireDatabaseUrl)
 
@@ -76,7 +76,7 @@ benchmarks =
           whnfIO (concurrentQueries 10 10 queryPgTypeFast)
       ]
     , bgroup "batch-insert-1000-pipelined"
-      -- Same as above but using hsqlx's pipelined executeBatch
+      -- Same as above but using valiant's pipelined executeBatch
       [ bench "10 conns x 1 batch" $
           whnfIO (concurrentQueries 10 1 queryBatchInsertPipelined)
       ]
@@ -167,7 +167,7 @@ queryBatchInsert conn = do
 
 queryBatchInsertPipelined :: Connection -> IO ()
 queryBatchInsertPipelined conn = do
-  -- Pipelined inserts (hsqlx advantage — asyncpg doesn't have this)
+  -- Pipelined inserts (valiant advantage — asyncpg doesn't have this)
   _ <- simpleQuery conn "TRUNCATE _bench_insert"
   _ <- executeBatch conn stmtInsertBench
     [ (i, i * 2, i * 3, i * 4,

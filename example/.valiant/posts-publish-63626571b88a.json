@@ -1,0 +1,22 @@
+{
+    "columns": [],
+    "database_url_hash": "62b373881bcc8dbafdfdc488ef1e8525e82a3586660ccaf97bef16bbbffae48d",
+    "file": "posts/publish.sql",
+    "valiant_version": "0.1.0",
+    "parameters": [
+        {
+            "haskell_module": "Data.Int",
+            "haskell_type": "Int32",
+            "index": 1,
+            "name": null,
+            "pg_enum_labels": null,
+            "pg_oid": 23,
+            "pg_type_category": null,
+            "pg_type_name": "int4"
+        }
+    ],
+    "prepared_at": "2026-03-17T16:39:12.019504Z",
+    "sql": "UPDATE posts\nSET published_at = now()\nWHERE id = $1 AND published_at IS NULL\n",
+    "sql_hash": "63626571b88a195ad885e0d26cf02abbf49b9933c436e948828b77e4ddc27584",
+    "statement_type": "update"
+}

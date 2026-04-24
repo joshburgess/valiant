@@ -1,6 +1,6 @@
 # Known Gaps and Future Work
 
-This document tracks features missing from the hsqlx/pg-wire
+This document tracks features missing from the valiant/pg-wire
 implementation, performance improvements, and architectural changes
 planned for future releases.
 
@@ -67,17 +67,17 @@ Last updated: 2026-03-24
   validation pass then unsafe fill pass, eliminates intermediate list
 - **Pool-level TypeCache** — `TVar (Map Word32 TypeInfo)` shared across
   connections for resolved PG type metadata
-- **Auto PG type discovery** — `hsqlx prepare` queries `pg_type`/`pg_enum`/
+- **Auto PG type discovery** — `valiant prepare` queries `pg_type`/`pg_enum`/
   `pg_range` for unknown OIDs instead of failing; enums→Text, domains→unwrap,
   ranges→PgRange
-- **PgEnum type class** — `Hsqlx.Binary.Enum` codec for enum binary format
+- **PgEnum type class** — `Valiant.Binary.Enum` codec for enum binary format
 - **Extended cache format** — `pg_type_category` and `pg_enum_labels` in
   cache JSON (backward-compatible optional fields)
 - **`-Werror`** — All four cabal packages compile warning-free
 - **Named parameters** — `:name` syntax in SQL files, `ToNamedParams` type class,
   `mkStatementNamed` constructor, Generic-based record encoding with field
   reordering and clear mismatch error messages
-- **Hsqlx.Monad** — `type Hsqlx = ReaderT Pool IO` convenience monad with
+- **Valiant.Monad** — `type Valiant = ReaderT Pool IO` convenience monad with
   lifted `fetchOneM`, `fetchAllM`, `executeM`, `withTransactionM`, etc.
 
 ---
@@ -435,7 +435,7 @@ per-value heap allocation.
 - Mock server (done: PgWire.MockServer)
 - Pre-allocated receive buffer (done: 32KB chunks, Builder accumulation)
 - Conduit/pipes/streaming/streamly/bluefin/effectful/fused-effects/mtl integration (done: 8 adapter packages)
-- Large object API (done: `Hsqlx.LargeObject` with bracket, import/export, streaming)
+- Large object API (done: `Valiant.LargeObject` with bracket, import/export, streaming)
 
 ---
 

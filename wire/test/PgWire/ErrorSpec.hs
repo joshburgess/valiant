@@ -7,7 +7,7 @@ import Test.Hspec
 
 spec :: Spec
 spec = do
-  describe "HsqlxError constructors" $ do
+  describe "ValiantError constructors" $ do
     it "ConnectionError carries message" $ do
       let err = ConnectionError "host unreachable"
       show err `shouldContain` "host unreachable"
@@ -36,13 +36,13 @@ spec = do
       show err `shouldContain` "table not found"
       show err `shouldContain` "42P01"
 
-  describe "throwHsqlx" $ do
+  describe "throwValiant" $ do
     it "throws as an Exception" $ do
-      let action = throwHsqlx (ConnectionError "test") :: IO ()
+      let action = throwValiant (ConnectionError "test") :: IO ()
       action `shouldThrow` (== ConnectionError "test")
 
     it "can be caught with specific pattern" $ do
-      result <- (throwHsqlx PoolTimeout >> pure "no") `catch` \(e :: HsqlxError) ->
+      result <- (throwValiant PoolTimeout >> pure "no") `catch` \(e :: ValiantError) ->
         case e of
           PoolTimeout -> pure "caught"
           _ -> pure "wrong"

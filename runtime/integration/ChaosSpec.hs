@@ -6,7 +6,7 @@ import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (mapConcurrently_)
 import Control.Exception (SomeException, try)
 import Data.ByteString.Char8 qualified as BS8
-import Hsqlx
+import Valiant
 import TestSupport
 import Test.Hspec
 
@@ -108,7 +108,7 @@ terminationRecoverySpec = describe "Termination recovery" $ do
     withTestConnection $ \killer -> do
       -- Find PIDs of all connections from our test user
       (rows, _) <- simpleQuery killer
-        "SELECT pid FROM pg_stat_activity WHERE usename = 'hsqlx_test' AND pid != pg_backend_pid() AND state = 'idle'"
+        "SELECT pid FROM pg_stat_activity WHERE usename = 'valiant_test' AND pid != pg_backend_pid() AND state = 'idle'"
       mapM_ (\row -> case row of
         [Just pid] -> do
           _ <- simpleQuery killer ("SELECT pg_terminate_backend(" <> pid <> ")")

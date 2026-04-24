@@ -1,10 +1,10 @@
--- | Error types for hsqlx runtime exceptions.
+-- | Error types for valiant runtime exceptions.
 --
--- All errors are thrown as 'HsqlxError' via 'throwIO' and can be caught
+-- All errors are thrown as 'ValiantError' via 'throwIO' and can be caught
 -- with the standard @Control.Exception@ machinery.
 module PgWire.Error
-  ( HsqlxError (..)
-  , throwHsqlx
+  ( ValiantError (..)
+  , throwValiant
   ) where
 
 import Control.Exception (Exception, throwIO)
@@ -13,8 +13,8 @@ import GHC.Generics (Generic)
 import NoThunks.Class (NoThunks)
 import PgWire.Protocol.Backend (PgError)
 
--- | All runtime errors thrown by hsqlx.
-data HsqlxError
+-- | All runtime errors thrown by valiant.
+data ValiantError
   = ConnectionError ByteString
   -- ^ Failed to establish a TCP\/TLS connection to the server.
   | AuthError ByteString
@@ -36,9 +36,9 @@ data HsqlxError
   -- ^ The connection's reader thread has died (network failure, server crash).
   deriving stock (Show, Eq, Generic)
 
-instance NoThunks HsqlxError
-instance Exception HsqlxError
+instance NoThunks ValiantError
+instance Exception ValiantError
 
--- | Throw an 'HsqlxError' as an exception.
-throwHsqlx :: HsqlxError -> IO a
-throwHsqlx = throwIO
+-- | Throw an 'ValiantError' as an exception.
+throwValiant :: ValiantError -> IO a
+throwValiant = throwIO

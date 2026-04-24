@@ -1,40 +1,40 @@
 module Main where
 
-import Hsqlx.ErrorSpec qualified as ErrorSpec
-import Hsqlx.Binary.ArraySpec qualified as ArraySpec
-import Hsqlx.Binary.CompositeSpec qualified as CompositeSpec
-import Hsqlx.Binary.DecodeSpec qualified as DecodeSpec
-import Hsqlx.Binary.EncodeSpec qualified as EncodeSpec
-import Hsqlx.Binary.HStoreSpec qualified as HStoreSpec
-import Hsqlx.Binary.InetSpec qualified as InetSpec
-import Hsqlx.Binary.MacAddrSpec qualified as MacAddrSpec
-import Hsqlx.Binary.IntervalSpec qualified as IntervalSpec
-import Hsqlx.Binary.JSONSpec qualified as JSONSpec
-import Hsqlx.Binary.NewtypeSpec qualified as NewtypeSpec
-import Hsqlx.Binary.PropertyHedgehogSpec qualified as PropertyHedgehogSpec
-import Hsqlx.Binary.RangeSpec qualified as RangeSpec
-import Hsqlx.Binary.ScientificSpec qualified as ScientificSpec
-import Hsqlx.Binary.UUIDSpec qualified as UUIDSpec
-import Hsqlx.FromRowSpec qualified as FromRowSpec
-import Hsqlx.NamedParamsSpec qualified as NamedParamsSpec
+import Valiant.ErrorSpec qualified as ErrorSpec
+import Valiant.Binary.ArraySpec qualified as ArraySpec
+import Valiant.Binary.CompositeSpec qualified as CompositeSpec
+import Valiant.Binary.DecodeSpec qualified as DecodeSpec
+import Valiant.Binary.EncodeSpec qualified as EncodeSpec
+import Valiant.Binary.HStoreSpec qualified as HStoreSpec
+import Valiant.Binary.InetSpec qualified as InetSpec
+import Valiant.Binary.MacAddrSpec qualified as MacAddrSpec
+import Valiant.Binary.IntervalSpec qualified as IntervalSpec
+import Valiant.Binary.JSONSpec qualified as JSONSpec
+import Valiant.Binary.NewtypeSpec qualified as NewtypeSpec
+import Valiant.Binary.PropertyHedgehogSpec qualified as PropertyHedgehogSpec
+import Valiant.Binary.RangeSpec qualified as RangeSpec
+import Valiant.Binary.ScientificSpec qualified as ScientificSpec
+import Valiant.Binary.UUIDSpec qualified as UUIDSpec
+import Valiant.FromRowSpec qualified as FromRowSpec
+import Valiant.NamedParamsSpec qualified as NamedParamsSpec
 import Test.Hspec
 
 main :: IO ()
 main = hspec $ do
-  describe "Hsqlx.Binary.Encode" EncodeSpec.spec
-  describe "Hsqlx.Binary.Decode" DecodeSpec.spec
-  describe "Hsqlx.Binary.Array" ArraySpec.spec
-  describe "Hsqlx.Binary.Composite" CompositeSpec.spec
-  describe "Hsqlx.Binary.Range" RangeSpec.spec
-  describe "Hsqlx.Binary.Scientific" ScientificSpec.spec
-  describe "Hsqlx.Binary.HStore" HStoreSpec.spec
-  describe "Hsqlx.Binary.Inet" InetSpec.spec
-  describe "Hsqlx.Binary.MacAddr" MacAddrSpec.spec
-  describe "Hsqlx.Binary.Interval" IntervalSpec.spec
-  describe "Hsqlx.Binary.UUID" UUIDSpec.spec
-  describe "Hsqlx.Binary.JSON" JSONSpec.spec
-  describe "Hsqlx.Binary.Newtype" NewtypeSpec.spec
-  describe "Hsqlx.Binary.Property" PropertyHedgehogSpec.spec
-  describe "Hsqlx.FromRow" FromRowSpec.spec
-  describe "Hsqlx.NamedParams" NamedParamsSpec.spec
-  describe "Hsqlx.Error" ErrorSpec.spec
+  describe "Valiant.Binary.Encode" EncodeSpec.spec
+  describe "Valiant.Binary.Decode" DecodeSpec.spec
+  describe "Valiant.Binary.Array" ArraySpec.spec
+  describe "Valiant.Binary.Composite" CompositeSpec.spec
+  describe "Valiant.Binary.Range" RangeSpec.spec
+  describe "Valiant.Binary.Scientific" ScientificSpec.spec
+  describe "Valiant.Binary.HStore" HStoreSpec.spec
+  describe "Valiant.Binary.Inet" InetSpec.spec
+  describe "Valiant.Binary.MacAddr" MacAddrSpec.spec
+  describe "Valiant.Binary.Interval" IntervalSpec.spec
+  describe "Valiant.Binary.UUID" UUIDSpec.spec
+  describe "Valiant.Binary.JSON" JSONSpec.spec
+  describe "Valiant.Binary.Newtype" NewtypeSpec.spec
+  describe "Valiant.Binary.Property" PropertyHedgehogSpec.spec
+  describe "Valiant.FromRow" FromRowSpec.spec
+  describe "Valiant.NamedParams" NamedParamsSpec.spec
+  describe "Valiant.Error" ErrorSpec.spec

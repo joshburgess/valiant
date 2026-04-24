@@ -1,6 +1,6 @@
-# hsqlx Tutorial
+# valiant Tutorial
 
-A step-by-step guide to using hsqlx in a Haskell project.
+A step-by-step guide to using valiant in a Haskell project.
 
 ## Prerequisites
 
@@ -14,8 +14,8 @@ In your `.cabal` file:
 
 ```cabal
 build-depends:
-  , hsqlx         >= 0.1
-  , hsqlx-plugin  >= 0.1
+  , valiant         >= 0.1
+  , valiant-plugin  >= 0.1
 ```
 
 ## 2. Create your database schema
@@ -62,31 +62,31 @@ INSERT INTO users (name, email) VALUES ($1, $2)
 SELECT count(*) FROM users
 ```
 
-## 4. Run `hsqlx prepare`
+## 4. Run `valiant prepare`
 
 This validates every `.sql` file against your database and writes type
-metadata to `.hsqlx/`.
+metadata to `.valiant/`.
 
 ```bash
 export DATABASE_URL="postgres://user:pass@localhost:5432/mydb"
-hsqlx prepare
+valiant prepare
 ```
 
-Commit the `.hsqlx/` directory to version control. This allows offline
+Commit the `.valiant/` directory to version control. This allows offline
 compilation and CI builds without a database.
 
 ## 5. Write Haskell bindings
 
 ```haskell
-{-# OPTIONS_GHC -fplugin=Hsqlx.Plugin
-                -fplugin-opt=Hsqlx.Plugin:sql-dir=sql #-}
+{-# OPTIONS_GHC -fplugin=Valiant.Plugin
+                -fplugin-opt=Valiant.Plugin:sql-dir=sql #-}
 
 module MyApp.Queries.Users where
 
 import Data.Int (Int32, Int64)
 import Data.Text (Text)
 import Data.Time (UTCTime)
-import Hsqlx
+import Valiant
 
 -- The plugin verifies these types at compile time.
 
@@ -132,7 +132,7 @@ The plugin checks that the fields match the SQL result columns by position.
 ## 7. Execute queries
 
 ```haskell
-import Hsqlx
+import Valiant
 import MyApp.Queries.Users qualified as Q
 
 main :: IO ()
@@ -251,13 +251,13 @@ withResource pool $ \conn -> do
               <> " Payload: " <> show (nPayload notif)
 ```
 
-## 14. The Hsqlx monad
+## 14. The Valiant monad
 
-For convenience, `Hsqlx` is a `ReaderT Pool IO` monad that threads the
+For convenience, `Valiant` is a `ReaderT Pool IO` monad that threads the
 pool implicitly:
 
 ```haskell
-app :: Hsqlx ()
+app :: Valiant ()
 app = do
   users <- fetchAllM Q.listAll ()
   withTransactionM $ \tx ->
@@ -266,7 +266,7 @@ app = do
 main :: IO ()
 main = do
   pool <- newPool defaultPoolConfig { poolConnString = "..." }
-  runHsqlx pool app
+  runValiant pool app
 ```
 
 ## 15. Connection pool tuning
@@ -301,8 +301,8 @@ resize pool 30
 
 ## 16. Custom type mappings
 
-By default, hsqlx maps standard Postgres types to Haskell types. For
-custom types (enums, domains, composite types), create `hsqlx-types.json`:
+By default, valiant maps standard Postgres types to Haskell types. For
+custom types (enums, domains, composite types), create `valiant-types.json`:
 
 ```json
 {
@@ -336,7 +336,7 @@ instance PgEnum UserRole where
 Instead of writing bindings by hand, generate them:
 
 ```bash
-hsqlx generate \
+valiant generate \
   --module-prefix MyApp.Queries \
   --output-dir src/MyApp/Queries/
 ```
@@ -350,13 +350,13 @@ the generated files freely — the plugin continues to verify everything.
 steps:
   # No database needed — just check the cache is current
   - name: Verify query cache
-    run: hsqlx check
+    run: valiant check
 
   # Build in offline mode
   - name: Build
     run: cabal build
     env:
-      HSQLX_OFFLINE: "true"
+      VALIANT_OFFLINE: "true"
 
   # Tests need a database
   - name: Test
@@ -367,11 +367,11 @@ steps:
 
 ## 19. Error messages
 
-hsqlx produces clear, actionable compile errors. Examples:
+valiant produces clear, actionable compile errors. Examples:
 
 **Wrong column type:**
 ```
-error: [HSQLX-003]
+error: [VALIANT-003]
     Column    Postgres type    Your type       Expected
     email     text (nullable)  Text            Maybe Text  MISMATCH
 
@@ -380,21 +380,21 @@ error: [HSQLX-003]
 
 **Wrong parameter count:**
 ```
-error: [HSQLX-006]
+error: [VALIANT-006]
     Your type provides 1 parameter but the query expects 2.
     Fix: change parameter type to a 2-tuple: Statement (Int32, Text) [...]
 ```
 
 **File not found:**
 ```
-error: [HSQLX-001]
+error: [VALIANT-001]
     sql/users/find_by_idd.sql not found.
     Did you mean: sql/users/find_by_id.sql (edit distance: 1)
 ```
 
 ## 20. File naming conventions
 
-`hsqlx generate` infers return types from file name prefixes:
+`valiant generate` infers return types from file name prefixes:
 
 | Prefix | Generated return type |
 |--------|---------------------|
@@ -410,7 +410,7 @@ your own type signatures.
 
 ## Next steps
 
-- See the [example project](../example/) for a complete REST API using hsqlx + scotty
+- See the [example project](../example/) for a complete REST API using valiant + scotty
 - See [PERFORMANCE.md](PERFORMANCE.md) for benchmarks and optimization details
 - See [ASYNC_ARCHITECTURE.md](ASYNC_ARCHITECTURE.md) for the sender/receiver split design
-- Run `hsqlx --help` for all CLI options
+- Run `valiant --help` for all CLI options

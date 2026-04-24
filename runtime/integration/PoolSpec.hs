@@ -6,7 +6,7 @@ import Control.Concurrent.MVar
 import Control.Concurrent.STM (newTVarIO, readTVarIO, modifyTVar', atomically)
 import Control.Exception (SomeException, try)
 import Data.IORef
-import Hsqlx
+import Valiant
 import TestSupport
 import Test.Hspec
 

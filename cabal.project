@@ -1,13 +1,13 @@
 with-compiler: ghc-9.10.3
 packages: . runtime bench-compare wire example deps/entropy plugin
-          adapters/hsqlx-bluefin
-          adapters/hsqlx-conduit
-          adapters/hsqlx-effectful
-          adapters/hsqlx-fused-effects
-          adapters/hsqlx-mtl
-          adapters/hsqlx-pipes
-          adapters/hsqlx-streaming
-          adapters/hsqlx-streamly
+          adapters/valiant-bluefin
+          adapters/valiant-conduit
+          adapters/valiant-effectful
+          adapters/valiant-fused-effects
+          adapters/valiant-mtl
+          adapters/valiant-pipes
+          adapters/valiant-streaming
+          adapters/valiant-streamly
 tests: True
 
 package text

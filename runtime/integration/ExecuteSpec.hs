@@ -3,8 +3,8 @@ module ExecuteSpec (spec) where
 import Control.Exception (try)
 import Data.Int (Int32, Int64)
 import Data.Text (Text)
-import Hsqlx
-import PgWire.Error (HsqlxError (..))
+import Valiant
+import PgWire.Error (ValiantError (..))
 import TestSupport
 import Test.Hspec
 

@@ -2,7 +2,7 @@ module CopySpec (spec) where
 
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
-import Hsqlx
+import Valiant
 import TestSupport
 import Test.Hspec
 

@@ -1,4 +1,4 @@
-# hsqlx Benchmark Results
+# valiant Benchmark Results
 
 Machine: Apple Silicon (macOS Darwin 24.4.0)
 GHC: 9.10.3, -O2
@@ -8,7 +8,7 @@ Tool: criterion 1.6, time-limit 2s per benchmark
 
 ## Comparative Reads
 
-| Query | hsqlx | hasql | pg-simple | persistent |
+| Query | valiant | hasql | pg-simple | persistent |
 |-------|-------|-------|-----------|------------|
 | SELECT 1 | 0.99 ms | 0.93 ms | 1.12 ms | 2.97 ms |
 | fetchOne by PK | 1.05 ms | 0.99 ms | 1.03 ms | 2.94 ms |
@@ -16,26 +16,26 @@ Tool: criterion 1.6, time-limit 2s per benchmark
 | fetch 5,000 rows | **17.4 ms** | 46.4 ms | 37.6 ms | 43.9 ms |
 | fetch 10,000 rows | **32.3 ms** | 101.0 ms | 71.3 ms | 85.6 ms |
 
-**Key takeaway**: hsqlx matches hasql on single-row latency and is 2-3x
+**Key takeaway**: valiant matches hasql on single-row latency and is 2-3x
 faster on multi-row reads due to binary format decoding directly from the
 network buffer without FFI overhead.
 
 ## Comparative Inserts
 
-| Rows | hsqlx (pipelined) | hsqlx (sequential) | hasql | pg-simple | persistent |
+| Rows | valiant (pipelined) | valiant (sequential) | hasql | pg-simple | persistent |
 |------|--------------------|--------------------|-------|-----------|------------|
 | 100 | **2.5 ms** | 100 ms | 101 ms | 106 ms | 98 ms |
 | 1,000 | **10.0 ms** | 1.05 s | 964 ms | 1.01 s | 990 ms |
 | 5,000 | **39.9 ms** | 5.24 s | 5.29 s | 6.36 s | 5.07 s |
 
 **Key takeaway**: Pipelined batch inserts via `executeBatch` are 40-130x
-faster than sequential inserts. All sequential paths (including hsqlx
+faster than sequential inserts. All sequential paths (including valiant
 sequential) are roughly equivalent since they're dominated by per-row
 round-trip latency.
 
 ## Comparative Updates
 
-| Rows | hsqlx | hasql | pg-simple | persistent |
+| Rows | valiant | hasql | pg-simple | persistent |
 |------|-------|-------|-----------|------------|
 | 100 | 1.63 ms | 1.49 ms | 1.67 ms | 3.40 ms |
 
@@ -43,7 +43,7 @@ Updates are a single server-side statement affecting N rows, so driver
 overhead is minimal. persistent is ~2x slower due to monad transformer
 stack overhead.
 
-## Pipeline Applicative (hsqlx-only feature)
+## Pipeline Applicative (valiant-only feature)
 
 | Queries | Pipelined | Sequential | Speedup |
 |---------|-----------|------------|---------|
@@ -82,7 +82,7 @@ round-trip regardless of query count.
 - Pool acquire/release adds <1ms overhead.
 - Transaction overhead (BEGIN+COMMIT) adds ~2.7ms over a bare scalar query.
 
-## Pipelined Insert Scaling (hsqlx executeBatch)
+## Pipelined Insert Scaling (valiant executeBatch)
 
 | Rows | Time | Per-row | Notes |
 |------|------|---------|-------|
@@ -203,5 +203,5 @@ of all 46 type benchmarks.
 4. **Seeded data**: Comparative benchmarks seed 10,000 rows with
    `ANALYZE` for accurate query plans. Runtime benchmarks seed 1,000 rows.
 
-5. **Pipelined fairness**: hsqlx is benchmarked both pipelined AND
+5. **Pipelined fairness**: valiant is benchmarked both pipelined AND
    sequential for inserts to show the feature advantage vs the baseline.

@@ -1,10 +1,10 @@
-# docker-compose.yml — Postgres for hsqlx tests and benchmarks.
+# docker-compose.yml — Postgres for valiant tests and benchmarks.
 #
 # Usage:
 #   docker compose up -d
-#   export DATABASE_URL="postgres://hsqlx_test:hsqlx_test@localhost:5433/hsqlx_test"
-#   cabal test hsqlx-integration
-#   cabal bench hsqlx-bench -- +RTS -N -RTS
+#   export DATABASE_URL="postgres://valiant_test:valiant_test@localhost:5433/valiant_test"
+#   cabal test valiant-integration
+#   cabal bench valiant-bench -- +RTS -N -RTS
 #   docker compose down
 #
 # Or use the helper script:
@@ -13,13 +13,13 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: hsqlx-test-pg
+    container_name: valiant-test-pg
     ports:
-      - "${HSQLX_TEST_PORT:-5433}:5432"
+      - "${VALIANT_TEST_PORT:-5433}:5432"
     environment:
-      POSTGRES_USER: hsqlx_test
-      POSTGRES_PASSWORD: hsqlx_test
-      POSTGRES_DB: hsqlx_test
+      POSTGRES_USER: valiant_test
+      POSTGRES_PASSWORD: valiant_test
+      POSTGRES_DB: valiant_test
     # Tuned for benchmark throughput, not durability
     command:
       - postgres
@@ -38,7 +38,7 @@ services:
     tmpfs:
       - /var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hsqlx_test"]
+      test: ["CMD-SHELL", "pg_isready -U valiant_test"]
       interval: 1s
       timeout: 5s
       retries: 30

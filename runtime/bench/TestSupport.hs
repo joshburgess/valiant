@@ -11,7 +11,7 @@ module TestSupport
 
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
-import Hsqlx
+import Valiant
 import System.Environment (lookupEnv)
 
 -- Connection helpers --------------------------------------------------------

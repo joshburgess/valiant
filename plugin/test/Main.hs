@@ -1,12 +1,12 @@
 module Main where
 
-import Hsqlx.Plugin.CacheSpec qualified as CacheSpec
-import Hsqlx.Plugin.ConfigSpec qualified as ConfigSpec
-import Hsqlx.Plugin.ErrorCaseSpec qualified as ErrorCaseSpec
+import Valiant.Plugin.CacheSpec qualified as CacheSpec
+import Valiant.Plugin.ConfigSpec qualified as ConfigSpec
+import Valiant.Plugin.ErrorCaseSpec qualified as ErrorCaseSpec
 import Test.Hspec
 
 main :: IO ()
 main = hspec $ do
-  describe "Hsqlx.Plugin.Config" ConfigSpec.spec
-  describe "Hsqlx.Plugin.Cache" CacheSpec.spec
-  describe "Hsqlx.Plugin.ErrorCases" ErrorCaseSpec.spec
+  describe "Valiant.Plugin.Config" ConfigSpec.spec
+  describe "Valiant.Plugin.Cache" CacheSpec.spec
+  describe "Valiant.Plugin.ErrorCases" ErrorCaseSpec.spec

@@ -9,11 +9,11 @@ set -euo pipefail
 #
 # Exports DATABASE_URL to stdout (source this script or eval its output).
 
-CONTAINER_NAME="hsqlx-test-pg"
-PG_PORT="${HSQLX_TEST_PORT:-5433}"
-PG_USER="hsqlx_test"
-PG_PASS="hsqlx_test"
-PG_DB="hsqlx_test"
+CONTAINER_NAME="valiant-test-pg"
+PG_PORT="${VALIANT_TEST_PORT:-5433}"
+PG_USER="valiant_test"
+PG_PASS="valiant_test"
+PG_DB="valiant_test"
 
 # ── 1. Check existing DATABASE_URL ──────────────────────────────────────────
 
@@ -75,4 +75,4 @@ done
 DATABASE_URL="postgres://${PG_USER}:${PG_PASS}@localhost:${PG_PORT}/${PG_DB}"
 
 echo "export DATABASE_URL=\"${DATABASE_URL}\""
-echo "export HSQLX_TEST_CONTAINER=\"${CONTAINER_NAME}\""
+echo "export VALIANT_TEST_CONTAINER=\"${CONTAINER_NAME}\""

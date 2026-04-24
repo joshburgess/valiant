@@ -1,4 +1,4 @@
-# hsqlx
+# valiant
 
 **Compile-time checked SQL for Haskell.**
 
@@ -7,12 +7,12 @@ Inspired by Rust's [sqlx](https://github.com/launchbadge/sqlx), built from scrat
 ## How it works
 
 ```
-  .sql files ──> hsqlx prepare ──> .hsqlx/ cache ──> GHC plugin ──> type-safe Haskell
+  .sql files ──> valiant prepare ──> .valiant/ cache ──> GHC plugin ──> type-safe Haskell
                     (live DB)        (committed)      (compile time)
 ```
 
 1. Write SQL in standalone `.sql` files with full editor support
-2. Run `hsqlx prepare` to validate queries against your database and cache type metadata
+2. Run `valiant prepare` to validate queries against your database and cache type metadata
 3. The GHC source plugin reads the cache at compile time and verifies your Haskell types match
 4. At runtime, a custom Postgres wire protocol driver executes queries with binary format encoding
 
@@ -22,12 +22,12 @@ Inspired by Rust's [sqlx](https://github.com/launchbadge/sqlx), built from scrat
 -- sql/users/find_by_id.sql:
 --   SELECT id, name, email FROM users WHERE id = $1
 
-{-# OPTIONS_GHC -fplugin=Hsqlx.Plugin
-                -fplugin-opt=Hsqlx.Plugin:sql-dir=sql #-}
+{-# OPTIONS_GHC -fplugin=Valiant.Plugin
+                -fplugin-opt=Valiant.Plugin:sql-dir=sql #-}
 
 module MyApp.Queries.Users where
 
-import Hsqlx
+import Valiant
 
 findById :: Statement Int32 (Maybe (Int32, Text, Maybe Text))
 findById = queryFile "users/find_by_id.sql"
@@ -42,7 +42,7 @@ The plugin verifies at compile time that:
 If anything is wrong, you get a clear compile error:
 
 ```
-src/MyApp/Queries/Users.hs:12:1: error: [HSQLX-003]
+src/MyApp/Queries/Users.hs:12:1: error: [VALIANT-003]
 
     -- Result type mismatch
     |
@@ -59,7 +59,7 @@ src/MyApp/Queries/Users.hs:12:1: error: [HSQLX-003]
 ## Runtime usage
 
 ```haskell
-import Hsqlx
+import Valiant
 import MyApp.Queries.Users qualified as Q
 
 main :: IO ()
@@ -103,33 +103,33 @@ main = do
 
 ```bash
 # Validate all .sql files against your database
-$ hsqlx prepare
+$ valiant prepare
   [1/10] sql/users/find_by_id.sql ............ ok
   [2/10] sql/users/find_by_email.sql ......... ok
   ...
-  Wrote 10 cache files to .hsqlx/
+  Wrote 10 cache files to .valiant/
 
 # Check cache freshness (for CI, no database needed)
-$ hsqlx check
+$ valiant check
 
 # Print inferred Haskell types
-$ hsqlx types
+$ valiant types
   sql/users/find_by_id.sql
     Params: Int32
     Result: (Int32, Text, Maybe Text)
 
 # Auto-generate Haskell binding modules
-$ hsqlx generate --module-prefix MyApp.Queries --output-dir src/MyApp/Queries/
+$ valiant generate --module-prefix MyApp.Queries --output-dir src/MyApp/Queries/
   Generated src/MyApp/Queries/Users.hs (7 queries)
   Generated src/MyApp/Queries/Posts.hs (3 queries)
 
 # Watch for changes and re-prepare
-$ hsqlx watch
+$ valiant watch
 ```
 
 ## Performance
 
-hsqlx is the fastest Haskell PostgreSQL library. It implements its own wire
+valiant is the fastest Haskell PostgreSQL library. It implements its own wire
 protocol in pure Haskell with binary format encoding, direct byte writes,
 pipelined execution, async sender/receiver split, and zero unnecessary copies.
 
@@ -139,20 +139,20 @@ Benchmarks against [hasql](https://hackage.haskell.org/package/hasql)
 
 **Reads** (Linux, Postgres 16, Unix socket, [CI-verified](docs/benchmark-results/)):
 
-| Rows | hsqlx | hasql | pg-simple | vs hasql | vs pg-simple |
+| Rows | valiant | hasql | pg-simple | vs hasql | vs pg-simple |
 |------|-------|-------|-----------|----------|--------------|
 | 1 (by PK) | 138 μs | 89 μs | 179 μs | 1.6x slower | **23% faster** |
 | 1,000 | **895 μs** | 4.76 ms | 3.57 ms | **5.3x faster** | **4.0x faster** |
 | 5,000 | **4.66 ms** | 25.5 ms | 20.0 ms | **5.5x faster** | **4.3x faster** |
 | 10,000 | **11.0 ms** | 54.4 ms | 38.3 ms | **5.0x faster** | **3.5x faster** |
 
-hsqlx is 1.6x slower on single-row lookups (the async sender/receiver
+valiant is 1.6x slower on single-row lookups (the async sender/receiver
 split has per-query coordination overhead that dominates when there's
 nothing to pipeline) but **5x faster** once row decoding dominates.
 
 **Writes (pipelined):**
 
-| Rows | hsqlx (pipelined) | hsqlx (seq) | hasql | pg-simple |
+| Rows | valiant (pipelined) | valiant (seq) | hasql | pg-simple |
 |------|--------------------|------------|-------|-----------|
 | 100 | **956 μs** | 15.2 ms | 9.46 ms | 15.9 ms |
 
@@ -161,7 +161,7 @@ than postgresql-simple.
 
 **vs asyncpg (Python)** — same CI runner, same Postgres, same Unix socket:
 
-| Benchmark | asyncpg | hsqlx |
+| Benchmark | asyncpg | valiant |
 |-----------|---------|-------|
 | SELECT 1+1 throughput (10 conns) | 30,279/s | **31,056/s** |
 | fetch 1000 rows throughput | 2,819/s | **3,084/s** |
@@ -183,7 +183,7 @@ for the full head-to-head comparison.
 - **Fused row decoding** -- decode as rows arrive, no intermediate list
 - **Pure Haskell** -- no `libpq`, no C toolchain, no system dependencies
 
-| | libpq (FFI) | hsqlx (pure Haskell) |
+| | libpq (FFI) | valiant (pure Haskell) |
 |---|---|---|
 | Single-row latency | **89 μs** (hasql) | 138 μs (1.6x slower) |
 | Multi-row throughput (10K) | 54.4 ms (hasql) | **11.0 ms (5.0x faster)** |
@@ -198,60 +198,60 @@ CSV data are in [docs/benchmark-results/](docs/benchmark-results/).
 
 ## Project structure
 
-hsqlx is a multi-package Cabal project:
+valiant is a multi-package Cabal project:
 
 | Package | Description |
 |---------|-------------|
 | `pg-wire` | Pure Haskell PostgreSQL v3 wire protocol driver, connection pool, auth, TLS |
-| `hsqlx` | Runtime library: binary codecs, query execution, transactions, streaming, COPY |
-| `hsqlx-cli` | CLI tool (`hsqlx prepare`, `check`, `types`, `generate`, `watch`) |
-| `hsqlx-plugin` | GHC source plugin for compile-time query validation |
-| `hsqlx-conduit` | Conduit streaming adapter |
-| `hsqlx-pipes` | Pipes streaming adapter |
-| `hsqlx-streaming` | `streaming` library adapter |
-| `hsqlx-streamly` | Streamly streaming adapter |
-| `hsqlx-bluefin` | Bluefin effect system adapter |
-| `hsqlx-effectful` | Effectful effect system adapter |
-| `hsqlx-fused-effects` | Fused-effects effect system adapter |
-| `hsqlx-mtl` | MTL monad transformer adapter |
-| `hsqlx-example` | Example REST API using hsqlx + scotty |
+| `valiant` | Runtime library: binary codecs, query execution, transactions, streaming, COPY |
+| `valiant-cli` | CLI tool (`valiant prepare`, `check`, `types`, `generate`, `watch`) |
+| `valiant-plugin` | GHC source plugin for compile-time query validation |
+| `valiant-conduit` | Conduit streaming adapter |
+| `valiant-pipes` | Pipes streaming adapter |
+| `valiant-streaming` | `streaming` library adapter |
+| `valiant-streamly` | Streamly streaming adapter |
+| `valiant-bluefin` | Bluefin effect system adapter |
+| `valiant-effectful` | Effectful effect system adapter |
+| `valiant-fused-effects` | Fused-effects effect system adapter |
+| `valiant-mtl` | MTL monad transformer adapter |
+| `valiant-example` | Example REST API using valiant + scotty |
 | `bench-compare` | Comparative benchmarks against hasql and postgresql-simple |
 
 ```
-hsqlx/
+valiant/
 ├── wire/                 # pg-wire: wire protocol, connection, pool, auth, TLS
 │   ├── src/PgWire/       # Protocol messages, builders, parsers, async I/O
 │   └── test/             # Wire protocol unit tests
-├── runtime/              # hsqlx: runtime library
-│   ├── src/Hsqlx/        # Binary codecs, execute, batch, pipeline, fold, copy, streaming
+├── runtime/              # valiant: runtime library
+│   ├── src/Valiant/        # Binary codecs, execute, batch, pipeline, fold, copy, streaming
 │   ├── bench/            # Codec + concurrent benchmarks (criterion)
 │   ├── integration/      # Integration tests (require Postgres)
 │   └── test/             # Codec unit tests
-├── src/                  # hsqlx-cli source
-│   └── Hsqlx/CLI/        # Commands, cache, type map, discovery, nullability
+├── src/                  # valiant-cli source
+│   └── Valiant/CLI/        # Commands, cache, type map, discovery, nullability
 ├── plugin/               # GHC source plugin
-│   └── src/Hsqlx/Plugin/ # AST traversal, verification, error messages
+│   └── src/Valiant/Plugin/ # AST traversal, verification, error messages
 ├── adapters/             # Streaming and effect system adapters (8 packages)
-│   ├── hsqlx-conduit/    # Conduit adapter
-│   ├── hsqlx-pipes/      # Pipes adapter
-│   ├── hsqlx-streaming/  # streaming library adapter
-│   ├── hsqlx-streamly/   # Streamly adapter
-│   ├── hsqlx-bluefin/    # Bluefin effect system adapter
-│   ├── hsqlx-effectful/  # Effectful effect system adapter
-│   ├── hsqlx-fused-effects/ # Fused-effects adapter
-│   └── hsqlx-mtl/        # MTL monad transformer adapter
+│   ├── valiant-conduit/    # Conduit adapter
+│   ├── valiant-pipes/      # Pipes adapter
+│   ├── valiant-streaming/  # streaming library adapter
+│   ├── valiant-streamly/   # Streamly adapter
+│   ├── valiant-bluefin/    # Bluefin effect system adapter
+│   ├── valiant-effectful/  # Effectful effect system adapter
+│   ├── valiant-fused-effects/ # Fused-effects adapter
+│   └── valiant-mtl/        # MTL monad transformer adapter
 ├── example/              # Example REST API (scotty)
 ├── bench-compare/        # Comparative benchmarks vs hasql, pg-simple
 ├── scripts/              # pg-setup.sh, pg-teardown.sh
 ├── docs/                 # TUTORIAL.md, PERFORMANCE.md, ASYNC_ARCHITECTURE.md
-└── .hsqlx/               # Cached query metadata (committed to VCS)
+└── .valiant/               # Cached query metadata (committed to VCS)
 ```
 
 ## Features
 
 ### SQL authoring
 - One SQL statement per `.sql` file with full editor support
-- Optional metadata comments: `-- hsqlx:name`, `-- hsqlx:result`, `-- hsqlx:single`
+- Optional metadata comments: `-- valiant:name`, `-- valiant:result`, `-- valiant:single`
 - Directory structure maps to Haskell module structure
 
 ### Compile-time validation
@@ -279,7 +279,7 @@ hsqlx/
 Nullable columns are wrapped in `Maybe`. Custom types are auto-discovered
 from `pg_type` at prepare time: enums map to `Text`, domains unwrap to
 their base type, ranges map to `PgRange BaseType`. Manual overrides via
-`hsqlx-types.json`.
+`valiant-types.json`.
 
 ### Runtime
 - Custom PostgreSQL v3 wire protocol implementation (no FFI, no `libpq`)
@@ -317,7 +317,7 @@ echo "SELECT id, name FROM users WHERE active = true" > sql/users/list_active.sq
 
 # 2. Validate against your dev database
 export DATABASE_URL="postgres://localhost:5432/mydb"
-hsqlx prepare
+valiant prepare
 
 # 3. Write (or generate) the Haskell binding
 # 4. Build — the plugin checks everything at compile time
@@ -329,12 +329,12 @@ cabal build
 ```yaml
 steps:
   - name: Verify query cache
-    run: hsqlx check          # no database needed
+    run: valiant check          # no database needed
 
   - name: Build
     run: cabal build
     env:
-      HSQLX_OFFLINE: "true"   # plugin reads from .hsqlx/ only
+      VALIANT_OFFLINE: "true"   # plugin reads from .valiant/ only
 ```
 
 ### Running benchmarks
@@ -342,16 +342,16 @@ steps:
 ```bash
 # Start Postgres via docker-compose (tuned for benchmarks)
 docker compose up -d --wait
-export DATABASE_URL="postgres://hsqlx_test:hsqlx_test@localhost:5433/hsqlx_test"
+export DATABASE_URL="postgres://valiant_test:valiant_test@localhost:5433/valiant_test"
 
 # Codec benchmarks (pure, no database needed)
-cabal bench hsqlx-bench --benchmark-options='--match prefix codec'
+cabal bench valiant-bench --benchmark-options='--match prefix codec'
 
 # Query benchmarks
-cabal bench hsqlx-bench --benchmark-options='--match prefix query'
+cabal bench valiant-bench --benchmark-options='--match prefix query'
 
 # Concurrent benchmarks (the async split showcase)
-cabal bench hsqlx-bench --benchmark-options='+RTS -N -RTS --match prefix concurrent'
+cabal bench valiant-bench --benchmark-options='+RTS -N -RTS --match prefix concurrent'
 
 # Comparative benchmarks vs hasql and postgresql-simple
 cabal run bench-compare
@@ -365,10 +365,10 @@ docker compose down
 Requires GHC 9.10 and Cabal 3.0+.
 
 ```bash
-git clone https://github.com/joshburgess/hsqlx.git
-cd hsqlx
+git clone https://github.com/joshburgess/valiant.git
+cd valiant
 cabal build all
-cabal test pg-wire-test hsqlx-test hsqlx-cli-test
+cabal test pg-wire-test valiant-test valiant-cli-test
 ```
 
 All packages compile with `-Werror`.
@@ -385,13 +385,13 @@ All packages compile with `-Werror`.
 
 ## Comparison with Rust's sqlx
 
-| Aspect | Rust sqlx | hsqlx |
+| Aspect | Rust sqlx | valiant |
 |--------|-----------|-------|
 | SQL authoring | String literals or `.sql` files | `.sql` files (primary) |
 | Compile-time mechanism | Proc macro | GHC source plugin |
-| DB at compile time | From proc macro | Separate `hsqlx prepare` step |
-| Offline mode | `.sqlx/` JSON cache | `.hsqlx/` JSON cache |
-| Code generation | No | `hsqlx generate` (optional) |
+| DB at compile time | From proc macro | Separate `valiant prepare` step |
+| Offline mode | `.sqlx/` JSON cache | `.valiant/` JSON cache |
+| Code generation | No | `valiant generate` (optional) |
 | Runtime driver | Custom async Rust driver | Custom async Haskell driver |
 | Concurrent I/O | Tokio async/await | Sender/receiver green threads |
 | Error messages | Generic Rust type errors | Column-by-column diagnostics with fixes |

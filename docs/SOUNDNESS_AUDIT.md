@@ -1,7 +1,7 @@
 # Soundness & Correctness Audit
 
 Conducted 2026-03-23 across three review passes. Covers `pg-wire` and
-`hsqlx` runtime internals.
+`valiant` runtime internals.
 
 **Status: ALL FINDINGS RESOLVED** (2026-03-23)
 
@@ -58,7 +58,7 @@ All resolved except #18 (false positive).
 | 17 | **Reaper/warmer threads die on exception** | Wrap loop body in `catch`; re-throw `AsyncException` for clean shutdown, catch synchronous exceptions and continue | `0fdd7b0`, `aeb7ebb` |
 | 18 | **Pool `psInUse` can go negative** | **False positive.** `pActive` correctly tracks total living connections; `psInUse = active - idle` is accurate. | — |
 | 19 | **Transaction-scoped advisory lock not verified** | `requireTransaction` checks `TxStatus` IORef before acquiring | `0fdd7b0` |
-| 20 | **LargeObject silent parse failures** | Replace `pure 0`/`pure empty` with `throwHsqlx (DecodeError ...)` | `0fdd7b0`, `62cd234` |
+| 20 | **LargeObject silent parse failures** | Replace `pure 0`/`pure empty` with `throwValiant (DecodeError ...)` | `0fdd7b0`, `62cd234` |
 | 21 | **FromRow ignores extra columns** | Added opt-in `FromRowStrict` class with column count validation; zero cost for `FromRow` users | `9cd65a9` |
 
 ### LOW — Documentation
@@ -77,7 +77,7 @@ All resolved except #18 (false positive).
 |---|-------|-----|--------|
 | 25 | **Fast-path lock stuck on `sendFrontendMsgs` exception** — lock never released, future fast-path calls degrade to slow queue | `onException releaseLock` around `sendFrontendMsgs` | `62cd234` |
 | 26 | **Transaction COMMIT failure poisons pool** — deferred constraint violation leaves connection in aborted state, returned to pool | `onException rollback conn` on COMMIT in all 3 transaction functions | `62cd234` |
-| 27 | **LargeObject `fail` throws `IOException` not `HsqlxError`** — breaks library error contract | Replace all `fail` with `throwHsqlx (DecodeError ...)` | `62cd234` |
+| 27 | **LargeObject `fail` throws `IOException` not `ValiantError`** — breaks library error contract | Replace all `fail` with `throwValiant (DecodeError ...)` | `62cd234` |
 
 **False positives investigated:**
 - Exclusive mode `signalDone` internal race — safe: runs inside `mask`, both ops are pure MVar operations
@@ -99,7 +99,7 @@ prevents pool poisoning (HIGH severity) at the cost of this edge case.
 |---|-------|-----|--------|
 | 28 | **Reaper/warmer catch `ThreadKilled`** — prevents clean pool shutdown | Re-throw `AsyncException`, only catch synchronous exceptions | `aeb7ebb` |
 | 29 | **Copy/Streaming cleanup masks original exception** — if wire is dead, cleanup throws and original exception is lost | Wrap cleanup handlers in `catch` so original exception always re-throws | `aeb7ebb` |
-| 30 | **`Dynamic.hs` `fail` throws `IOException`** — inconsistent with `HsqlxError` | Replace with `throwHsqlx (DecodeError ...)` | `aeb7ebb` |
+| 30 | **`Dynamic.hs` `fail` throws `IOException`** — inconsistent with `ValiantError` | Replace with `throwValiant (DecodeError ...)` | `aeb7ebb` |
 | 31 | **`ccMaxPreparedStatements` not validated** — zero/negative silently disables caching | Clamp to `max 1` at connection creation | `aeb7ebb` |
 
 ---
@@ -155,4 +155,4 @@ Lower values are appropriate for PgBouncer or memory-constrained setups.
 | API changes | #11 (`pipeExecute` → `()`), #21 (`FromRowStrict`) | **Zero** — additive or type-only |
 
 All fixes verified with: 80 integration tests, 234 pg-wire unit tests,
-264 hsqlx unit tests — all passing.
+264 valiant unit tests — all passing.

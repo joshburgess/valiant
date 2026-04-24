@@ -2,7 +2,7 @@
 -- PostgreSQL binary format.
 --
 -- Instances are provided for common types ('Int32', 'Text', 'Bool',
--- 'UTCTime', etc.) in "Hsqlx.Binary.Encode" and "Hsqlx.Binary.Decode".
+-- 'UTCTime', etc.) in "Valiant.Binary.Encode" and "Valiant.Binary.Decode".
 -- Custom types can provide their own instances.
 module PgWire.Binary.Types
   ( PgEncode (..)

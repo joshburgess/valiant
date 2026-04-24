@@ -78,7 +78,7 @@ import PgWire.Auth.Cleartext (cleartextAuth)
 import PgWire.Auth.MD5 (md5Auth)
 import PgWire.Auth.ScramSHA256 (scramAuth)
 import PgWire.Connection.Config (ConnConfig (..), TargetSessionAttrs (..), TlsMode (..), parseConnString, parseHosts)
-import PgWire.Error (HsqlxError (..), throwHsqlx)
+import PgWire.Error (ValiantError (..), throwValiant)
 import PgWire.Protocol.Backend
 import PgWire.Protocol.Builders (buildStartup)
 import PgWire.Protocol.Frontend (DescribeTarget (..), FrontendMsg (..), StartupParams (..))
@@ -88,7 +88,7 @@ import PgWire.Wire (TlsConfig (..), TraceDirection (..), WireConn (..), connectT
 --
 -- After the initial handshake, dedicated writer and reader threads handle
 -- all wire I/O. Use 'submitRequest' or the higher-level functions in
--- "Hsqlx.Execute" to interact with the connection.
+-- "Valiant.Execute" to interact with the connection.
 data Connection = Connection
   { connAsync :: !AsyncWireConn
   -- ^ The async wire connection (writer + reader threads).
@@ -164,7 +164,7 @@ connect cfg0 = do
   tryHosts cfg orderedHosts
 
 tryHosts :: ConnConfig -> [String] -> IO Connection
-tryHosts _ [] = throwHsqlx (ConnectionError "All hosts failed")
+tryHosts _ [] = throwValiant (ConnectionError "All hosts failed")
 tryHosts cfg [h] = connectSingleHost cfg { ccHost = h }
 tryHosts cfg (h : hs) = do
   result <- try @SomeException (connectSingleHost cfg { ccHost = h })
@@ -274,7 +274,7 @@ connectSingleHost cfg = do
             pure ()
           NoticeResponse _ -> loop
           other ->
-            throwHsqlx (ProtocolError ("Unexpected message during startup: " <> BS8.pack (show other)))
+            throwValiant (ProtocolError ("Unexpected message during startup: " <> BS8.pack (show other)))
 
   loop
 
@@ -307,7 +307,7 @@ connectSingleHost cfg = do
 -- | Connect using a connection string.
 connectString :: ByteString -> IO Connection
 connectString bs = case parseConnString bs of
-  Left err -> throwHsqlx (ConnectionError (BS8.pack err))
+  Left err -> throwValiant (ConnectionError (BS8.pack err))
   Right cfg -> connect cfg
 
 -- | Close a connection.
@@ -332,7 +332,7 @@ simpleQuery conn sql = do
   resp <- submitRequest (connAsync conn) (ReqSimpleQuery sql)
   case resp of
     RespSimple rows tag -> pure (rows, tag)
-    _ -> throwHsqlx (ProtocolError "simpleQuery: unexpected response type")
+    _ -> throwValiant (ProtocolError "simpleQuery: unexpected response type")
 
 -- | Reset the connection: close and reconnect using the same config.
 reset :: Connection -> IO Connection
@@ -466,7 +466,7 @@ describePrepared conn stmtName = do
       msg <- recvBackendMsg wc
       case msg of
         ParameterDescription oids -> pure oids
-        ErrorResponse err -> throwHsqlx (QueryError err)
+        ErrorResponse err -> throwValiant (QueryError err)
         _ -> collectParams wc
 
     collectColumns wc = do
@@ -474,7 +474,7 @@ describePrepared conn stmtName = do
       case msg of
         RowDescription fields -> pure fields
         NoData -> pure V.empty
-        ErrorResponse err -> throwHsqlx (QueryError err)
+        ErrorResponse err -> throwValiant (QueryError err)
         _ -> collectColumns wc
 
     waitDescribeReady wc txRef = do
@@ -584,14 +584,14 @@ handleAuth wc cfg = do
           scramAuth wc (ccUser cfg) (ccPassword cfg)
           -- scramAuth handles waiting for AuthOk internally
       | otherwise ->
-          throwHsqlx (AuthError ("Unsupported SASL mechanisms: " <> BS8.pack (show mechs)))
-    ErrorResponse err -> throwHsqlx (AuthError (pgMessage err))
-    other -> throwHsqlx (AuthError ("Unexpected auth message: " <> BS8.pack (show other)))
+          throwValiant (AuthError ("Unsupported SASL mechanisms: " <> BS8.pack (show mechs)))
+    ErrorResponse err -> throwValiant (AuthError (pgMessage err))
+    other -> throwValiant (AuthError ("Unexpected auth message: " <> BS8.pack (show other)))
 
 waitForAuthOk :: WireConn -> IO ()
 waitForAuthOk wc = do
   msg <- recvBackendMsg wc
   case msg of
     Authentication AuthOk -> pure ()
-    ErrorResponse err -> throwHsqlx (AuthError (pgMessage err))
-    other -> throwHsqlx (AuthError ("Expected AuthOk, got: " <> BS8.pack (show other)))
+    ErrorResponse err -> throwValiant (AuthError (pgMessage err))
+    other -> throwValiant (AuthError ("Expected AuthOk, got: " <> BS8.pack (show other)))

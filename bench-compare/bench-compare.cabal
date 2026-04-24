@@ -13,7 +13,7 @@ executable bench-compare
     OverloadedStrings
 
   other-modules:
-    BenchHsqlx
+    BenchValiant
     BenchHasql
     BenchPgSimple
     BenchPersistent
@@ -26,8 +26,8 @@ executable bench-compare
     , text
     , vector
 
-    -- hsqlx (our runtime)
-    , hsqlx
+    -- valiant (our runtime)
+    , valiant
 
     -- hasql ecosystem
     , hasql                  >=1.6  && <1.11

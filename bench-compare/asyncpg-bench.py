@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Benchmark asyncpg on the same queries as hsqlx's BenchAsyncpgCompare.
+Benchmark asyncpg on the same queries as valiant's BenchAsyncpgCompare.
 
 Usage:
     pip install asyncpg uvloop
-    python asyncpg-bench.py postgres://hsqlx_test@/hsqlx_test?host=/var/run/postgresql
+    python asyncpg-bench.py postgres://valiant_test@/valiant_test?host=/var/run/postgresql
 
 Runs each benchmark for 10 seconds, reports queries/sec and rows/sec.
 """
@@ -157,7 +157,7 @@ async def bench_batch_insert(pool):
 
 async def main():
     dsn = sys.argv[1] if len(sys.argv) > 1 else os.environ.get(
-        "DATABASE_URL", "postgres://hsqlx_test@/hsqlx_test?host=/var/run/postgresql")
+        "DATABASE_URL", "postgres://valiant_test@/valiant_test?host=/var/run/postgresql")
 
     pool = await asyncpg.create_pool(dsn, min_size=CONCURRENCY, max_size=CONCURRENCY)
 

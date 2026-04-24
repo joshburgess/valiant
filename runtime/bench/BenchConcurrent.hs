@@ -13,7 +13,7 @@ import Criterion.Main
 import Data.Int (Int32, Int64)
 import Data.IORef
 import Data.Text (Text)
-import Hsqlx
+import Valiant
 import System.IO.Unsafe (unsafePerformIO)
 import TestSupport (requireDatabaseUrl, insertBulkUsers)
 

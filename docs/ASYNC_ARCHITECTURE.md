@@ -84,7 +84,7 @@ data ResponseCollector
 ```haskell
 data AsyncWireConn = AsyncWireConn
   { awcWire          :: !WireConn
-  , awcSendQueue     :: !(TBQueue (Request, MVar (Either HsqlxError Response)))
+  , awcSendQueue     :: !(TBQueue (Request, MVar (Either ValiantError Response)))
   , awcPending       :: !(TQueue PendingResponse)
   , awcAlive         :: !(TVar Bool)
   , awcTxStatus      :: !(IORef TxStatus)
@@ -125,7 +125,7 @@ data AsyncWireConn = AsyncWireConn
 ### Error recovery
 
 Query errors (`ErrorResponse`) are per-request, not connection-fatal.
-The reader catches `HsqlxError`, drains to `ReadyForQuery`, delivers the
+The reader catches `ValiantError`, drains to `ReadyForQuery`, delivers the
 error to the specific caller's MVar, and continues serving other requests.
 
 Fatal errors (socket closed, parse failure) kill both threads. All
@@ -171,11 +171,11 @@ so no application thread blocks forever.
 | `wire/src/PgWire/Async.hs` | Core async machinery: types, writer, reader, submitRequest |
 | `wire/src/PgWire/Connection.hs` | `Connection` wraps `AsyncWireConn`; spawns threads after startup |
 | `wire/src/PgWire/Error.hs` | `ConnectionDead` error constructor |
-| `runtime/src/Hsqlx/Execute.hs` | `submitRequest` with `CollectRows`/`CollectCommand` |
-| `runtime/src/Hsqlx/Copy.hs` | `ReqExclusive` for COPY streaming |
-| `runtime/src/Hsqlx/Streaming.hs` | `ReqExclusive` for cursor operations |
-| `runtime/src/Hsqlx/Fold.hs` | `ReqExclusive` for constant-memory fold |
-| `runtime/src/Hsqlx/Batch.hs` | `submitRequest` with `CollectRows` |
-| `runtime/src/Hsqlx/Pipeline.hs` | `submitRequest` with `CollectBatch` |
-| `runtime/src/Hsqlx/Notify.hs` | Callback-based notification dispatch |
-| `runtime/src/Hsqlx/Transaction.hs` | `simpleQuery` goes through async channel |
+| `runtime/src/Valiant/Execute.hs` | `submitRequest` with `CollectRows`/`CollectCommand` |
+| `runtime/src/Valiant/Copy.hs` | `ReqExclusive` for COPY streaming |
+| `runtime/src/Valiant/Streaming.hs` | `ReqExclusive` for cursor operations |
+| `runtime/src/Valiant/Fold.hs` | `ReqExclusive` for constant-memory fold |
+| `runtime/src/Valiant/Batch.hs` | `submitRequest` with `CollectRows` |
+| `runtime/src/Valiant/Pipeline.hs` | `submitRequest` with `CollectBatch` |
+| `runtime/src/Valiant/Notify.hs` | Callback-based notification dispatch |
+| `runtime/src/Valiant/Transaction.hs` | `simpleQuery` goes through async channel |

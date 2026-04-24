@@ -15,17 +15,17 @@ import Data.Time
   , secondsToDiffTime
   )
 import Data.Vector qualified as V
-import Hsqlx.Binary.Array (pgDecodeArray, pgEncodeArray)
-import Hsqlx.Binary.Decode ()
-import Hsqlx.Binary.Encode ()
+import Valiant.Binary.Array (pgDecodeArray, pgEncodeArray)
+import Valiant.Binary.Decode ()
+import Valiant.Binary.Encode ()
 import Data.Time (TimeZone, minutesToTimeZone, ZonedTime (..), utcToZonedTime)
-import Hsqlx.Binary.HStore (PgHStore (..), hstoreFromList)
-import Hsqlx.Binary.Inet (PgInet, ipv4, ipv6Host)
-import Hsqlx.Binary.Interval (PgInterval (..))
-import Hsqlx.Binary.MacAddr (PgMacAddr, macAddr)
-import Hsqlx.Binary.Point (PgPoint (..))
-import Hsqlx.Binary.Scientific ()
-import Hsqlx.Binary.Unbounded (Unbounded (..))
+import Valiant.Binary.HStore (PgHStore (..), hstoreFromList)
+import Valiant.Binary.Inet (PgInet, ipv4, ipv6Host)
+import Valiant.Binary.Interval (PgInterval (..))
+import Valiant.Binary.MacAddr (PgMacAddr, macAddr)
+import Valiant.Binary.Point (PgPoint (..))
+import Valiant.Binary.Scientific ()
+import Valiant.Binary.Unbounded (Unbounded (..))
 import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
 import PgWire.Protocol.Oid
 

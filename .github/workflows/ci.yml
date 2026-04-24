@@ -37,9 +37,9 @@ jobs:
       - name: Build all packages
         run: |
           cabal update
-          cabal build pg-wire hsqlx hsqlx-plugin hsqlx-cli
-          cabal build hsqlx-mtl hsqlx-effectful hsqlx-bluefin hsqlx-fused-effects
-          cabal build hsqlx-conduit hsqlx-streaming hsqlx-streamly hsqlx-pipes
+          cabal build pg-wire valiant valiant-plugin valiant-cli
+          cabal build valiant-mtl valiant-effectful valiant-bluefin valiant-fused-effects
+          cabal build valiant-conduit valiant-streaming valiant-streamly valiant-pipes
       - uses: actions/cache/save@v4
         with:
           path: |
@@ -67,7 +67,7 @@ jobs:
           restore-keys: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-
       - run: cabal test pg-wire-test
 
-  test-hsqlx:
+  test-valiant:
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -84,7 +84,7 @@ jobs:
             dist-newstyle
           key: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
           restore-keys: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-
-      - run: cabal test hsqlx-test
+      - run: cabal test valiant-test
 
   test-cli:
     needs: build
@@ -103,7 +103,7 @@ jobs:
             dist-newstyle
           key: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
           restore-keys: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-
-      - run: cabal test hsqlx-cli-test
+      - run: cabal test valiant-cli-test
 
   test-plugin:
     needs: build
@@ -122,7 +122,7 @@ jobs:
             dist-newstyle
           key: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
           restore-keys: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-
-      - run: cabal test hsqlx-plugin-test
+      - run: cabal test valiant-plugin-test
 
   # ── Integration tests (need Postgres) ─────────────────────────────
   test-integration:
@@ -147,15 +147,15 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-16
           sudo systemctl start postgresql
-          sudo -u postgres psql -c "CREATE USER hsqlx_test WITH PASSWORD 'hsqlx_test' SUPERUSER;"
-          sudo -u postgres psql -c "CREATE DATABASE hsqlx_test OWNER hsqlx_test;"
+          sudo -u postgres psql -c "CREATE USER valiant_test WITH PASSWORD 'valiant_test' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE valiant_test OWNER valiant_test;"
           PG_HBA=$(sudo -u postgres psql -t -c "SHOW hba_file;" | xargs)
           sudo sed -i '1s/^/local all all trust\n/' "$PG_HBA"
           sudo systemctl reload postgresql
       - name: Run integration tests
         env:
-          DATABASE_URL: postgres://hsqlx_test:hsqlx_test@/hsqlx_test?host=/var/run/postgresql
-        run: cabal test hsqlx-integration
+          DATABASE_URL: postgres://valiant_test:valiant_test@/valiant_test?host=/var/run/postgresql
+        run: cabal test valiant-integration
 
   # ── HLint ─────────────────────────────────────────────────────────
   hlint:

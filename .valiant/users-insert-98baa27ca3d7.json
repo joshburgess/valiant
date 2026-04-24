@@ -1,0 +1,26 @@
+{
+    "columns": [],
+    "database_url_hash": "f89d3fdecad2c5849bb76880c33597d66f4b151d9731ae72a74d700847d4090b",
+    "file": "users/insert.sql",
+    "valiant_version": "0.1.0",
+    "parameters": [
+        {
+            "haskell_module": "Data.Text",
+            "haskell_type": "Text",
+            "index": 1,
+            "pg_oid": 25,
+            "pg_type_name": "text"
+        },
+        {
+            "haskell_module": "Data.Text",
+            "haskell_type": "Text",
+            "index": 2,
+            "pg_oid": 25,
+            "pg_type_name": "text"
+        }
+    ],
+    "prepared_at": "2026-03-15T12:35:27.618779Z",
+    "sql": "INSERT INTO users (name, email)\nVALUES ($1, $2)\n",
+    "sql_hash": "98baa27ca3d79ffcfb5fde7e994b1b6db7283e2ff9cccfc1a907b982d5a50056",
+    "statement_type": "insert"
+}

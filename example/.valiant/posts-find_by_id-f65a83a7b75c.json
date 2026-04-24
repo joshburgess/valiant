@@ -1,0 +1,83 @@
+{
+    "columns": [
+        {
+            "haskell_module": "Data.Int",
+            "haskell_type": "Int32",
+            "name": "id",
+            "nullable": false,
+            "pg_enum_labels": null,
+            "pg_oid": 23,
+            "pg_type_category": null,
+            "pg_type_name": "int4",
+            "source_column_number": 1,
+            "source_table_oid": 17609
+        },
+        {
+            "haskell_module": "Data.Text",
+            "haskell_type": "Text",
+            "name": "title",
+            "nullable": false,
+            "pg_enum_labels": null,
+            "pg_oid": 25,
+            "pg_type_category": null,
+            "pg_type_name": "text",
+            "source_column_number": 3,
+            "source_table_oid": 17609
+        },
+        {
+            "haskell_module": "Data.Text",
+            "haskell_type": "Maybe Text",
+            "name": "body",
+            "nullable": true,
+            "pg_enum_labels": null,
+            "pg_oid": 25,
+            "pg_type_category": null,
+            "pg_type_name": "text",
+            "source_column_number": 4,
+            "source_table_oid": 17609
+        },
+        {
+            "haskell_module": "Data.Time",
+            "haskell_type": "Maybe UTCTime",
+            "name": "published_at",
+            "nullable": true,
+            "pg_enum_labels": null,
+            "pg_oid": 1184,
+            "pg_type_category": null,
+            "pg_type_name": "timestamptz",
+            "source_column_number": 5,
+            "source_table_oid": 17609
+        },
+        {
+            "haskell_module": "Data.Text",
+            "haskell_type": "Text",
+            "name": "author_name",
+            "nullable": false,
+            "pg_enum_labels": null,
+            "pg_oid": 25,
+            "pg_type_category": null,
+            "pg_type_name": "text",
+            "source_column_number": 2,
+            "source_table_oid": 17599
+        }
+    ],
+    "database_url_hash": "62b373881bcc8dbafdfdc488ef1e8525e82a3586660ccaf97bef16bbbffae48d",
+    "file": "posts/find_by_id.sql",
+    "valiant_version": "0.1.0",
+    "parameters": [
+        {
+            "haskell_module": "Data.Int",
+            "haskell_type": "Int32",
+            "index": 1,
+            "name": null,
+            "pg_enum_labels": null,
+            "pg_oid": 23,
+            "pg_type_category": null,
+            "pg_type_name": "int4"
+        }
+    ],
+    "prepared_at": "2026-03-17T16:39:12.005182Z",
+    "sql": "SELECT p.id, p.title, p.body, p.published_at, u.name as author_name\nFROM posts p\nJOIN users u ON u.id = p.author_id\nWHERE p.id = $1\n",
+    "sql_hash": "f65a83a7b75c6b77b2530f1629f7183748cc6438841fa98288401f8202945f7a",
+    "statement_type": "select"
+}

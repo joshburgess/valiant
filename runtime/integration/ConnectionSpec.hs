@@ -1,6 +1,6 @@
 module ConnectionSpec (spec) where
 
-import Hsqlx
+import Valiant
 import TestSupport
 import Test.Hspec
 

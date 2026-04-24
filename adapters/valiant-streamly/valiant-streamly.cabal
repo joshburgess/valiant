@@ -1,0 +1,56 @@
+cabal-version:   3.0
+name:            valiant-streamly
+version:         0.1.0.0
+synopsis:        Streamly streaming adapter for valiant
+description:
+  Stream PostgreSQL query results using the @streamly@ library.
+  Provides cursor-based and fold-based producers as @Stream IO r@
+  values, enabling high-performance composable stream processing.
+license:         BSD-3-Clause
+license-file:    ../../LICENSE
+build-type:      Simple
+
+common warnings
+  ghc-options: -Wall -Wcompat -Werror -Wno-unticked-promoted-constructors -funbox-strict-fields -fspecialise-aggressively
+
+library
+  import:           warnings
+  hs-source-dirs:   src
+  default-language: GHC2021
+  default-extensions:
+    DerivingStrategies
+    OverloadedStrings
+    StrictData
+
+  exposed-modules:
+    Valiant.Streamly
+
+  build-depends:
+    , base            >=4.17 && <5
+    , bytestring      >=0.11 && <0.13
+    , valiant
+    , pg-wire
+    , streamly-core   >=0.2  && <0.4
+    , vector          >=0.12 && <0.14
+
+test-suite valiant-streamly-test
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Main.hs
+  default-language: GHC2021
+  default-extensions:
+    OverloadedStrings
+
+  other-modules:
+    TestSupport
+
+  build-depends:
+    , base            >=4.17 && <5
+    , bytestring      >=0.11 && <0.13
+    , hspec           >=2.11 && <2.12
+    , valiant
+    , valiant-streamly
+    , pg-wire
+    , streamly-core   >=0.2  && <0.4
+    , text            >=2.0  && <2.2

@@ -1,0 +1,77 @@
+cabal-version:   3.0
+name:            valiant-effectful
+version:         0.1.0.0
+synopsis:        Effectful adapter for valiant
+description:
+  Provides an @Valiant@ effect for the @effectful@ effect system, enabling
+  compile-time checked SQL queries as an effect with pool-based handlers.
+
+  @
+  import Valiant.Effectful
+
+  myApp :: (Valiant :> es, IOE :> es) => Eff es [User]
+  myApp = do
+    users <- fetchAllEff listUsers ()
+    forM_ users $ \\u -> executeEff updateLastSeen (userId u)
+    pure users
+
+  main :: IO ()
+  main = do
+    pool <- newPool defaultPoolConfig { poolConnString = "..." }
+    runEff . runValiant pool $ myApp
+  @
+license:         BSD-3-Clause
+license-file:    ../../LICENSE
+build-type:      Simple
+
+common warnings
+  ghc-options: -Wall -Wcompat -Werror -Wno-unticked-promoted-constructors -funbox-strict-fields -fspecialise-aggressively
+
+library
+  import:           warnings
+  hs-source-dirs:   src
+  default-language: GHC2021
+  default-extensions:
+    DataKinds
+    DerivingStrategies
+    GADTs
+    LambdaCase
+    OverloadedStrings
+    StrictData
+    TypeFamilies
+    TypeOperators
+
+  exposed-modules:
+    Valiant.Effectful
+
+  build-depends:
+    , base            >=4.17 && <5
+    , effectful-core  >=2.3  && <2.6
+    , valiant
+    , pg-wire
+    , vector          >=0.12 && <0.14
+
+test-suite valiant-effectful-test
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Main.hs
+  default-language: GHC2021
+  default-extensions:
+    DataKinds
+    GADTs
+    OverloadedStrings
+    TypeOperators
+
+  build-depends:
+    , base            >=4.17 && <5
+    , bytestring      >=0.11 && <0.13
+    , effectful-core   >=2.3  && <2.6
+    , hspec           >=2.11 && <2.12
+    , valiant
+    , valiant-effectful
+    , pg-wire
+    , text            >=2.0  && <2.2
+
+  other-modules:
+    TestSupport

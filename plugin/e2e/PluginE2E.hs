@@ -5,7 +5,7 @@ module PluginE2E where
 import Data.Int (Int32)
 import Data.Text (Text)
 import Data.Time (UTCTime)
-import Hsqlx.Statement (Statement, queryFile)
+import Valiant.Statement (Statement, queryFile)
 
 -- | Positional params: SELECT 5 columns, 1 Int32 param.
 -- sql/users/find_by_id.sql:
