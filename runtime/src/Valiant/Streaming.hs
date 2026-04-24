@@ -26,6 +26,7 @@ module Valiant.Streaming
   ) where
 
 import Control.Exception (SomeException, catch, onException)
+import Control.Monad (when)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
@@ -53,6 +54,10 @@ data CursorState = CursorState
   -- ^ Transaction status ref.
   , csExhausted :: IORef Bool
   -- ^ Whether the cursor has returned all rows.
+  , csPreparedBatch :: IORef Int
+  -- ^ Batch size currently baked into the unnamed prepared FETCH
+  -- statement on the server. 'fetchBatch' re-parses only when the
+  -- requested size differs from this value.
   }
 
 -- | Open a parameterized cursor for a statement, run an action, then close.
@@ -70,13 +75,16 @@ withCursor
   -- ^ Batch size hint (used as default for 'fetchBatch')
   -> (CursorState -> IO a)
   -> IO a
-withCursor conn stmt params _batchSize action =
+withCursor conn stmt params batchSize action =
   submitExclusive (connAsync conn) $ \wc txRef -> do
     cursorName <- freshCursorName
 
-    -- Declare cursor using extended query protocol:
-    -- DECLARE <cursor> NO SCROLL CURSOR FOR <stmt>
+    -- Declare the cursor and prepare a FETCH statement for the hinted
+    -- batch size in a single pipelined round-trip. Subsequent
+    -- 'fetchBatch' calls reuse the unnamed prepared FETCH as long as
+    -- the requested batch size matches.
     let declareSql = "DECLARE " <> cursorName <> " NO SCROLL CURSOR FOR " <> stmtSQL stmt
+        fetchSql = "FETCH FORWARD " <> BS8.pack (show batchSize) <> " FROM " <> cursorName
         encodedParams = stmtEncode stmt params
         paramOids = V.map Oid.unOid (stmtParamOids stmt)
 
@@ -84,13 +92,15 @@ withCursor conn stmt params _batchSize action =
       [ Parse "" declareSql paramOids
       , Bind "" "" (V.singleton BinaryFormat) encodedParams V.empty
       , Execute "" 0
+      , Parse "" fetchSql V.empty
       , Sync
       ]
 
     waitDeclareComplete wc txRef
 
     exhausted <- newIORef False
-    let cs = CursorState cursorName wc txRef exhausted
+    preparedBatch <- newIORef batchSize
+    let cs = CursorState cursorName wc txRef exhausted preparedBatch
         closeCursor =
           (do sendFrontendMsg wc (Query ("CLOSE " <> cursorName))
               collectSimpleDiscard wc txRef
@@ -109,13 +119,19 @@ fetchBatch cs n = do
   if done
     then pure []
     else do
-      let fetchSql = "FETCH FORWARD " <> BS8.pack (show n) <> " FROM " <> csName cs
-      sendFrontendMsgs (csWire cs)
-        [ Parse "" fetchSql V.empty
-        , Bind "" "" V.empty V.empty (V.singleton BinaryFormat)
-        , Execute "" 0
-        , Sync
-        ]
+      prepared <- readIORef (csPreparedBatch cs)
+      let bindExecSync =
+            [ Bind "" "" V.empty V.empty (V.singleton BinaryFormat)
+            , Execute "" 0
+            , Sync
+            ]
+          msgs
+            | prepared == n = bindExecSync
+            | otherwise =
+                let fetchSql = "FETCH FORWARD " <> BS8.pack (show n) <> " FROM " <> csName cs
+                in Parse "" fetchSql V.empty : bindExecSync
+      when (prepared /= n) $ writeIORef (csPreparedBatch cs) n
+      sendFrontendMsgs (csWire cs) msgs
       rows <- collectFetchResults (csWire cs) (csTxRef cs)
       if null rows
         then do

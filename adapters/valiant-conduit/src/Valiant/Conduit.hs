@@ -76,8 +76,11 @@ selectSource conn stmt params batchSize = do
   liftIO $ submitExclusive (connAsync conn) $ \wc txRef -> do
     cursorName <- freshCursorName
 
-    -- DECLARE cursor
+    -- DECLARE cursor and prepare the FETCH statement in one round-trip.
+    -- The unnamed prepared statement holds FETCH for the duration of
+    -- this exclusive-wire section; each batch reuses it via Bind/Execute.
     let declareSql = "DECLARE " <> cursorName <> " NO SCROLL CURSOR FOR " <> stmtSQL stmt
+        fetchSql = "FETCH FORWARD " <> BS8.pack (show batchSize) <> " FROM " <> cursorName
         encodedParams = stmtEncode stmt params
         paramOids = V.map Oid.unOid (stmtParamOids stmt)
 
@@ -85,13 +88,14 @@ selectSource conn stmt params batchSize = do
       [ Parse "" declareSql paramOids
       , Bind "" "" binaryFmtVec encodedParams V.empty
       , Execute "" 0
+      , Parse "" fetchSql V.empty
       , Sync
       ]
     waitDeclareComplete wc txRef
 
     -- Fetch loop — this runs in IO, not ConduitT, because we're inside
     -- submitExclusive. We collect all rows and return them.
-    allRows <- fetchAllCursor wc txRef cursorName batchSize (stmtDecode stmt)
+    allRows <- fetchAllCursor wc txRef (stmtDecode stmt)
 
     -- Close cursor
     sendFrontendMsg wc (Query ("CLOSE " <> cursorName))
@@ -142,17 +146,13 @@ foldSource conn stmt params = do
 fetchAllCursor
   :: WireConn
   -> IORef TxStatus
-  -> ByteString
-  -> Int
   -> (Vector (Maybe ByteString) -> Either String r)
   -> IO [r]
-fetchAllCursor wc txRef cursorName batchSize decode = go []
+fetchAllCursor wc txRef decode = go []
   where
     go !acc = do
-      let fetchSql = "FETCH FORWARD " <> BS8.pack (show batchSize) <> " FROM " <> cursorName
       sendFrontendMsgs wc
-        [ Parse "" fetchSql V.empty
-        , Bind "" "" V.empty V.empty binaryFmtVec
+        [ Bind "" "" V.empty V.empty binaryFmtVec
         , Execute "" 0
         , Sync
         ]

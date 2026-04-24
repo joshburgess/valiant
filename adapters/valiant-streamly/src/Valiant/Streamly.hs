@@ -60,16 +60,18 @@ selectStreamly conn stmt params batchSize =
     rows <- submitExclusive (connAsync conn) $ \wc txRef -> do
       cursorName <- freshCursorName
       let declareSql = "DECLARE " <> cursorName <> " NO SCROLL CURSOR FOR " <> stmtSQL stmt
+          fetchSql = "FETCH FORWARD " <> BS8.pack (show batchSize) <> " FROM " <> cursorName
           encodedParams = stmtEncode stmt params
           paramOids = V.map Oid.unOid (stmtParamOids stmt)
       sendFrontendMsgs wc
         [ Parse "" declareSql paramOids
         , Bind "" "" binaryFmtVec encodedParams V.empty
         , Execute "" 0
+        , Parse "" fetchSql V.empty
         , Sync
         ]
       waitDeclareComplete wc txRef
-      allRows <- fetchAllCursor wc txRef cursorName batchSize (stmtDecode stmt)
+      allRows <- fetchAllCursor wc txRef (stmtDecode stmt)
       sendFrontendMsg wc (Query ("CLOSE " <> cursorName))
       collectSimpleDiscard wc txRef
       pure allRows
@@ -102,16 +104,14 @@ foldStreamly conn stmt params =
 ------------------------------------------------------------------------
 
 fetchAllCursor
-  :: WireConn -> IORef TxStatus -> ByteString -> Int
+  :: WireConn -> IORef TxStatus
   -> (Vector (Maybe ByteString) -> Either String r)
   -> IO [r]
-fetchAllCursor wc txRef cursorName batchSize decode = go []
+fetchAllCursor wc txRef decode = go []
   where
     go !acc = do
-      let fetchSql = "FETCH FORWARD " <> BS8.pack (show batchSize) <> " FROM " <> cursorName
       sendFrontendMsgs wc
-        [ Parse "" fetchSql V.empty
-        , Bind "" "" V.empty V.empty binaryFmtVec
+        [ Bind "" "" V.empty V.empty binaryFmtVec
         , Execute "" 0
         , Sync
         ]
