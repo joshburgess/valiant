@@ -131,8 +131,27 @@ benchmarks =
           p <- getPool
           withTransaction p $ \tx ->
             fetchScalar (txConn tx) stmtCount ()
+
+    , bench "cursor 1000 rows, batch 100" $
+        whnfIO (cursorDrain 100)
+    , bench "cursor 1000 rows, batch 500" $
+        whnfIO (cursorDrain 500)
+    , bench "cursor 1000 rows, batch 1000" $
+        whnfIO (cursorDrain 1000)
     ]
   ]
+
+-- | Drain a 1000-row cursor with the given batch size. Returns the row
+-- count so the benchmark can't optimize the fetch away.
+cursorDrain :: Int -> IO Int
+cursorDrain !batch = do
+  p <- getPool
+  withTransaction p $ \tx ->
+    withCursor (txConn tx) stmtListAllBulk () batch $ \cs -> do
+      let loop !n = do
+            rows <- fetchBatch cs batch
+            if null rows then pure n else loop (n + length rows)
+      loop 0
 
 -- Statements ----------------------------------------------------------------
 
