@@ -3,7 +3,7 @@ module Valiant.CLI.CustomTypesSpec (spec) where
 import Data.Aeson (encode, object, (.=))
 import Data.ByteString.Lazy qualified as LBS
 import Data.Map.Strict qualified as Map
-import Database.PostgreSQL.LibPQ (Oid (..))
+import PgWire.Protocol.Oid (Oid (..))
 import Valiant.CLI.CustomTypes (loadCustomTypes)
 import Valiant.CLI.TypeMap (HaskellType (..))
 import System.IO.Temp (withSystemTempDirectory)

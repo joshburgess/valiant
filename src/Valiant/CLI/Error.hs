@@ -8,7 +8,7 @@ module Valiant.CLI.Error
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import Database.PostgreSQL.LibPQ (Oid (..))
+import PgWire.Protocol.Oid (Oid (..))
 import System.Exit (exitFailure)
 import System.IO (stderr)
 

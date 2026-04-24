@@ -2,7 +2,7 @@
 module Valiant.CLI.TypeMapSpec (spec) where
 
 import Data.Map.Strict qualified as Map
-import Database.PostgreSQL.LibPQ (Oid (..))
+import PgWire.Protocol.Oid (Oid (..))
 import Valiant.CLI.TypeMap
 import Test.Hspec
 

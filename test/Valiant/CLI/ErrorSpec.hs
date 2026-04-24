@@ -1,7 +1,7 @@
 module Valiant.CLI.ErrorSpec (spec) where
 
 import Data.Text qualified as T
-import Database.PostgreSQL.LibPQ (Oid (..))
+import PgWire.Protocol.Oid (Oid (..))
 import Valiant.CLI.Error
 import Test.Hspec
 

@@ -15,10 +15,9 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
-import Database.PostgreSQL.LibPQ (Oid (..))
-import Foreign.C.Types (CUInt)
+import PgWire.Connection (Connection)
+import PgWire.Protocol.Oid (Oid (..))
 import Valiant.CLI.Describe (PgTypeCategory (..), PgTypeInfo (..), queryEnumLabels, queryRangeSubtype, queryTypeInfo)
-import Database.PostgreSQL.LibPQ qualified as PQ
 
 -- | A Haskell type with its originating module.
 data HaskellType = HaskellType
@@ -96,7 +95,7 @@ data ResolvedType = ResolvedType
 -- Handles enums (→ 'Text'), domains (→ unwrap to base type),
 -- ranges (→ @PgRange BaseType@), and composites (→ error).
 resolveUnknownOid
-  :: PQ.Connection
+  :: Connection
   -> Map Oid HaskellType
   -- ^ Custom type overrides
   -> Oid
@@ -119,7 +118,7 @@ resolveUnknownOid conn customs oid = do
             }
       PgDomain -> do
         -- Follow typbasetype to the underlying type
-        let baseOid = Oid (fromIntegral (ptiBaseOid info) :: CUInt)
+        let baseOid = Oid (ptiBaseOid info)
         case oidToHaskellTypeWith customs baseOid of
           Just ht ->
             pure . Right $

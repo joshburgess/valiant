@@ -9,8 +9,8 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Time.Clock (UTCTime, getCurrentTime)
 import Data.Word (Word32)
-import Database.PostgreSQL.LibPQ (Oid (..))
-import Database.PostgreSQL.LibPQ qualified as PQ
+import PgWire.Connection (Connection)
+import PgWire.Protocol.Oid (Oid (..))
 import Valiant.CLI.Cache
 import Valiant.CLI.Config (AppEnv (..))
 import Valiant.CLI.Describe (ColumnMeta (..), DescribeError (..), ParamMeta (..), QueryMeta (..), describeQuery, withPgConnection)
@@ -75,7 +75,7 @@ discoverHsFiles dir = do
   matched <- Glob.globDir [pat] dir
   pure (concat matched)
 
-processFile :: AppEnv -> CustomTypeMap -> PQ.Connection -> Int -> (Int, SqlFile) -> IO Bool
+processFile :: AppEnv -> CustomTypeMap -> Connection -> Int -> (Int, SqlFile) -> IO Bool
 processFile env customs conn total (idx, sqlFile) = do
   printProgress idx total (sqlRelPath sqlFile)
 
@@ -110,7 +110,7 @@ processFile env customs conn total (idx, sqlFile) = do
 buildCacheEntry
   :: AppEnv
   -> CustomTypeMap
-  -> PQ.Connection
+  -> Connection
   -> SqlFile
   -> QueryMeta
   -> [Bool]
@@ -141,7 +141,7 @@ buildCacheEntry env customs conn sqlFile meta nullabilities nameMapping now = do
               , ceColumns = columns
               }
 
-resolveParams :: CustomTypeMap -> PQ.Connection -> Map.Map Int Text -> [ParamMeta] -> IO (Either Text [CacheParam])
+resolveParams :: CustomTypeMap -> Connection -> Map.Map Int Text -> [ParamMeta] -> IO (Either Text [CacheParam])
 resolveParams customs conn nameMap = go []
   where
     go !acc [] = pure (Right (reverse acc))
@@ -151,7 +151,7 @@ resolveParams customs conn nameMap = go []
         Left err -> pure (Left err)
         Right cp -> go (cp : acc) pms
 
-resolveParam :: CustomTypeMap -> PQ.Connection -> Map.Map Int Text -> ParamMeta -> IO (Either Text CacheParam)
+resolveParam :: CustomTypeMap -> Connection -> Map.Map Int Text -> ParamMeta -> IO (Either Text CacheParam)
 resolveParam customs conn nameMap ParamMeta {..} =
   let Oid oid = pmOid
       paramName = Map.lookup pmIndex nameMap
@@ -190,7 +190,7 @@ resolveParam customs conn nameMap ParamMeta {..} =
                   , cpPgEnumLabels = rtEnumLabels rt
                   }
 
-resolveColumns :: CustomTypeMap -> PQ.Connection -> [(ColumnMeta, Bool)] -> IO (Either Text [CacheColumn])
+resolveColumns :: CustomTypeMap -> Connection -> [(ColumnMeta, Bool)] -> IO (Either Text [CacheColumn])
 resolveColumns customs conn = go []
   where
     go !acc [] = pure (Right (reverse acc))
@@ -200,7 +200,7 @@ resolveColumns customs conn = go []
         Left err -> pure (Left err)
         Right cc -> go (cc : acc) rest
 
-resolveColumn :: CustomTypeMap -> PQ.Connection -> ColumnMeta -> Bool -> IO (Either Text CacheColumn)
+resolveColumn :: CustomTypeMap -> Connection -> ColumnMeta -> Bool -> IO (Either Text CacheColumn)
 resolveColumn customs conn ColumnMeta {..} nullable =
   let Oid oid = cmOid
       Oid tOid = cmTableOid

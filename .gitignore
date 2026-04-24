@@ -5,3 +5,4 @@ dist-newstyle/
 *.dyn_o
 *.hie
 .env
+.valiant/

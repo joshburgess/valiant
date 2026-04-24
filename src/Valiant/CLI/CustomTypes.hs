@@ -10,8 +10,7 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Word (Word32)
-import Database.PostgreSQL.LibPQ (Oid (..))
-import Foreign.C.Types (CUInt)
+import PgWire.Protocol.Oid (Oid (..))
 import Valiant.CLI.TypeMap (HaskellType (..))
 import System.Directory (doesFileExist)
 
@@ -46,7 +45,7 @@ toMap :: [CustomTypeEntry] -> CustomTypeMap
 toMap = Map.fromList . map toPair
   where
     toPair CustomTypeEntry {..} =
-      (Oid (fromIntegral cteOid :: CUInt), HaskellType cteHaskellType cteHaskellModule)
+      (Oid cteOid, HaskellType cteHaskellType cteHaskellModule)
 
 data CustomTypeEntry = CustomTypeEntry
   { cteOid :: Word32

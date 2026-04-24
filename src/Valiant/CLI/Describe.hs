@@ -12,14 +12,22 @@ module Valiant.CLI.Describe
   , withPgConnection
   ) where
 
+import Control.Exception (bracket, try)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
+import Data.IORef (IORef, writeIORef)
 import Data.Text (Text)
 import Data.Text.Encoding qualified as TE
+import Data.Vector qualified as V
+import Data.Vector (Vector)
 import Data.Word (Word32)
-import Database.PostgreSQL.LibPQ (Oid (..))
-import Database.PostgreSQL.LibPQ qualified as PQ
-import Foreign.C.Types (CUInt)
+import PgWire.Async (submitExclusive)
+import PgWire.Connection (Connection, close, connAsync, connectString, simpleQuery)
+import PgWire.Error (PgWireError)
+import PgWire.Protocol.Backend (BackendMsg (..), FieldInfo (..), PgError (..), TxStatus)
+import PgWire.Protocol.Frontend (DescribeTarget (..), FrontendMsg (..))
+import PgWire.Protocol.Oid (Oid (..))
+import PgWire.Wire (WireConn, recvBackendMsg, sendFrontendMsg)
 import Valiant.CLI.Discover (SqlFile (..))
 
 -- | Raw metadata returned by Postgres for a described query.
@@ -54,84 +62,90 @@ data DescribeError = DescribeError
   deriving stock (Show)
 
 -- | Connect to Postgres, run an action, and close the connection.
-withPgConnection :: ByteString -> (PQ.Connection -> IO a) -> IO a
+withPgConnection :: ByteString -> (Connection -> IO a) -> IO a
 withPgConnection connStr action = do
-  conn <- PQ.connectdb connStr
-  status <- PQ.status conn
-  case status of
-    PQ.ConnectionOk -> do
-      result <- action conn
-      PQ.finish conn
-      pure result
-    _ -> do
-      msg <- maybe "unknown error" TE.decodeUtf8 <$> PQ.errorMessage conn
-      PQ.finish conn
-      error $ "valiant: connection failed: " <> show msg
+  result <- try @PgWireError (bracket (connectString connStr) close action)
+  case result of
+    Right a -> pure a
+    Left err -> error $ "valiant: connection failed: " <> show err
 
 -- | Prepare and describe a SQL query, returning structured metadata.
-describeQuery :: PQ.Connection -> SqlFile -> IO (Either DescribeError QueryMeta)
+describeQuery :: Connection -> SqlFile -> IO (Either DescribeError QueryMeta)
 describeQuery conn sqlFile = do
   let stmtName = BS8.pack ("valiant_" <> sqlRelPath sqlFile)
       sql = sqlContent sqlFile
+  result <- parseAndDescribe conn stmtName sql
+  pure $ case result of
+    Left err -> Left (pgErrorToDescribeError err)
+    Right (paramOids, fields) -> Right (buildMeta paramOids fields)
 
-  -- Prepare the statement
-  mResult <- PQ.prepare conn stmtName sql Nothing
-  case mResult of
-    Nothing -> pure . Left $ DescribeError "PQprepare returned null" Nothing Nothing
-    Just result -> do
-      st <- PQ.resultStatus result
-      case st of
-        PQ.CommandOk -> describeStmt conn stmtName
-        _ -> Left <$> extractPgError result
+-- | Send Parse + Describe + Sync in one round trip and collect the response.
+-- Returns the parameter OIDs and column field info, or the server's error.
+parseAndDescribe
+  :: Connection
+  -> ByteString
+  -- ^ statement name
+  -> ByteString
+  -- ^ SQL text
+  -> IO (Either PgError (Vector Word32, Vector FieldInfo))
+parseAndDescribe conn stmtName sql =
+  submitExclusive (connAsync conn) $ \wc txRef -> do
+    sendFrontendMsg wc (Parse stmtName sql V.empty)
+    sendFrontendMsg wc (Describe DescribeStatement stmtName)
+    sendFrontendMsg wc Sync
+    collectDescribeResponse wc txRef
 
-describeStmt :: PQ.Connection -> ByteString -> IO (Either DescribeError QueryMeta)
-describeStmt conn stmtName = do
-  mResult <- PQ.describePrepared conn stmtName
-  case mResult of
-    Nothing -> pure . Left $ DescribeError "PQdescribePrepared returned null" Nothing Nothing
-    Just result -> do
-      st <- PQ.resultStatus result
-      case st of
-        PQ.CommandOk -> Right <$> extractMeta result
-        _ -> Left <$> extractPgError result
+-- | Collect the response to a Parse + Describe + Sync sequence.
+-- Expected message order on success:
+-- ParseComplete, ParameterDescription, (RowDescription | NoData), ReadyForQuery.
+-- On error: ErrorResponse, ReadyForQuery.
+collectDescribeResponse
+  :: WireConn
+  -> IORef TxStatus
+  -> IO (Either PgError (Vector Word32, Vector FieldInfo))
+collectDescribeResponse wc txRef = loop Nothing V.empty V.empty
+  where
+    loop !mErr !paramOids !fields = do
+      msg <- recvBackendMsg wc
+      case msg of
+        ParseComplete -> loop mErr paramOids fields
+        ParameterDescription oids -> loop mErr oids fields
+        RowDescription fs -> loop mErr paramOids fs
+        NoData -> loop mErr paramOids V.empty
+        ErrorResponse err -> loop (Just err) paramOids fields
+        ReadyForQuery status -> do
+          writeIORef txRef status
+          pure $ case mErr of
+            Just err -> Left err
+            Nothing -> Right (paramOids, fields)
+        _ -> loop mErr paramOids fields
 
-extractMeta :: PQ.Result -> IO QueryMeta
-extractMeta result = do
-  nParams <- PQ.nparams result
-  params <- mapM (extractParam result) [0 .. nParams - 1]
-  nFields <- PQ.nfields result
-  let PQ.Col nf = nFields
-      fieldRange = map PQ.Col [0 .. nf - 1]
-  columns <- mapM (extractColumn result) fieldRange
-  pure QueryMeta {qmParams = params, qmColumns = columns}
+buildMeta :: Vector Word32 -> Vector FieldInfo -> QueryMeta
+buildMeta paramOids fields =
+  QueryMeta
+    { qmParams =
+        [ ParamMeta {pmIndex = i + 1, pmOid = Oid oid}
+        | (i, oid) <- zip [0 ..] (V.toList paramOids)
+        ]
+    , qmColumns = map fieldToColumnMeta (V.toList fields)
+    }
 
-extractParam :: PQ.Result -> Int -> IO ParamMeta
-extractParam result idx = do
-  oid <- PQ.paramtype result idx
-  pure ParamMeta {pmIndex = idx + 1, pmOid = oid}
+fieldToColumnMeta :: FieldInfo -> ColumnMeta
+fieldToColumnMeta fi =
+  ColumnMeta
+    { cmName = TE.decodeUtf8 (fiName fi)
+    , cmOid = Oid (fiTypeOid fi)
+    , cmTableOid = Oid (fiTableOid fi)
+    , cmColumnNumber = fromIntegral (fiColumnNum fi)
+    }
 
-extractColumn :: PQ.Result -> PQ.Column -> IO ColumnMeta
-extractColumn result col = do
-  mName <- PQ.fname result col
-  let name = maybe "?" TE.decodeUtf8 mName
-  oid <- PQ.ftype result col
-  tableOid <- PQ.ftable result col
-  colNum <- PQ.ftablecol result col
-  let PQ.Col colNumInt = colNum
-  pure
-    ColumnMeta
-      { cmName = name
-      , cmOid = oid
-      , cmTableOid = tableOid
-      , cmColumnNumber = fromIntegral colNumInt
-      }
-
-extractPgError :: PQ.Result -> IO DescribeError
-extractPgError result = do
-  msg <- maybe "unknown error" TE.decodeUtf8 <$> PQ.resultErrorField result PQ.DiagMessagePrimary
-  detail <- fmap TE.decodeUtf8 <$> PQ.resultErrorField result PQ.DiagMessageDetail
-  hint <- fmap TE.decodeUtf8 <$> PQ.resultErrorField result PQ.DiagMessageHint
-  pure DescribeError {deMessage = msg, deDetail = detail, deHint = hint}
+pgErrorToDescribeError :: PgError -> DescribeError
+pgErrorToDescribeError err =
+  DescribeError
+    { deMessage = TE.decodeUtf8 (pgMessage err)
+    , deDetail = TE.decodeUtf8 <$> pgDetail err
+    , deHint = TE.decodeUtf8 <$> pgHint err
+    }
 
 -- Type discovery -------------------------------------------------------------
 
@@ -159,34 +173,30 @@ data PgTypeInfo = PgTypeInfo
   deriving stock (Show)
 
 -- | Query @pg_type@ for information about an unknown OID.
-queryTypeInfo :: PQ.Connection -> Oid -> IO (Maybe PgTypeInfo)
+queryTypeInfo :: Connection -> Oid -> IO (Maybe PgTypeInfo)
 queryTypeInfo conn (Oid rawOid) = do
-  let oidParam = BS8.pack (show (fromIntegral rawOid :: Word32))
-  mResult <- PQ.execParams conn
-    "SELECT typname, typtype, typarray, typbasetype, typelem FROM pg_type WHERE oid = $1"
-    [Just (PQ.Oid 26, oidParam, PQ.Text)]  -- OID 26 = oid type
-    PQ.Text
-  case mResult of
-    Nothing -> pure Nothing
-    Just result -> do
-      nRows <- PQ.ntuples result
-      if nRows == 0
-        then pure Nothing
-        else do
-          mName <- PQ.getvalue result (PQ.toRow (0 :: Int)) (PQ.toColumn (0 :: Int))
-          mTyptype <- PQ.getvalue result (PQ.toRow (0 :: Int)) (PQ.toColumn (1 :: Int))
-          mTyparray <- PQ.getvalue result (PQ.toRow (0 :: Int)) (PQ.toColumn (2 :: Int))
-          mTypbase <- PQ.getvalue result (PQ.toRow (0 :: Int)) (PQ.toColumn (3 :: Int))
-          mTypelem <- PQ.getvalue result (PQ.toRow (0 :: Int)) (PQ.toColumn (4 :: Int))
-          pure $
-            Just
-              PgTypeInfo
-                { ptiName = maybe "" TE.decodeUtf8 mName
-                , ptiCategory = parseTyptype mTyptype
-                , ptiArrayOid = parseOidField mTyparray
-                , ptiBaseOid = parseOidField mTypbase
-                , ptiElemOid = parseOidField mTypelem
-                }
+  let sql =
+        "SELECT typname, typtype, typarray, typbasetype, typelem FROM pg_type WHERE oid = "
+          <> BS8.pack (show rawOid)
+  result <- try @PgWireError (simpleQuery conn sql)
+  pure $ case result of
+    Left _ -> Nothing
+    Right (rows, _) -> case rows of
+      (row : _) -> Just (parsePgTypeRow row)
+      [] -> Nothing
+
+parsePgTypeRow :: [Maybe ByteString] -> PgTypeInfo
+parsePgTypeRow row =
+  let (mName, mTyptype, mTyparray, mTypbase, mTypelem) = case row of
+        (a : b : c : d : e : _) -> (a, b, c, d, e)
+        _ -> (Nothing, Nothing, Nothing, Nothing, Nothing)
+   in PgTypeInfo
+        { ptiName = maybe "" TE.decodeUtf8 mName
+        , ptiCategory = parseTyptype mTyptype
+        , ptiArrayOid = parseOidField mTyparray
+        , ptiBaseOid = parseOidField mTypbase
+        , ptiElemOid = parseOidField mTypelem
+        }
 
 parseTyptype :: Maybe ByteString -> PgTypeCategory
 parseTyptype (Just "e") = PgEnum
@@ -204,41 +214,31 @@ parseOidField (Just bs) =
     Nothing -> 0
 
 -- | Query @pg_enum@ for the labels of an enum type.
-queryEnumLabels :: PQ.Connection -> Oid -> IO [Text]
+queryEnumLabels :: Connection -> Oid -> IO [Text]
 queryEnumLabels conn (Oid rawOid) = do
-  let oidParam = BS8.pack (show (fromIntegral rawOid :: Word32))
-  mResult <- PQ.execParams conn
-    "SELECT enumlabel FROM pg_enum WHERE enumtypid = $1 ORDER BY enumsortorder"
-    [Just (PQ.Oid 26, oidParam, PQ.Text)]
-    PQ.Text
-  case mResult of
-    Nothing -> pure []
-    Just result -> do
-      nRows <- PQ.ntuples result
-      let rows = [0 .. nRows - 1]
-      mapM
-        ( \r -> do
-            mVal <- PQ.getvalue result r (PQ.toColumn (0 :: Int))
-            pure (maybe "" TE.decodeUtf8 mVal)
-        )
-        rows
+  let sql =
+        "SELECT enumlabel FROM pg_enum WHERE enumtypid = "
+          <> BS8.pack (show rawOid)
+          <> " ORDER BY enumsortorder"
+  result <- try @PgWireError (simpleQuery conn sql)
+  pure $ case result of
+    Left _ -> []
+    Right (rows, _) -> map labelOf rows
+  where
+    labelOf (Just v : _) = TE.decodeUtf8 v
+    labelOf _ = ""
 
 -- | Query @pg_range@ for the subtype OID of a range type.
-queryRangeSubtype :: PQ.Connection -> Oid -> IO (Maybe Oid)
+queryRangeSubtype :: Connection -> Oid -> IO (Maybe Oid)
 queryRangeSubtype conn (Oid rawOid) = do
-  let oidParam = BS8.pack (show (fromIntegral rawOid :: Word32))
-  mResult <- PQ.execParams conn
-    "SELECT rngsubtype FROM pg_range WHERE rngtypid = $1"
-    [Just (PQ.Oid 26, oidParam, PQ.Text)]
-    PQ.Text
-  case mResult of
-    Nothing -> pure Nothing
-    Just result -> do
-      nRows <- PQ.ntuples result
-      if nRows == 0
-        then pure Nothing
-        else do
-          mVal <- PQ.getvalue result (PQ.toRow (0 :: Int)) (PQ.toColumn (0 :: Int))
-          pure $ case mVal >>= fmap fst . BS8.readInt of
-            Just n -> Just (Oid (fromIntegral n :: CUInt))
-            Nothing -> Nothing
+  let sql =
+        "SELECT rngsubtype FROM pg_range WHERE rngtypid = "
+          <> BS8.pack (show rawOid)
+  result <- try @PgWireError (simpleQuery conn sql)
+  pure $ case result of
+    Left _ -> Nothing
+    Right (rows, _) -> case rows of
+      ((Just v : _) : _) -> case BS8.readInt v of
+        Just (n, _) -> Just (Oid (fromIntegral n))
+        Nothing -> Nothing
+      _ -> Nothing
