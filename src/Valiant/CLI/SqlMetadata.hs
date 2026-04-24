@@ -49,7 +49,7 @@ parseDirective :: Text -> (Text, Text)
 parseDirective line =
   let stripped = T.stripStart line
       -- Remove "-- valiant:" prefix
-      afterPrefix = T.drop 9 stripped -- length "-- valiant:" == 9
+      afterPrefix = T.drop 11 stripped -- length "-- valiant:" == 11
       (key, rest) = T.break (== ' ') (T.strip afterPrefix)
    in (T.toLower key, T.strip rest)
 
