@@ -29,7 +29,7 @@ import Network.Socket qualified as NS
 import Network.Socket.ByteString qualified as NSB
 import PgWire.Connection (Connection (..))
 import PgWire.Connection.Config (ConnConfig (..))
-import PgWire.Error (ValiantError (..), throwValiant)
+import PgWire.Error (PgWireError (..), throwPgWire)
 
 -- | Cancel the currently executing query on a connection.
 --
@@ -60,7 +60,7 @@ withQueryTimeout conn seconds action = do
   case result of
     Left () -> do
       cancelQuery conn
-      throwValiant (ConnectionError "Query timed out")
+      throwPgWire (ConnectionError "Query timed out")
     Right a -> pure a
 
 -- | Send a CancelRequest to the given host/port.
@@ -75,7 +75,7 @@ sendCancelRequest host port pid key = do
   let hints = NS.defaultHints {NS.addrSocketType = NS.Stream}
   addrs <- NS.getAddrInfo (Just hints) (Just host) (Just (show port))
   case addrs of
-    [] -> throwValiant (ConnectionError "Cancel: no address found")
+    [] -> throwPgWire (ConnectionError "Cancel: no address found")
     (addr : _) -> do
       sock <- NS.socket (NS.addrFamily addr) NS.Stream NS.defaultProtocol
       NS.connect sock (NS.addrAddress addr)

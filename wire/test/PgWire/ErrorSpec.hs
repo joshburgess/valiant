@@ -7,7 +7,7 @@ import Test.Hspec
 
 spec :: Spec
 spec = do
-  describe "ValiantError constructors" $ do
+  describe "PgWireError constructors" $ do
     it "ConnectionError carries message" $ do
       let err = ConnectionError "host unreachable"
       show err `shouldContain` "host unreachable"
@@ -36,13 +36,13 @@ spec = do
       show err `shouldContain` "table not found"
       show err `shouldContain` "42P01"
 
-  describe "throwValiant" $ do
+  describe "throwPgWire" $ do
     it "throws as an Exception" $ do
-      let action = throwValiant (ConnectionError "test") :: IO ()
+      let action = throwPgWire (ConnectionError "test") :: IO ()
       action `shouldThrow` (== ConnectionError "test")
 
     it "can be caught with specific pattern" $ do
-      result <- (throwValiant PoolTimeout >> pure "no") `catch` \(e :: ValiantError) ->
+      result <- (throwPgWire PoolTimeout >> pure "no") `catch` \(e :: PgWireError) ->
         case e of
           PoolTimeout -> pure "caught"
           _ -> pure "wrong"

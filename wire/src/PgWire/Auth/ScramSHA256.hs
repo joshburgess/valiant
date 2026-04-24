@@ -13,7 +13,7 @@ import Data.ByteString qualified as BS
 import Data.ByteString.Base64 qualified as B64
 import Data.ByteString.Char8 qualified as BS8
 import Data.Bits (xor)
-import PgWire.Error (ValiantError (..), throwValiant)
+import PgWire.Error (PgWireError (..), throwPgWire)
 import PgWire.Protocol.Backend (AuthType (..), BackendMsg (..), PgError (..))
 import PgWire.Protocol.Frontend (FrontendMsg (..))
 import PgWire.Wire (WireConn, recvBackendMsg, sendFrontendMsg)
@@ -55,8 +55,8 @@ scramAuthInternal wc user password mCertHash = do
   serverFirstMsg <- case msg1 of
     Authentication (AuthSASLContinue serverData) -> pure serverData
     Authentication AuthOk -> pure ""
-    ErrorResponse err -> throwValiant (AuthError (pgMessage err))
-    other -> throwValiant (AuthError ("Unexpected message during SCRAM: " <> BS8.pack (show other)))
+    ErrorResponse err -> throwPgWire (AuthError (pgMessage err))
+    other -> throwPgWire (AuthError ("Unexpected message during SCRAM: " <> BS8.pack (show other)))
 
   -- Parse server first message: r=<nonce>,s=<salt>,i=<iterations>
   let serverFields = parseScramFields serverFirstMsg
@@ -66,12 +66,12 @@ scramAuthInternal wc user password mCertHash = do
 
   let iterations = read (BS8.unpack iterStr) :: Int
   salt <- case B64.decode saltB64 of
-    Left err -> throwValiant (AuthError ("Bad salt base64: " <> BS8.pack err))
+    Left err -> throwPgWire (AuthError ("Bad salt base64: " <> BS8.pack err))
     Right s -> pure s
 
   -- Verify server nonce starts with our client nonce
   if not (clientNonce `BS.isPrefixOf` serverNonce)
-    then throwValiant (AuthError "Server nonce doesn't start with client nonce")
+    then throwPgWire (AuthError "Server nonce doesn't start with client nonce")
     else pure ()
 
   -- Compute proofs
@@ -99,23 +99,23 @@ scramAuthInternal wc user password mCertHash = do
     Authentication (AuthSASLFinal serverData) -> do
       let sFields = parseScramFields serverData
       case lookup "v" sFields of
-        Nothing -> throwValiant (AuthError "Missing server signature in SASL final")
+        Nothing -> throwPgWire (AuthError "Missing server signature in SASL final")
         Just sigB64 -> case B64.decode sigB64 of
-          Left err -> throwValiant (AuthError ("Bad server sig base64: " <> BS8.pack err))
+          Left err -> throwPgWire (AuthError ("Bad server sig base64: " <> BS8.pack err))
           Right sig
             | not (BA.constEq sig serverSignature) ->
-                throwValiant (AuthError "Server signature mismatch")
+                throwPgWire (AuthError "Server signature mismatch")
             | otherwise -> pure ()
     Authentication AuthOk -> pure ()
-    ErrorResponse err -> throwValiant (AuthError (pgMessage err))
-    other -> throwValiant (AuthError ("Unexpected message during SCRAM final: " <> BS8.pack (show other)))
+    ErrorResponse err -> throwPgWire (AuthError (pgMessage err))
+    other -> throwPgWire (AuthError ("Unexpected message during SCRAM final: " <> BS8.pack (show other)))
 
   -- Wait for AuthOk
   msg3 <- recvBackendMsg wc
   case msg3 of
     Authentication AuthOk -> pure ()
-    ErrorResponse err -> throwValiant (AuthError (pgMessage err))
-    _ -> throwValiant (AuthError "Expected AuthOk after SCRAM")
+    ErrorResponse err -> throwPgWire (AuthError (pgMessage err))
+    _ -> throwPgWire (AuthError "Expected AuthOk after SCRAM")
 
 -- Crypto helpers ----------------------------------------------------------
 
@@ -150,5 +150,5 @@ parseScramFields bs =
 lookupField :: ByteString -> [(ByteString, ByteString)] -> IO ByteString
 lookupField key fields =
   case lookup key fields of
-    Nothing -> throwValiant (AuthError ("Missing SCRAM field: " <> key))
+    Nothing -> throwPgWire (AuthError ("Missing SCRAM field: " <> key))
     Just v -> pure v

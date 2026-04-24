@@ -34,7 +34,7 @@ import Data.ByteString.Lazy qualified as LBS
 import Data.IORef
 import Data.Maybe (fromMaybe)
 import Data.Time (NominalDiffTime)
-import PgWire.Error (ValiantError (..), throwValiant)
+import PgWire.Error (PgWireError (..), throwPgWire)
 import System.Timeout (timeout)
 import PgWire.Protocol.Backend (BackendMsg)
 import PgWire.Protocol.Builders (buildFrontendMsg, buildFrontendMsgsConcat)
@@ -74,7 +74,7 @@ connectTcpTimeout timeoutSecs host port = do
   let hints = NS.defaultHints {NS.addrSocketType = NS.Stream}
   addrs <- NS.getAddrInfo (Just hints) (Just host) (Just (show port))
   case addrs of
-    [] -> throwValiant (ConnectionError "No address found")
+    [] -> throwPgWire (ConnectionError "No address found")
     (addr : _) -> do
       sock <- NS.socket (NS.addrFamily addr) NS.Stream NS.defaultProtocol
       let doConnect = NS.connect sock (NS.addrAddress addr)
@@ -85,7 +85,7 @@ connectTcpTimeout timeoutSecs host port = do
           case result of
             Nothing -> do
               NS.close sock
-              throwValiant (ConnectionError "Connect timed out")
+              throwPgWire (ConnectionError "Connect timed out")
             Just () -> pure ()
         else doConnect
       -- Disable Nagle's algorithm for lower latency on small messages
@@ -177,10 +177,10 @@ upgradeTls wc tlsCfg = do
       mkTlsWireConn ctx (wcBuffer wc)
 
     78 {- N -} ->
-      throwValiant (ConnectionError "Server does not support SSL")
+      throwPgWire (ConnectionError "Server does not support SSL")
 
     other ->
-      throwValiant (ConnectionError ("Unexpected SSL response: " <> BS8.pack (show other)))
+      throwPgWire (ConnectionError ("Unexpected SSL response: " <> BS8.pack (show other)))
 
 -- | Wrap a WireConn as a TLS backend (for the handshake, which needs
 -- raw socket I/O).
@@ -225,7 +225,7 @@ tlsRecvExact ctx bufRef n = do
       then do
         chunk <- TLS.recvData ctx
         if BS.null chunk
-          then throwValiant (ConnectionError "TLS connection closed")
+          then throwPgWire (ConnectionError "TLS connection closed")
           else if BS.length chunk >= n
             then do
               let (!taken, !rest) = BS.splitAt n chunk
@@ -237,7 +237,7 @@ tlsRecvExact ctx bufRef n = do
             !builder0 = B.byteString buf
         chunk <- TLS.recvData ctx
         if BS.null chunk
-          then throwValiant (ConnectionError "TLS connection closed")
+          then throwPgWire (ConnectionError "TLS connection closed")
           else if BS.length chunk >= remaining
             then do
               let (!taken, !rest) = BS.splitAt remaining chunk
@@ -256,7 +256,7 @@ tlsAccumulate ctx bufRef chunk remaining !builder
           !builder' = builder <> B.byteString chunk
       next <- TLS.recvData ctx
       if BS.null next
-        then throwValiant (ConnectionError "TLS connection closed")
+        then throwPgWire (ConnectionError "TLS connection closed")
         else tlsAccumulate ctx bufRef next remaining' builder'
 
 -- | Send a frontend message over the wire.
@@ -305,12 +305,12 @@ recvBackendMsg wc = do
     if payloadLen > 0
       then wcRecv wc (fromIntegral payloadLen)
       else if payloadLen < 0
-        then throwValiant (ProtocolError ("Invalid message length: " <> BS8.pack (show len)))
+        then throwPgWire (ProtocolError ("Invalid message length: " <> BS8.pack (show len)))
         else pure BS.empty
   -- Trace the raw bytes (header + payload)
   traceIfEnabled wc TraceRecv (header <> payload)
   case parseBackendMsg tag payload of
-    Left err -> throwValiant (ProtocolError (BS8.pack err))
+    Left err -> throwPgWire (ProtocolError (BS8.pack err))
     Right msg -> pure msg
   where
     decodeInt32At :: ByteString -> Int -> Int
@@ -353,7 +353,7 @@ recvExact sock bufRef n = do
         -- Buffer empty: read fresh chunk from socket.
         chunk <- NSB.recv sock (max recvChunkSize n)
         if BS.null chunk
-          then throwValiant (ConnectionError "Connection closed by server")
+          then throwPgWire (ConnectionError "Connection closed by server")
           else if BS.length chunk >= n
             then do
               let (!taken, !rest) = BS.splitAt n chunk
@@ -366,7 +366,7 @@ recvExact sock bufRef n = do
             !builder0 = B.byteString buf
         chunk <- NSB.recv sock (max recvChunkSize remaining)
         if BS.null chunk
-          then throwValiant (ConnectionError "Connection closed by server")
+          then throwPgWire (ConnectionError "Connection closed by server")
           else if BS.length chunk >= remaining
             then do
               let (!taken, !rest) = BS.splitAt remaining chunk
@@ -386,5 +386,5 @@ recvExact sock bufRef n = do
               !builder' = builder <> B.byteString chunk
           next <- NSB.recv sock (max recvChunkSize remaining')
           if BS.null next
-            then throwValiant (ConnectionError "Connection closed by server")
+            then throwPgWire (ConnectionError "Connection closed by server")
             else accumulate next remaining' builder'

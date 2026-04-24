@@ -7,7 +7,7 @@ import Hedgehog
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Range qualified as Range
 import PgWire.Connection (simpleQuery)
-import PgWire.Error (ValiantError (..))
+import PgWire.Error (PgWireError (..))
 import PgWire.MockServer (defaultMockConfig, withMockServer)
 import PgWire.Pool (Pool, PoolStats (..), closePool, newPool, poolIsAlive, poolStats, resize, withResource)
 import PgWire.Pool.Config (PoolConfig (..), defaultPoolConfig)

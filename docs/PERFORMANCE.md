@@ -603,7 +603,7 @@ long.
   operations are streaming state machines that can't be multiplexed.
 
 **Reader error recovery.** Query errors (`ErrorResponse`) are per-request,
-not connection-fatal. The reader catches `ValiantError`, drains to
+not connection-fatal. The reader catches `PgWireError`, drains to
 `ReadyForQuery`, delivers the error to the specific caller's MVar, and
 continues serving other requests. Without this fix, any query error
 would kill the reader thread and the entire connection.

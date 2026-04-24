@@ -1,10 +1,10 @@
--- | Error types for valiant runtime exceptions.
+-- | Error types for pg-wire runtime exceptions.
 --
--- All errors are thrown as 'ValiantError' via 'throwIO' and can be caught
+-- All errors are thrown as 'PgWireError' via 'throwIO' and can be caught
 -- with the standard @Control.Exception@ machinery.
 module PgWire.Error
-  ( ValiantError (..)
-  , throwValiant
+  ( PgWireError (..)
+  , throwPgWire
   ) where
 
 import Control.Exception (Exception, throwIO)
@@ -13,8 +13,8 @@ import GHC.Generics (Generic)
 import NoThunks.Class (NoThunks)
 import PgWire.Protocol.Backend (PgError)
 
--- | All runtime errors thrown by valiant.
-data ValiantError
+-- | All runtime errors thrown by pg-wire.
+data PgWireError
   = ConnectionError ByteString
   -- ^ Failed to establish a TCP\/TLS connection to the server.
   | AuthError ByteString
@@ -36,9 +36,9 @@ data ValiantError
   -- ^ The connection's reader thread has died (network failure, server crash).
   deriving stock (Show, Eq, Generic)
 
-instance NoThunks ValiantError
-instance Exception ValiantError
+instance NoThunks PgWireError
+instance Exception PgWireError
 
--- | Throw an 'ValiantError' as an exception.
-throwValiant :: ValiantError -> IO a
-throwValiant = throwIO
+-- | Throw a 'PgWireError' as an exception.
+throwPgWire :: PgWireError -> IO a
+throwPgWire = throwIO

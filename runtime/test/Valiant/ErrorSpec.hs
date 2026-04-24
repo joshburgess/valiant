@@ -4,7 +4,7 @@ import Control.Exception (try)
 import Data.ByteString.Char8 qualified as BS8
 import Valiant.Error
 import PgWire.Connection (Connection, close, connectString, simpleQuery)
-import PgWire.Error (ValiantError (..))
+import PgWire.Error (PgWireError (..))
 import PgWire.MockServer
 import Test.Hspec
 
@@ -17,7 +17,7 @@ withMockConn cfg action =
     close conn
     pure result
 
-triggerError :: Connection -> IO ValiantError
+triggerError :: Connection -> IO PgWireError
 triggerError conn = do
   result <- try (simpleQuery conn "TRIGGER ERROR")
   case result of

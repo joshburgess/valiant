@@ -84,7 +84,7 @@ data ResponseCollector
 ```haskell
 data AsyncWireConn = AsyncWireConn
   { awcWire          :: !WireConn
-  , awcSendQueue     :: !(TBQueue (Request, MVar (Either ValiantError Response)))
+  , awcSendQueue     :: !(TBQueue (Request, MVar (Either PgWireError Response)))
   , awcPending       :: !(TQueue PendingResponse)
   , awcAlive         :: !(TVar Bool)
   , awcTxStatus      :: !(IORef TxStatus)
@@ -125,7 +125,7 @@ data AsyncWireConn = AsyncWireConn
 ### Error recovery
 
 Query errors (`ErrorResponse`) are per-request, not connection-fatal.
-The reader catches `ValiantError`, drains to `ReadyForQuery`, delivers the
+The reader catches `PgWireError`, drains to `ReadyForQuery`, delivers the
 error to the specific caller's MVar, and continues serving other requests.
 
 Fatal errors (socket closed, parse failure) kill both threads. All

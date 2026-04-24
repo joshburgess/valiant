@@ -33,7 +33,7 @@ import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
 import Data.Word (Word64)
 import PgWire.Connection (Connection, simpleQuery)
-import PgWire.Error (ValiantError (..))
+import PgWire.Error (PgWireError (..))
 import PgWire.Protocol.Backend (PgError (..))
 import PgWire.Pool (Pool, withResource)
 import System.IO.Unsafe (unsafePerformIO)
@@ -234,7 +234,7 @@ withTransactionRetry maxRetries =
 -- withTransactionRetryIf shouldRetry 3 pool $ \\tx -> ...
 -- @
 withTransactionRetryIf
-  :: (ValiantError -> Bool)
+  :: (PgWireError -> Bool)
   -> Int
   -> Pool
   -> (Transaction -> IO a)

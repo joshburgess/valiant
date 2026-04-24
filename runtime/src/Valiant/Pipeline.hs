@@ -32,7 +32,7 @@ import Data.Vector (Vector)
 import Data.Vector qualified as V
 import PgWire.Async (Request (..), Response (..), ResponseCollector (..), submitRequest)
 import PgWire.Connection (Connection (..))
-import PgWire.Error (ValiantError (..), throwValiant)
+import PgWire.Error (PgWireError (..), throwPgWire)
 import PgWire.Protocol.Frontend
 import Valiant.Execute (ensurePrepared)
 import Valiant.Statement (Statement (..))
@@ -63,7 +63,7 @@ pipeFetchOne stmt params = QueryP stmt params $ \rows ->
   case rows of
     [] -> pure Nothing
     (row : _) -> case stmtDecode stmt row of
-      Left err -> throwValiant (DecodeError (BS8.pack err))
+      Left err -> throwPgWire (DecodeError (BS8.pack err))
       Right val -> pure (Just val)
 {-# INLINE pipeFetchOne #-}
 
@@ -71,7 +71,7 @@ pipeFetchOne stmt params = QueryP stmt params $ \rows ->
 pipeFetchAll :: Statement p r -> p -> Pipeline [r]
 pipeFetchAll stmt params = QueryP stmt params $ \rows ->
   mapM (\row -> case stmtDecode stmt row of
-    Left err -> throwValiant (DecodeError (BS8.pack err))
+    Left err -> throwPgWire (DecodeError (BS8.pack err))
     Right val -> pure val) rows
 {-# INLINE pipeFetchAll #-}
 
@@ -80,10 +80,10 @@ pipeFetchScalar :: Statement p r -> p -> Pipeline r
 pipeFetchScalar stmt params = QueryP stmt params $ \rows ->
   case rows of
     [row] -> case stmtDecode stmt row of
-      Left err -> throwValiant (DecodeError (BS8.pack err))
+      Left err -> throwPgWire (DecodeError (BS8.pack err))
       Right val -> pure val
-    [] -> throwValiant (DecodeError "pipeFetchScalar: no rows")
-    _ -> throwValiant (DecodeError "pipeFetchScalar: more than one row")
+    [] -> throwPgWire (DecodeError "pipeFetchScalar: no rows")
+    _ -> throwPgWire (DecodeError "pipeFetchScalar: more than one row")
 {-# INLINE pipeFetchScalar #-}
 
 -- | Pipeline a command (INSERT\/UPDATE\/DELETE).
@@ -126,7 +126,7 @@ runPipeline conn pipeline = do
 
       case resp of
         RespBatchRows results -> evalPipeline pipeline results
-        _ -> throwValiant (ProtocolError "runPipeline: unexpected response type")
+        _ -> throwPgWire (ProtocolError "runPipeline: unexpected response type")
 
 -- Internal ----------------------------------------------------------------
 
@@ -150,7 +150,7 @@ eval ref (QueryP _ _ decode) = do
     (rows : rest) -> do
       writeIORef ref rest
       decode rows
-    [] -> throwValiant (DecodeError "pipeline: result underflow")
+    [] -> throwPgWire (DecodeError "pipeline: result underflow")
 eval ref (ApP pf px) = do
   f <- eval ref pf
   x <- eval ref px

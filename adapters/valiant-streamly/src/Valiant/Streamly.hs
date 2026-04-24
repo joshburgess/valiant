@@ -29,7 +29,7 @@ import Data.Vector (Vector)
 import Data.Vector qualified as V
 import PgWire.Async (submitExclusive)
 import PgWire.Connection (Connection (..))
-import PgWire.Error (ValiantError (..), throwValiant)
+import PgWire.Error (PgWireError (..), throwPgWire)
 import PgWire.Protocol.Backend
 import PgWire.Protocol.Frontend
 import PgWire.Protocol.Oid qualified as Oid
@@ -115,7 +115,7 @@ fetchAllCursor wc txRef cursorName batchSize decode = go []
         then pure (reverse acc)
         else do
           decoded <- mapM (\row -> case decode row of
-            Left err -> throwValiant (DecodeError (BS8.pack err))
+            Left err -> throwPgWire (DecodeError (BS8.pack err))
             Right !val -> pure val) rawRows
           go (reverse decoded ++ acc)
 
@@ -130,16 +130,16 @@ collectAndDecode wc txRef decode = go []
       case msg of
         BindComplete -> go acc
         DataRow vals -> case decode vals of
-          Left err -> throwValiant (DecodeError (BS8.pack err))
+          Left err -> throwPgWire (DecodeError (BS8.pack err))
           Right !val -> go (val : acc)
         CommandComplete _ -> go acc
         EmptyQueryResponse -> go acc
         ReadyForQuery status -> do
           writeIORef txRef status
           pure (reverse acc)
-        ErrorResponse err -> throwValiant (QueryError err)
+        ErrorResponse err -> throwPgWire (QueryError err)
         NoticeResponse _ -> go acc
-        other -> throwValiant (ProtocolError ("Unexpected in fold stream: " <> BS8.pack (show other)))
+        other -> throwPgWire (ProtocolError ("Unexpected in fold stream: " <> BS8.pack (show other)))
 
 waitDeclareComplete :: WireConn -> IORef TxStatus -> IO ()
 waitDeclareComplete wc txRef = go
@@ -151,9 +151,9 @@ waitDeclareComplete wc txRef = go
         BindComplete -> go
         CommandComplete _ -> go
         ReadyForQuery status -> writeIORef txRef status
-        ErrorResponse err -> throwValiant (QueryError err)
+        ErrorResponse err -> throwPgWire (QueryError err)
         NoticeResponse _ -> go
-        other -> throwValiant (ProtocolError ("Unexpected in DECLARE: " <> BS8.pack (show other)))
+        other -> throwPgWire (ProtocolError ("Unexpected in DECLARE: " <> BS8.pack (show other)))
 
 collectFetchResults :: WireConn -> IORef TxStatus -> IO [Vector (Maybe ByteString)]
 collectFetchResults wc txRef = go []
@@ -167,9 +167,9 @@ collectFetchResults wc txRef = go []
         ReadyForQuery status -> do
           writeIORef txRef status
           pure (reverse acc)
-        ErrorResponse err -> throwValiant (QueryError err)
+        ErrorResponse err -> throwPgWire (QueryError err)
         NoticeResponse _ -> go acc
-        other -> throwValiant (ProtocolError ("Unexpected in cursor fetch: " <> BS8.pack (show other)))
+        other -> throwPgWire (ProtocolError ("Unexpected in cursor fetch: " <> BS8.pack (show other)))
 
 collectSimpleDiscard :: WireConn -> IORef TxStatus -> IO ()
 collectSimpleDiscard wc txRef = go
@@ -178,7 +178,7 @@ collectSimpleDiscard wc txRef = go
       msg <- recvBackendMsg wc
       case msg of
         ReadyForQuery status -> writeIORef txRef status
-        ErrorResponse err -> throwValiant (QueryError err)
+        ErrorResponse err -> throwPgWire (QueryError err)
         _ -> go
 
 {-# NOINLINE cursorCounter #-}

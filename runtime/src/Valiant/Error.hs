@@ -47,15 +47,15 @@ module Valiant.Error
 import Control.Exception (catch, throwIO)
 import Data.Maybe (fromMaybe)
 import Data.ByteString (ByteString)
-import PgWire.Error (ValiantError (..))
+import PgWire.Error (PgWireError (..))
 import PgWire.Protocol.Backend (PgError (..))
 
--- | Extract the SQLSTATE code from an 'ValiantError', if it wraps a
+-- | Extract the SQLSTATE code from a 'PgWireError', if it wraps a
 -- server-side 'QueryError'.
 --
 -- Returns 'Nothing' for non-query errors (connection errors, decode
 -- errors, pool errors, etc.).
-sqlState :: ValiantError -> Maybe ByteString
+sqlState :: PgWireError -> Maybe ByteString
 sqlState (QueryError err) = Just (pgCode err)
 sqlState _ = Nothing
 
@@ -65,7 +65,7 @@ sqlState _ = Nothing
 -- mDetail <- pgErrorOf err pgDetail
 -- mTable  <- pgErrorOf err pgTable
 -- @
-pgErrorOf :: ValiantError -> (PgError -> a) -> Maybe a
+pgErrorOf :: PgWireError -> (PgError -> a) -> Maybe a
 pgErrorOf (QueryError err) f = Just (f err)
 pgErrorOf _ _ = Nothing
 
@@ -91,12 +91,12 @@ data ConstraintViolation
   -- ^ @23P01@ — an exclusion constraint was violated.
   deriving stock (Show, Eq, Ord)
 
--- | Extract a 'ConstraintViolation' from an 'ValiantError', if the error
+-- | Extract a 'ConstraintViolation' from a 'PgWireError', if the error
 -- is a constraint violation (SQLSTATE class 23).
 --
 -- Returns 'Nothing' for non-query errors or query errors that are not
 -- constraint violations.
-constraintViolation :: ValiantError -> Maybe ConstraintViolation
+constraintViolation :: PgWireError -> Maybe ConstraintViolation
 constraintViolation (QueryError err) =
   let code = pgCode err
       name = fromMaybe "" (pgConstraint err)
@@ -120,7 +120,7 @@ constraintViolation _ = Nothing
 --   (execute conn insertStmt params)
 -- @
 catchConstraintViolation
-  :: (ValiantError -> ConstraintViolation -> IO a)
+  :: (PgWireError -> ConstraintViolation -> IO a)
   -> IO a
   -> IO a
 catchConstraintViolation handler action =
@@ -134,58 +134,58 @@ catchConstraintViolation handler action =
 ------------------------------------------------------------------------
 
 -- | @23505@ — unique constraint or unique index violation.
-isUniqueViolation :: ValiantError -> Bool
+isUniqueViolation :: PgWireError -> Bool
 isUniqueViolation = hasState "23505"
 
 -- | @23503@ — foreign key constraint violation.
-isForeignKeyViolation :: ValiantError -> Bool
+isForeignKeyViolation :: PgWireError -> Bool
 isForeignKeyViolation = hasState "23503"
 
 -- | @23502@ — NOT NULL constraint violation.
-isNotNullViolation :: ValiantError -> Bool
+isNotNullViolation :: PgWireError -> Bool
 isNotNullViolation = hasState "23502"
 
 -- | @23514@ — CHECK constraint violation.
-isCheckViolation :: ValiantError -> Bool
+isCheckViolation :: PgWireError -> Bool
 isCheckViolation = hasState "23514"
 
 -- | @23P01@ — exclusion constraint violation.
-isExclusionViolation :: ValiantError -> Bool
+isExclusionViolation :: PgWireError -> Bool
 isExclusionViolation = hasState "23P01"
 
 -- | @40001@ — serialization failure. Retry the transaction.
-isSerializationError :: ValiantError -> Bool
+isSerializationError :: PgWireError -> Bool
 isSerializationError = hasState "40001"
 
 -- | @40P01@ — deadlock detected. Retry the transaction.
-isDeadlockError :: ValiantError -> Bool
+isDeadlockError :: PgWireError -> Bool
 isDeadlockError = hasState "40P01"
 
 -- | @25P01@ — no active transaction (e.g., COMMIT outside a transaction).
-isNoActiveTransactionError :: ValiantError -> Bool
+isNoActiveTransactionError :: PgWireError -> Bool
 isNoActiveTransactionError = hasState "25P01"
 
 -- | @25P02@ — current transaction is aborted, commands ignored until
 -- end of transaction block.
-isFailedTransactionError :: ValiantError -> Bool
+isFailedTransactionError :: PgWireError -> Bool
 isFailedTransactionError = hasState "25P02"
 
 -- | @22P02@ — invalid input syntax for type (e.g., passing @\"abc\"@ for an integer).
-isInvalidTextRepresentation :: ValiantError -> Bool
+isInvalidTextRepresentation :: PgWireError -> Bool
 isInvalidTextRepresentation = hasState "22P02"
 
 -- | @42P01@ — undefined table.
-isUndefinedTable :: ValiantError -> Bool
+isUndefinedTable :: PgWireError -> Bool
 isUndefinedTable = hasState "42P01"
 
 -- | @42703@ — undefined column.
-isUndefinedColumn :: ValiantError -> Bool
+isUndefinedColumn :: PgWireError -> Bool
 isUndefinedColumn = hasState "42703"
 
 -- | @42601@ — syntax error in SQL.
-isSyntaxError :: ValiantError -> Bool
+isSyntaxError :: PgWireError -> Bool
 isSyntaxError = hasState "42601"
 
 -- Internal: check if an error has a specific SQLSTATE code.
-hasState :: ByteString -> ValiantError -> Bool
+hasState :: ByteString -> PgWireError -> Bool
 hasState expected err = sqlState err == Just expected

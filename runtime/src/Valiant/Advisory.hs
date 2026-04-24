@@ -36,7 +36,7 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.Int (Int64)
 import PgWire.Connection (Connection, simpleQuery, transactionStatus)
-import PgWire.Error (ValiantError (..), throwValiant)
+import PgWire.Error (PgWireError (..), throwPgWire)
 import PgWire.Protocol.Backend (TxStatus (..))
 
 -- | Acquire a session-scoped advisory lock, run an action, then release.
@@ -136,4 +136,4 @@ requireTransaction conn label = do
   status <- transactionStatus conn
   case status of
     TxInTransaction -> pure ()
-    _ -> throwValiant (ProtocolError (label <> ": must be called within a transaction"))
+    _ -> throwPgWire (ProtocolError (label <> ": must be called within a transaction"))

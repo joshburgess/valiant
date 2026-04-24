@@ -32,7 +32,7 @@ import Data.Word (Word32, Word64)
 import PgWire.Async (Request (..), Response (..), ResponseCollector (..), submitRequest)
 import PgWire.Binary.Types (PgEncode (..))
 import PgWire.Connection (Connection (..))
-import PgWire.Error (ValiantError (..), throwValiant)
+import PgWire.Error (PgWireError (..), throwPgWire)
 import PgWire.Protocol.Frontend
 import PgWire.Protocol.Oid (Oid (..))
 import Valiant.Binary.Array (pgEncodeArray)
@@ -79,9 +79,9 @@ fetchByIds conn sql elemOid ids = do
 
   case resp of
     RespRows rows -> mapM (\row -> case fromRow row of
-      Left err -> throwValiant (DecodeError (BS8.pack err))
+      Left err -> throwPgWire (DecodeError (BS8.pack err))
       Right !val -> pure val) rows
-    _ -> throwValiant (ProtocolError "fetchByIds: unexpected response type")
+    _ -> throwPgWire (ProtocolError "fetchByIds: unexpected response type")
 
 -- Map element OID to array OID
 arrayOidFor :: Oid -> Oid
@@ -124,7 +124,7 @@ ensurePreparedRaw conn sql oids = do
           tick <- nextTick conn
           modifyIORef' (connStmtCache conn) (PSQ.insert sql tick name)
           pure name
-        _ -> throwValiant (ProtocolError "ensurePreparedRaw: unexpected response type")
+        _ -> throwPgWire (ProtocolError "ensurePreparedRaw: unexpected response type")
 
 -- | Evict the least recently used statement if the cache is full.
 evictIfNeeded :: Connection -> PSQ.HashPSQ ByteString Word64 ByteString -> IO ()

@@ -57,7 +57,7 @@ import Data.Word (Word32, Word64)
 import PgWire.Async (Request (..), Response (..), ResponseCollector (..), submitRequest, submitExclusive)
 import PgWire.Connection (Connection (..))
 import PgWire.Protocol.Oid qualified as Oid
-import PgWire.Error (ValiantError (..), throwValiant)
+import PgWire.Error (PgWireError (..), throwPgWire)
 import PgWire.Protocol.Backend
 import PgWire.Protocol.Frontend
 import PgWire.Wire (WireConn, recvBackendMsg, sendFrontendMsg, sendFrontendMsgs)
@@ -91,7 +91,7 @@ fetchOne conn stmt params = do
   case mRow of
     Nothing -> pure Nothing
     Just row -> case stmtDecode stmt row of
-      Left err -> throwValiant (DecodeError (BS8.pack err))
+      Left err -> throwPgWire (DecodeError (BS8.pack err))
       Right val -> pure (Just val)
 
 -- | Fetch all result rows as a list.
@@ -115,9 +115,9 @@ fetchScalar :: Connection -> Statement p r -> p -> IO r
 fetchScalar conn stmt params = do
   mRow <- fetchFirstRowRaw conn stmt params
   case mRow of
-    Nothing -> throwValiant (DecodeError "fetchScalar: query returned no rows")
+    Nothing -> throwPgWire (DecodeError "fetchScalar: query returned no rows")
     Just row -> case stmtDecode stmt row of
-      Left err -> throwValiant (DecodeError (BS8.pack err))
+      Left err -> throwPgWire (DecodeError (BS8.pack err))
       Right val -> pure val
 
 -- | Like 'fetchOne' but throws 'DecodeError' if no rows are returned.
@@ -131,7 +131,7 @@ fetchOneOrThrow :: Connection -> Statement p r -> p -> IO r
 fetchOneOrThrow conn stmt params = do
   mResult <- fetchOne conn stmt params
   case mResult of
-    Nothing -> throwValiant (DecodeError "fetchOneOrThrow: query returned no rows")
+    Nothing -> throwPgWire (DecodeError "fetchOneOrThrow: query returned no rows")
     Just val -> pure val
 
 -- | Check whether a query returns any rows. Useful for @EXISTS@-style queries.
@@ -170,9 +170,9 @@ fetchAllVec conn stmt params = do
     RespRowsVec rawVec -> do
       when needsParse $ cacheStmt conn (stmtSQL stmt) name
       V.mapM (\row -> case stmtDecode stmt row of
-        Left err -> throwValiant (DecodeError (BS8.pack err))
+        Left err -> throwPgWire (DecodeError (BS8.pack err))
         Right !val -> pure val) rawVec
-    _ -> throwValiant (ProtocolError "fetchAllVec: unexpected response type")
+    _ -> throwPgWire (ProtocolError "fetchAllVec: unexpected response type")
 
 -- | Like 'fetchAll' but applies a transformation to each decoded row.
 -- Useful for mapping database rows to domain types without an intermediate list.
@@ -230,16 +230,16 @@ forEach conn stmt params action = do
             BindComplete -> go
             ParseComplete -> go
             DataRow vals -> case stmtDecode stmt vals of
-              Left err -> throwValiant (DecodeError (BS8.pack err))
+              Left err -> throwPgWire (DecodeError (BS8.pack err))
               Right !val -> do
                 action val
                 go
             CommandComplete _ -> go
             EmptyQueryResponse -> go
             ReadyForQuery status -> writeIORef txRef status
-            ErrorResponse err -> throwValiant (QueryError err)
+            ErrorResponse err -> throwPgWire (QueryError err)
             NoticeResponse _ -> go
-            other -> throwValiant (ProtocolError ("Unexpected in forEach: " <> BS8.pack (show other)))
+            other -> throwPgWire (ProtocolError ("Unexpected in forEach: " <> BS8.pack (show other)))
     go
 
 ------------------------------------------------------------------------
@@ -293,7 +293,7 @@ execute conn stmt params = do
     RespCommand tag -> do
       when needsParse $ cacheStmt conn (stmtSQL stmt) name
       pure (tagRows tag)
-    _ -> throwValiant (ProtocolError "execute: unexpected response type")
+    _ -> throwPgWire (ProtocolError "execute: unexpected response type")
 
 -- | Execute a command with a RETURNING clause. Returns the number of rows
 -- affected and the decoded result rows.
@@ -322,7 +322,7 @@ executeReturning conn stmt params = do
       when needsParse $ cacheStmt conn (stmtSQL stmt) name
       decoded <- decodeRows (stmtDecode stmt) rawRows
       pure (tagRows tag, decoded)
-    _ -> throwValiant (ProtocolError "executeReturning: unexpected response type")
+    _ -> throwPgWire (ProtocolError "executeReturning: unexpected response type")
 
 -- | Execute a statement once for each parameter set. Returns the total
 -- number of rows affected across all executions. This is an alias for
@@ -361,7 +361,7 @@ executeReturningMany conn stmt paramsList = do
       allRows <- concat <$> mapM (decodeRows (stmtDecode stmt)) results
       let total = fromIntegral (length allRows)
       pure (total, allRows)
-    _ -> throwValiant (ProtocolError "executeReturningMany: unexpected response type")
+    _ -> throwPgWire (ProtocolError "executeReturningMany: unexpected response type")
 
 ------------------------------------------------------------------------
 -- Raw (unchecked) queries
@@ -406,7 +406,7 @@ rawFetchAll conn sql oids params = do
     RespRows rows -> do
       when needsParse $ cacheStmt conn sql name
       pure rows
-    _ -> throwValiant (ProtocolError "rawFetchAll: unexpected response type")
+    _ -> throwPgWire (ProtocolError "rawFetchAll: unexpected response type")
 
 -- | Execute a raw SQL query and return the first row, or 'Nothing' if the
 -- query produces no results. Like 'rawFetchAll' but discards all rows after
@@ -454,7 +454,7 @@ rawExecute conn sql oids params = do
     RespCommand tag -> do
       when needsParse $ cacheStmt conn sql name
       pure (tagRows tag)
-    _ -> throwValiant (ProtocolError "rawExecute: unexpected response type")
+    _ -> throwPgWire (ProtocolError "rawExecute: unexpected response type")
 
 -- | Look up or allocate a statement name for raw SQL (same cache as typed).
 lookupOrAllocRaw :: Connection -> ByteString -> IO (ByteString, Bool)
@@ -505,7 +505,7 @@ executeBatch conn stmt paramsList = do
         RespBatchCommand total -> do
           when needsParse $ cacheStmt conn (stmtSQL stmt) name
           pure total
-        _ -> throwValiant (ProtocolError "executeBatch: unexpected response type")
+        _ -> throwPgWire (ProtocolError "executeBatch: unexpected response type")
 
     -- Large batch: stream in chunks via exclusive mode
     (_, Just _) -> submitExclusive (connAsync conn) $ \wc txRef -> do
@@ -545,9 +545,9 @@ fetchBatchOne conn stmt paramsList = do
       mapM (\rows -> case rows of
         [] -> pure Nothing
         (row : _) -> case stmtDecode stmt row of
-          Left err -> throwValiant (DecodeError (BS8.pack err))
+          Left err -> throwPgWire (DecodeError (BS8.pack err))
           Right val -> pure (Just val)) results
-    _ -> throwValiant (ProtocolError "fetchBatchOne: unexpected response type")
+    _ -> throwPgWire (ProtocolError "fetchBatchOne: unexpected response type")
 
 -- | Fetch all rows for each parameter set, pipelined into a single round
 -- trip. Returns a list of result lists parallel to the input list.
@@ -573,7 +573,7 @@ fetchBatchAll conn stmt paramsList = do
     RespBatchRows results -> do
       when needsParse $ cacheStmt conn (stmtSQL stmt) name
       mapM (decodeRows (stmtDecode stmt)) results
-    _ -> throwValiant (ProtocolError "fetchBatchAll: unexpected response type")
+    _ -> throwPgWire (ProtocolError "fetchBatchAll: unexpected response type")
 
 ------------------------------------------------------------------------
 -- Internal
@@ -597,7 +597,7 @@ fetchFirstRowRaw conn stmt params = do
     RespFirstRow mRow -> do
       when needsParse $ cacheStmt conn (stmtSQL stmt) name
       pure mRow
-    _ -> throwValiant (ProtocolError "fetchFirstRowRaw: unexpected response type")
+    _ -> throwPgWire (ProtocolError "fetchFirstRowRaw: unexpected response type")
 
 -- | Fetch raw rows, coalescing Parse+Bind+Execute for cache misses.
 fetchRowsRaw :: Connection -> Statement p r -> p -> IO [Vector (Maybe ByteString)]
@@ -617,7 +617,7 @@ fetchRowsRaw conn stmt params = do
     RespRows rows -> do
       when needsParse $ cacheStmt conn (stmtSQL stmt) name
       pure rows
-    _ -> throwValiant (ProtocolError "fetchRows: unexpected response type")
+    _ -> throwPgWire (ProtocolError "fetchRows: unexpected response type")
 
 -- | Check the statement cache. On miss, allocate a name and evict if needed.
 -- When prepared statements are disabled (PgBouncer compatibility), always
@@ -653,7 +653,7 @@ cacheStmt conn sql name
 -- | Decode a list of raw row vectors into typed values.
 decodeRows :: (Vector (Maybe ByteString) -> Either String r) -> [Vector (Maybe ByteString)] -> IO [r]
 decodeRows decode = mapM $ \row -> case decode row of
-  Left err -> throwValiant (DecodeError (BS8.pack err))
+  Left err -> throwPgWire (DecodeError (BS8.pack err))
   Right !val -> pure val
 
 -- | Batch size threshold for switching to streaming mode.
@@ -684,7 +684,7 @@ ensurePrepared conn stmt = do
           tick <- nextTick conn
           modifyIORef' (connStmtCache conn) (PSQ.insert sql tick name)
           pure name
-        _ -> throwValiant (ProtocolError "ensurePrepared: unexpected response type")
+        _ -> throwPgWire (ProtocolError "ensurePrepared: unexpected response type")
 
 -- | Bump the monotonic tick counter and return the new value.
 nextTick :: Connection -> IO Word64
@@ -728,8 +728,8 @@ waitParseWire wc = do
   case msg of
     ParseComplete -> pure ()
     NoticeResponse _ -> waitParseWire wc
-    ErrorResponse err -> throwValiant (QueryError err)
-    other -> throwValiant (ProtocolError ("Expected ParseComplete, got: " <> BS8.pack (show other)))
+    ErrorResponse err -> throwPgWire (QueryError err)
+    other -> throwPgWire (ProtocolError ("Expected ParseComplete, got: " <> BS8.pack (show other)))
 
 -- | Collect batch command results on the wire (used in streaming mode).
 collectBatchCmdWire :: WireConn -> IORef TxStatus -> Int -> IO Int64
@@ -745,9 +745,9 @@ collectBatchCmdWire wc txRef = go 0
         CommandComplete tag -> go (total + tagRows tag) (n - 1)
         ErrorResponse err -> do
           waitReadyWire wc txRef
-          throwValiant (QueryError err)
+          throwPgWire (QueryError err)
         NoticeResponse _ -> go total n
-        other -> throwValiant (ProtocolError ("Unexpected in batch: " <> BS8.pack (show other)))
+        other -> throwPgWire (ProtocolError ("Unexpected in batch: " <> BS8.pack (show other)))
 
 -- | Wait for ReadyForQuery on the wire.
 waitReadyWire :: WireConn -> IORef TxStatus -> IO ()

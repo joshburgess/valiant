@@ -34,7 +34,7 @@ import Data.Vector qualified as V
 import Data.Word (Word64)
 import PgWire.Async (submitExclusive)
 import PgWire.Connection (Connection (..))
-import PgWire.Error (ValiantError (..), throwValiant)
+import PgWire.Error (PgWireError (..), throwPgWire)
 import PgWire.Protocol.Backend
 import PgWire.Protocol.Frontend
 import PgWire.Protocol.Oid qualified as Oid
@@ -130,9 +130,9 @@ waitDeclareComplete wc txRef = go
         BindComplete -> go
         CommandComplete _ -> go
         ReadyForQuery status -> writeIORef txRef status
-        ErrorResponse err -> throwValiant (QueryError err)
+        ErrorResponse err -> throwPgWire (QueryError err)
         NoticeResponse _ -> go
-        other -> throwValiant (ProtocolError ("Unexpected in DECLARE cursor: " <> BS8.pack (show other)))
+        other -> throwPgWire (ProtocolError ("Unexpected in DECLARE cursor: " <> BS8.pack (show other)))
 
 collectFetchResults :: WireConn -> IORef TxStatus -> IO [Vector (Maybe ByteString)]
 collectFetchResults wc txRef = go []
@@ -147,9 +147,9 @@ collectFetchResults wc txRef = go []
         ReadyForQuery status -> do
           writeIORef txRef status
           pure (reverse acc)
-        ErrorResponse err -> throwValiant (QueryError err)
+        ErrorResponse err -> throwPgWire (QueryError err)
         NoticeResponse _ -> go acc
-        other -> throwValiant (ProtocolError ("Unexpected in cursor fetch: " <> BS8.pack (show other)))
+        other -> throwPgWire (ProtocolError ("Unexpected in cursor fetch: " <> BS8.pack (show other)))
 
 -- | Discard all results from a simple query.
 collectSimpleDiscard :: WireConn -> IORef TxStatus -> IO ()
@@ -159,7 +159,7 @@ collectSimpleDiscard wc txRef = go
       msg <- recvBackendMsg wc
       case msg of
         ReadyForQuery status -> writeIORef txRef status
-        ErrorResponse err -> throwValiant (QueryError err)
+        ErrorResponse err -> throwPgWire (QueryError err)
         _ -> go
 
 -- | Global counter for unique cursor names.

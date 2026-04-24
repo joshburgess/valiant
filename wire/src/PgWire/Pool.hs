@@ -46,7 +46,7 @@ import Data.Time (NominalDiffTime, UTCTime, addUTCTime, diffUTCTime, getCurrentT
 import Data.HashPSQ qualified as PSQ
 import PgWire.Async (AsyncWireConn (..))
 import PgWire.Connection (Connection (..), close, connectString, simpleQuery)
-import PgWire.Error (ValiantError (..), throwValiant)
+import PgWire.Error (PgWireError (..), throwPgWire)
 import PgWire.Pool.Config (PoolConfig (..), QueueMode (..), RecyclingMethod (..))
 import PgWire.Pool.Observation (PoolEvent (ConnectionAcquired, ConnectionCreated, ConnectionDestroyed, ConnectionRecycled, ConnectionReleased, HealthCheckFailed, AcquireTimeout, ReaperSwept, WarmerCreated, PoolResized, PoolShutdown))
 import PgWire.TypeCache (TypeCache, newTypeCache)
@@ -61,7 +61,7 @@ data Pool = Pool
   { pConfig :: PoolConfig
   , pIdle :: TVar (Seq PoolEntry)
   , pActive :: TVar Int
-  , pWaiters :: TVar (Seq (TMVar (Either ValiantError Connection)))
+  , pWaiters :: TVar (Seq (TMVar (Either PgWireError Connection)))
   , pClosed :: TVar Bool
   , pReaper :: IORef (Async ())
   , pWarmer :: IORef (Maybe (Async ()))
@@ -391,7 +391,7 @@ setPreReleaseHook pool = writeIORef (pOnRelease pool)
 data AcquireAction
   = GotIdle !PoolEntry
   | CreateNew
-  | MustWait !(TMVar (Either ValiantError Connection))
+  | MustWait !(TMVar (Either PgWireError Connection))
   | PoolIsClosed
 
 -- | Atomically decide what to do: take idle, create new, or enqueue waiter.
@@ -436,7 +436,7 @@ acquireWithTimeout :: Pool -> NominalDiffTime -> IO Connection
 acquireWithTimeout pool timeout = do
   act <- atomically (acquireAction pool)
   case act of
-    PoolIsClosed -> throwValiant PoolClosed
+    PoolIsClosed -> throwPgWire PoolClosed
     GotIdle entry -> tryRecycle pool entry
     CreateNew -> createConnection pool
     MustWait waiter -> waitForConnectionWith pool waiter timeout
@@ -536,7 +536,7 @@ jitteredDeadline cfg now = do
     else pure 0
   pure (addUTCTime (poolMaxLife cfg + offset) now)
 
-waitForConnectionWith :: Pool -> TMVar (Either ValiantError Connection) -> NominalDiffTime -> IO Connection
+waitForConnectionWith :: Pool -> TMVar (Either PgWireError Connection) -> NominalDiffTime -> IO Connection
 waitForConnectionWith pool waiter timeout = do
   let timeoutMicros = round (timeout * 1000000) :: Int
   result <- race
@@ -547,8 +547,8 @@ waitForConnectionWith pool waiter timeout = do
       atomically $ modifyTVar' (pTotalTimeouts pool) (+ 1)
       logPool pool "warn" "acquire timeout"
       observe pool AcquireTimeout
-      throwValiant PoolTimeout
-    Right (Left err) -> throwValiant err
+      throwPgWire PoolTimeout
+    Right (Left err) -> throwPgWire err
     Right (Right conn) -> do
       runHook (pOnAcquire pool) conn
       pure conn
@@ -592,7 +592,7 @@ deliverToWaiter pool conn = atomically $ do
           deliverLoop pool rest conn
 
 -- | STM loop to deliver to next available waiter.
-deliverLoop :: Pool -> Seq (TMVar (Either ValiantError Connection)) -> Connection -> STM Bool
+deliverLoop :: Pool -> Seq (TMVar (Either PgWireError Connection)) -> Connection -> STM Bool
 deliverLoop _ Empty _ = pure False
 deliverLoop pool (w :<| rest) conn = do
   delivered <- tryPutTMVar w (Right conn)

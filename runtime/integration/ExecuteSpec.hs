@@ -4,7 +4,7 @@ import Control.Exception (try)
 import Data.Int (Int32, Int64)
 import Data.Text (Text)
 import Valiant
-import PgWire.Error (ValiantError (..))
+import PgWire.Error (PgWireError (..))
 import TestSupport
 import Test.Hspec
 

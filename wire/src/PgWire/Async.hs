@@ -44,7 +44,7 @@ import Data.Map.Strict qualified as Map
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 import Data.Vector.Mutable qualified as VM
-import PgWire.Error (ValiantError (..), throwValiant)
+import PgWire.Error (PgWireError (..), throwPgWire)
 import PgWire.Protocol.Backend
 import PgWire.Protocol.Frontend (FrontendMsg (..))
 import PgWire.Wire (WireConn, recvBackendMsg, sendFrontendMsgs)
@@ -113,15 +113,15 @@ data ResponseCollector
 -- | Enqueued by the writer, dequeued by the reader.
 data PendingResponse = PendingResponse
   { prCollector :: !ResponseCollector
-  , prMVar :: !(MVar (Either ValiantError Response))
+  , prMVar :: !(MVar (Either PgWireError Response))
   }
 
 -- | The async connection state. Owns the writer and reader threads.
 data AsyncWireConn = AsyncWireConn
   { awcWire :: !WireConn
-  , awcSendQueue :: !(TBQueue (Request, MVar (Either ValiantError Response)))
+  , awcSendQueue :: !(TBQueue (Request, MVar (Either PgWireError Response)))
   , awcPending :: !(TQueue PendingResponse)
-  , awcExclusive :: !(TMVar (MVar (Either ValiantError Response)))
+  , awcExclusive :: !(TMVar (MVar (Either PgWireError Response)))
   -- ^ When set, the writer pauses the pipeline for exclusive access.
   , awcAlive :: !(TVar Bool)
   , awcTxStatus :: !(IORef TxStatus)
@@ -140,9 +140,9 @@ data AsyncWireConn = AsyncWireConn
 -- thread handles themselves (avoids circular dependency with StrictData).
 data AsyncCore = AsyncCore
   { acWire :: !WireConn
-  , acSendQueue :: !(TBQueue (Request, MVar (Either ValiantError Response)))
+  , acSendQueue :: !(TBQueue (Request, MVar (Either PgWireError Response)))
   , acPending :: !(TQueue PendingResponse)
-  , acExclusive :: !(TMVar (MVar (Either ValiantError Response)))
+  , acExclusive :: !(TMVar (MVar (Either PgWireError Response)))
   , acAlive :: !(TVar Bool)
   , acTxStatus :: !(IORef TxStatus)
   , acNotifyHandler :: !(IORef (Int32 -> ByteString -> ByteString -> IO ()))
@@ -246,7 +246,7 @@ submitRequest awc req = do
             writeTBQueue (awcSendQueue awc) (req, respVar)
             pure (Just False)           -- slow path: queued
   case path of
-    Nothing -> throwValiant ConnectionDead
+    Nothing -> throwPgWire ConnectionDead
     Just False -> do
       -- Slow path: wait for response from reader via writer
       result <- takeMVar respVar
@@ -288,7 +288,7 @@ submitExclusive awc action = mask $ \restore -> do
       then putTMVar (awcExclusive awc) respVar >> pure True
       else pure False
   if not signaled
-    then throwValiant ConnectionDead
+    then throwPgWire ConnectionDead
     else do
 
       -- Wait for writer to drain pending and hand us control
@@ -320,8 +320,8 @@ requestToMsgs (ReqClose closeMsg) = ([closeMsg, Sync], CollectCloseComplete)
 ------------------------------------------------------------------------
 
 data WriterAction
-  = WriterExclusive !(MVar (Either ValiantError Response))
-  | WriterBatch ![(Request, MVar (Either ValiantError Response))]
+  = WriterExclusive !(MVar (Either PgWireError Response))
+  | WriterBatch ![(Request, MVar (Either PgWireError Response))]
 
 writerThread :: AsyncCore -> IO ()
 writerThread ac = go `catch` onDeath
@@ -347,7 +347,7 @@ writerThread ac = go `catch` onDeath
       rest <- drainTBQueue (acSendQueue ac)
       pure (WriterBatch (first : rest))
 
-    handleBatch :: [(Request, MVar (Either ValiantError Response))] -> IO ()
+    handleBatch :: [(Request, MVar (Either PgWireError Response))] -> IO ()
     handleBatch items = do
       let (allMsgs, pendings) = unzip (map buildItem items)
       atomically $ mapM_ (writeTQueue (acPending ac)) pendings
@@ -355,7 +355,7 @@ writerThread ac = go `catch` onDeath
       -- Release the send lock so fast-path callers can send again.
       atomically $ putTMVar (acSendLock ac) ()
 
-    buildItem :: (Request, MVar (Either ValiantError Response)) -> ([FrontendMsg], PendingResponse)
+    buildItem :: (Request, MVar (Either PgWireError Response)) -> ([FrontendMsg], PendingResponse)
     buildItem (req, respVar) = case req of
       ReqExtendedQuery msgs collector ->
         (msgs, PendingResponse collector respVar)
@@ -366,7 +366,7 @@ writerThread ac = go `catch` onDeath
       ReqClose closeMsg ->
         ([closeMsg, Sync], PendingResponse CollectCloseComplete respVar)
 
-    handleExclusive :: MVar (Either ValiantError Response) -> IO ()
+    handleExclusive :: MVar (Either PgWireError Response) -> IO ()
     handleExclusive respVar = do
       atomically $ do
         empty <- isEmptyTQueue (acPending ac)
@@ -396,7 +396,7 @@ readerThread ac = go `catch` onDeath
       result <- try (collectResponse (prCollector pr))
       case result of
         Right resp -> putMVar (prMVar pr) (Right resp)
-        Left (err :: ValiantError) -> do
+        Left (err :: PgWireError) -> do
           -- After ErrorResponse with Sync, Postgres sends ReadyForQuery.
           -- After ErrorResponse with Flush (preparation), it does NOT.
           case prCollector pr of
@@ -636,7 +636,7 @@ drainTBQueue q = loop id
         Just item -> loop (acc . (item :))
         Nothing -> pure (acc [])
 
-drainPendingWithError :: AsyncWireConn -> ValiantError -> IO ()
+drainPendingWithError :: AsyncWireConn -> PgWireError -> IO ()
 drainPendingWithError awc err = do
   pendings <- atomically $ flushTQueue (awcPending awc)
   mapM_ (\pr -> tryPutMVar (prMVar pr) (Left err) >> pure ()) pendings
@@ -648,7 +648,7 @@ drainPendingWithError awc err = do
     Nothing -> pure ()
 
 -- | Like 'drainPendingWithError' but operates on 'AsyncCore' (used by threads).
-drainPendingWithErrorCore :: AsyncCore -> ValiantError -> IO ()
+drainPendingWithErrorCore :: AsyncCore -> PgWireError -> IO ()
 drainPendingWithErrorCore ac err = do
   pendings <- atomically $ flushTQueue (acPending ac)
   mapM_ (\pr -> tryPutMVar (prMVar pr) (Left err) >> pure ()) pendings

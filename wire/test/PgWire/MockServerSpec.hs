@@ -3,7 +3,7 @@ module PgWire.MockServerSpec (spec) where
 import Control.Exception (try)
 import Data.ByteString.Char8 qualified as BS8
 import PgWire.Connection (Connection, close, connectString, simpleQuery)
-import PgWire.Error (ValiantError (..))
+import PgWire.Error (PgWireError (..))
 import PgWire.MockServer
 import Test.Hspec
 
@@ -59,7 +59,7 @@ spec = do
               { mockQueryHandler = errorHandler "42P01" "relation \"foo\" does not exist"
               }
         connectToMock cfg $ \conn -> do
-          result <- try @ValiantError (simpleQuery conn "SELECT * FROM foo")
+          result <- try @PgWireError (simpleQuery conn "SELECT * FROM foo")
           case result of
             Left (QueryError _) -> pure ()
             Left other -> expectationFailure $ "Expected QueryError, got: " <> show other
@@ -74,7 +74,7 @@ spec = do
               }
         connectToMock cfg $ \conn -> do
           -- First query errors
-          result1 <- try @ValiantError (simpleQuery conn "BAD")
+          result1 <- try @PgWireError (simpleQuery conn "BAD")
           case result1 of
             Left (QueryError _) -> pure ()
             _ -> expectationFailure "Expected QueryError for BAD query"

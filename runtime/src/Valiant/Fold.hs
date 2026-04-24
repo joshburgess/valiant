@@ -26,7 +26,7 @@ import Data.Vector (Vector)
 import Data.Vector qualified as V
 import PgWire.Async (submitExclusive)
 import PgWire.Connection (Connection (..))
-import PgWire.Error (ValiantError (..), throwValiant)
+import PgWire.Error (PgWireError (..), throwPgWire)
 import PgWire.Protocol.Backend
 import PgWire.Protocol.Frontend
 import PgWire.Wire (WireConn, recvBackendMsg, sendFrontendMsgs)
@@ -78,16 +78,16 @@ collectFold wc txRef decode = go
       case msg of
         BindComplete -> go acc step'
         DataRow vals -> case decode vals of
-          Left err -> throwValiant (DecodeError (BS8.pack err))
+          Left err -> throwPgWire (DecodeError (BS8.pack err))
           Right !val -> go (step' acc val) step'
         CommandComplete _ -> go acc step'
         EmptyQueryResponse -> go acc step'
         ReadyForQuery status -> do
           writeIORef txRef status
           pure acc
-        ErrorResponse err -> throwValiant (QueryError err)
+        ErrorResponse err -> throwPgWire (QueryError err)
         NoticeResponse _ -> go acc step'
-        other -> throwValiant (ProtocolError ("Unexpected in fold: " <> BS8.pack (show other)))
+        other -> throwPgWire (ProtocolError ("Unexpected in fold: " <> BS8.pack (show other)))
 
 -- | Drain messages until ReadyForQuery, updating transaction status.
 -- Used for cleanup after fold exceptions.

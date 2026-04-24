@@ -23,7 +23,7 @@ import Data.Vector (Vector)
 import Data.Vector qualified as V
 import PgWire.Async (submitExclusive)
 import PgWire.Connection (Connection (..))
-import PgWire.Error (ValiantError (..), throwValiant)
+import PgWire.Error (PgWireError (..), throwPgWire)
 import PgWire.Protocol.Backend
 import PgWire.Protocol.Frontend
 import PgWire.Wire (WireConn, recvBackendMsg, sendFrontendMsg)
@@ -78,8 +78,8 @@ copyOut conn sql consumer =
               consumer chunk
               loop
             CopyDoneMsg -> pure ()
-            ErrorResponse err -> throwValiant (QueryError err)
-            other -> throwValiant (ProtocolError ("Unexpected in COPY OUT: " <> BS8.pack (show other)))
+            ErrorResponse err -> throwPgWire (QueryError err)
+            other -> throwPgWire (ProtocolError ("Unexpected in COPY OUT: " <> BS8.pack (show other)))
     loop
     collectCopyResult wc txRef
 
@@ -157,16 +157,16 @@ waitCopyIn wc = do
   msg <- recvBackendMsg wc
   case msg of
     CopyInResponse _ _ -> pure ()
-    ErrorResponse err -> throwValiant (QueryError err)
-    other -> throwValiant (ProtocolError ("Expected CopyInResponse, got: " <> BS8.pack (show other)))
+    ErrorResponse err -> throwPgWire (QueryError err)
+    other -> throwPgWire (ProtocolError ("Expected CopyInResponse, got: " <> BS8.pack (show other)))
 
 waitCopyOut :: WireConn -> IO ()
 waitCopyOut wc = do
   msg <- recvBackendMsg wc
   case msg of
     CopyOutResponse _ _ -> pure ()
-    ErrorResponse err -> throwValiant (QueryError err)
-    other -> throwValiant (ProtocolError ("Expected CopyOutResponse, got: " <> BS8.pack (show other)))
+    ErrorResponse err -> throwPgWire (QueryError err)
+    other -> throwPgWire (ProtocolError ("Expected CopyOutResponse, got: " <> BS8.pack (show other)))
 
 collectCopyResult :: WireConn -> IORef TxStatus -> IO CopyResult
 collectCopyResult wc txRef = go 0
@@ -178,9 +178,9 @@ collectCopyResult wc txRef = go 0
         ReadyForQuery status -> do
           writeIORef txRef status
           pure (CopyResult n)
-        ErrorResponse err -> throwValiant (QueryError err)
+        ErrorResponse err -> throwPgWire (QueryError err)
         NoticeResponse _ -> go n
-        other -> throwValiant (ProtocolError ("Unexpected in COPY result: " <> BS8.pack (show other)))
+        other -> throwPgWire (ProtocolError ("Unexpected in COPY result: " <> BS8.pack (show other)))
 
     tagRows (InsertTag r) = r
     tagRows (UpdateTag r) = r
