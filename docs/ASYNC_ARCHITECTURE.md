@@ -12,7 +12,7 @@ Each `Connection` uses three cooperating green threads after startup:
    `MVar`s in FIFO order.
 
 **Key insight:** PostgreSQL processes messages in strict FIFO order. No
-correlation IDs needed — the i-th response corresponds to the i-th pending
+correlation IDs needed. The i-th response corresponds to the i-th pending
 request. This is the same architecture behind asyncpg's 3x advantage over
 psycopg2 on concurrent workloads.
 
@@ -45,7 +45,7 @@ long.
 
 ### Core types (`wire/src/PgWire/Async.hs`)
 
-**Request ADT** — what application threads submit:
+**Request ADT**: what application threads submit:
 ```haskell
 data Request
   = ReqExtendedQuery
@@ -59,7 +59,7 @@ data Request
       !(WireConn -> IO ())  -- closure with direct socket access
 ```
 
-**Response ADT** — what comes back via MVar:
+**Response ADT**: what comes back via MVar:
 ```haskell
 data Response
   = RespRows ![Vector (Maybe ByteString)]  -- collected DataRow vectors
@@ -69,7 +69,7 @@ data Response
   | RespBatchRows ![[Vector (Maybe ByteString)]]  -- one list per sub-query
 ```
 
-**ResponseCollector** — tells the reader thread how to interpret backend
+**ResponseCollector**: tells the reader thread how to interpret backend
 messages for this request:
 ```haskell
 data ResponseCollector
@@ -80,7 +80,7 @@ data ResponseCollector
   | CollectSimple       -- simple query: text rows + optional tag
 ```
 
-**AsyncWireConn** — the async connection state:
+**AsyncWireConn**: the async connection state:
 ```haskell
 data AsyncWireConn = AsyncWireConn
   { awcWire          :: !WireConn
@@ -102,7 +102,7 @@ data AsyncWireConn = AsyncWireConn
 2. Drains remaining available requests (non-blocking `tryReadTBQueue`)
 3. For each request: builds `[FrontendMsg]`, enqueues `PendingResponse`
 4. Coalesces all messages into a single `send()` via `buildFrontendMsgsConcat`
-5. Special case: `ReqExclusive` — flushes all pending responses, runs
+5. Special case: `ReqExclusive` flushes all pending responses, runs
    closure with direct socket access, then resumes
 6. Loops
 

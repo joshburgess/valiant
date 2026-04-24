@@ -1,7 +1,7 @@
 cabal-version:   3.0
 name:            valiant
 version:         0.1.0.0
-synopsis:        Compile-time checked SQL for Haskell — runtime library
+synopsis:        Compile-time checked SQL for Haskell, runtime library
 description:
   Runtime library for valiant. Provides the @Statement@ type, binary format
   codecs, query execution functions, and re-exports from @pg-wire@ (the

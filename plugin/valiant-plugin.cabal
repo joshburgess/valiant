@@ -1,7 +1,7 @@
 cabal-version:   3.0
 name:            valiant-plugin
 version:         0.1.0.0
-synopsis:        Compile-time checked SQL for Haskell — GHC source plugin
+synopsis:        Compile-time checked SQL for Haskell, GHC source plugin
 description:
   GHC source plugin that validates @queryFile@ calls at compile time
   by reading cached metadata from the @.valiant/@ directory.

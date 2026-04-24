@@ -342,13 +342,13 @@ valiant generate \
 ```
 
 This creates one module per `sql/` subdirectory with inferred types. Edit
-the generated files freely — the plugin continues to verify everything.
+the generated files freely. The plugin continues to verify everything.
 
 ## 18. CI setup
 
 ```yaml
 steps:
-  # No database needed — just check the cache is current
+  # No database needed, just check the cache is current
   - name: Verify query cache
     run: valiant check
 

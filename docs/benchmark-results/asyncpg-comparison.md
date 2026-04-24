@@ -13,9 +13,9 @@ is the database driver.
 - **asyncpg:** Python 3.12 + asyncpg + uvloop, 10 connections, 10s per benchmark
 - **valiant:** GHC 9.10.3, -O2, criterion (5s time-limit), 10 connections via pool
 
-## Results (Run 3 — March 2026, with fast-path send + binary pg_type)
+## Results (Run 3, March 2026, with fast-path send + binary pg_type)
 
-### SELECT 1+1 (minimal overhead — measures driver/protocol cost)
+### SELECT 1+1 (minimal overhead, measures driver/protocol cost)
 
 | Driver | Queries/sec |
 |--------|------------|
@@ -26,7 +26,7 @@ With the fast-path send optimization, **valiant matches asyncpg** on
 trivial queries. The fast path bypasses the writer thread's queue when
 there's no contention, eliminating ~30-40μs of coordination overhead.
 
-### generate_series(1000) — bulk row fetch (1000 integer rows)
+### generate_series(1000): bulk row fetch (1000 integer rows)
 
 | Driver | Queries/sec | Rows/sec |
 |--------|------------|----------|
@@ -47,7 +47,7 @@ asyncpg is 29% faster on wide text-heavy rows. This gap is from asyncpg's
 Cython-compiled codec layer decoding 12 mixed-type columns per row
 faster than pure Haskell.
 
-### Batch insert 1000 rows (sequential — one INSERT per round-trip)
+### Batch insert 1000 rows (sequential, one INSERT per round-trip)
 
 | Driver | Batches/sec | Inserts/sec |
 |--------|------------|-------------|
@@ -56,7 +56,7 @@ faster than pure Haskell.
 | **valiant (pipelined)** | **173.8/s** | **173,800/s** |
 
 Sequential: asyncpg is 26% faster (uvloop's tighter event loop).
-**Pipelined: valiant is 7.7x faster than asyncpg** — asyncpg has no
+**Pipelined: valiant is 7.7x faster than asyncpg.** asyncpg has no
 equivalent to `executeBatch`, which sends all 1000 Bind+Execute pairs
 in a single network round-trip.
 
@@ -85,7 +85,7 @@ has lower per-iteration overhead than GHC's green thread scheduler.
 asyncpg's Cython-compiled protocol layer also eliminates Python
 interpreter overhead on the hot path.
 
-**Where valiant wins:** Batch write operations via pipelining — a
+**Where valiant wins:** Batch write operations via pipelining, a
 protocol-level optimization that asyncpg doesn't expose. This is the
 single biggest performance win for real applications that do bulk
 inserts, updates, or deletes.

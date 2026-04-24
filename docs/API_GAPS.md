@@ -125,7 +125,7 @@ but some use cases genuinely need dynamic SQL composition.
 
 ### 3.6 money Type
 
-PG `money` type (OID 790). Uncommon — the PostgreSQL docs recommend
+PG `money` type (OID 790). Uncommon; the PostgreSQL docs recommend
 using `numeric` instead. Users can `CAST(amount AS numeric)` in SQL.
 
 ### ~~3.7 Conduit / Streaming Library Integration~~ DONE
@@ -171,7 +171,7 @@ Features where valiant matches or exceeds all competitors:
 | TLS 1.2/1.3 | Client certs, CA validation, full hostname verification |
 | Multi-host failover | `target_session_attrs`, `load_balance_hosts` |
 | SCRAM-SHA-256 auth | Required by modern PostgreSQL |
-| No C dependencies | Pure Haskell — no libpq, no system deps |
+| No C dependencies | Pure Haskell (no libpq, no system deps) |
 | Structured error messages | 9 error types with column-by-column diagnostics |
 | hstore codec | `Valiant.Binary.HStore` |
 | macaddr / macaddr8 codec | `Valiant.Binary.MacAddr` |

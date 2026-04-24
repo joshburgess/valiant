@@ -16,7 +16,7 @@ Tool: criterion 1.6, time-limit 2s per benchmark
 | Float | 33 ns | castFloatToWord32 + 4 bytes |
 | Double | 36 ns | castDoubleToWord64 + 8 bytes |
 | Text (5 chars) | 41 ns | UTF-8 encodeUtf8 |
-| Text (100 chars) | 41 ns | Same — encodeUtf8 is O(1) for ASCII |
+| Text (100 chars) | 41 ns | Same: encodeUtf8 is O(1) for ASCII |
 | Text (10K chars) | 378 ns | Non-ASCII or large copy |
 | ByteString (100B) | 18 ns | Identity (zero-copy) |
 | ByteString (10KB) | 18 ns | Identity (zero-copy) |
@@ -48,7 +48,7 @@ Tool: criterion 1.6, time-limit 2s per benchmark
 | Float | 36 ns | Word32 → castWord32ToFloat |
 | Double | 19 ns | Word64 → castWord64ToDouble |
 | Text (5 chars) | 56 ns | decodeUtf8' validation |
-| Text (100 chars) | 57 ns | Same class — UTF-8 validation |
+| Text (100 chars) | 57 ns | Same class: UTF-8 validation |
 | Day | 29 ns | int32 + addDays |
 | UTCTime | 57 ns | int64 → epoch arithmetic |
 | Scientific | 119 ns | Base-10000 digit parsing |
@@ -85,7 +85,7 @@ Tool: criterion 1.6, time-limit 2s per benchmark
 1. **Fixed-size types (Int, Bool, Float, Double)**: 19-38 ns. Dominated by
    `unsafeCreate` allocation overhead, not computation.
 
-2. **ByteString encode is zero-copy**: 18 ns regardless of size — `pgEncode = id`.
+2. **ByteString encode is zero-copy**: 18 ns regardless of size (`pgEncode = id`).
 
 3. **Text encode is O(1) for ASCII**: UTF-8 encoding of pure ASCII text is
    essentially a memcpy, so 100 chars takes the same time as 5.

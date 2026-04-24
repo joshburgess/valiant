@@ -2,7 +2,7 @@
 
 **Compile-time checked SQL for Haskell.**
 
-Inspired by Rust's [sqlx](https://github.com/launchbadge/sqlx), built from scratch for Haskell. No Template Haskell. No `libpq`. No C dependencies. Raw `.sql` files validated against a live Postgres database at prepare time, with a GHC source plugin that enforces type safety at compile time. The fastest Haskell PostgreSQL library — 5x faster than hasql on multi-row reads, 10x faster on pipelined batch writes, competitive with asyncpg (Python) on throughput.
+Inspired by Rust's [sqlx](https://github.com/launchbadge/sqlx), built from scratch for Haskell. No Template Haskell. No `libpq`. No C dependencies. Raw `.sql` files validated against a live Postgres database at prepare time, with a GHC source plugin that enforces type safety at compile time. The fastest Haskell PostgreSQL library: 5x faster than hasql on multi-row reads, 10x faster on pipelined batch writes, competitive with asyncpg (Python) on throughput.
 
 ## How it works
 
@@ -81,7 +81,7 @@ main = do
   n <- withResource pool $ \conn ->
     execute conn Q.insert ("Alice", Just "alice@example.com")
 
-  -- Batch insert (pipelined — eliminates per-row round-trips)
+  -- Batch insert (pipelined, eliminates per-row round-trips)
   withResource pool $ \conn ->
     executeBatch conn Q.insert
       [ ("Alice", Just "alice@example.com")
@@ -159,7 +159,7 @@ nothing to pipeline) but **5x faster** once row decoding dominates.
 Pipelined batch inserts are **9.9x faster** than hasql and **16.6x faster**
 than postgresql-simple.
 
-**vs asyncpg (Python)** — same CI runner, same Postgres, same Unix socket:
+**vs asyncpg (Python)** (same CI runner, same Postgres, same Unix socket):
 
 | Benchmark | asyncpg | valiant |
 |-----------|---------|-------|
@@ -188,7 +188,7 @@ for the full head-to-head comparison.
 | Single-row latency | **89 μs** (hasql) | 138 μs (1.6x slower) |
 | Multi-row throughput (10K) | 54.4 ms (hasql) | **11.0 ms (5.0x faster)** |
 | Batch writes (100 inserts) | 9.46 ms (hasql) | **956 μs (9.9x faster)** |
-| vs asyncpg (Python) | — | **Faster on row throughput** |
+| vs asyncpg (Python) | N/A | **Faster on row throughput** |
 | Build requirements | Needs `libpq-dev` | No system dependencies |
 
 See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the full deep-dive:
@@ -320,7 +320,7 @@ export DATABASE_URL="postgres://localhost:5432/mydb"
 valiant prepare
 
 # 3. Write (or generate) the Haskell binding
-# 4. Build — the plugin checks everything at compile time
+# 4. Build (the plugin checks everything at compile time)
 cabal build
 ```
 

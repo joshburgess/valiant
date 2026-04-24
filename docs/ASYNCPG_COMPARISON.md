@@ -49,9 +49,9 @@ replicate the methodology for valiant to get directly comparable results.
 These are **geometric means** across all 7 benchmarks, not individual numbers.
 
 ### Key Advantages asyncpg Has
-1. **uvloop** — 2-4x faster than default asyncio event loop
-2. **Cython-compiled codec layer** — binary decode compiled to C
-3. **Bare-metal Threadripper** — 32 cores, no virtualization
+1. **uvloop**: 2-4x faster than default asyncio event loop
+2. **Cython-compiled codec layer**: binary decode compiled to C
+3. **Bare-metal Threadripper**: 32 cores, no virtualization
 4. **No Postgres tuning** but temp cluster = no WAL overhead
 5. **10 concurrent connections** with pure async (no OS thread overhead)
 

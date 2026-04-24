@@ -51,7 +51,7 @@ stack overhead.
 | 3 | 1.47 ms | 3.73 ms | 2.5x |
 | 5 | 1.59 ms | 5.40 ms | 3.4x |
 
-Speedup scales linearly with query count — pipelined is always ~1
+Speedup scales linearly with query count. Pipelined is always ~1
 round-trip regardless of query count.
 
 ## Single-Connection Query Benchmarks
@@ -77,7 +77,7 @@ round-trip regardless of query count.
   wire-level collector produces a list of raw rows regardless. `fetchAllVec`
   pays an extra list→Vector conversion. Use `fetchAllVec` when you need
   indexed access to results, not for raw speed.
-- `executeWithFold` and `forEach` are within 15% of `fetchAll` — the
+- `executeWithFold` and `forEach` are within 15% of `fetchAll`. The
   per-row decode cost dominates, not the collection strategy.
 - Pool acquire/release adds <1ms overhead.
 - Transaction overhead (BEGIN+COMMIT) adds ~2.7ms over a bare scalar query.
@@ -91,7 +91,7 @@ round-trip regardless of query count.
 | 5,000 | 37.7 ms | 7.5 μs | Streams in 256-item chunks in exclusive mode |
 
 Per-row cost decreases with batch size due to round-trip amortization.
-At 5,000 rows the overhead is 7.5 μs/row — dominated by Postgres
+At 5,000 rows the overhead is 7.5 μs/row, dominated by Postgres
 server-side INSERT execution, not client overhead.
 
 ## Concurrent Throughput (Async Split)

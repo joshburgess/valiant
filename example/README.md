@@ -1,15 +1,15 @@
-# valiant example — REST API
+# valiant example: REST API
 
 A small REST API demonstrating valiant with [scotty](https://hackage.haskell.org/package/scotty).
 
 ## Features demonstrated
 
-- **Connection pooling** — `newPool` / `withResource`
-- **Typed queries** — `fetchOne`, `fetchAll`, `fetchScalar`, `execute`
-- **Pipelined batch inserts** — `executeBatch` for high-throughput writes
-- **Transactions** — `withTransaction` with automatic commit/rollback
-- **Nullable columns** — `Maybe Text` for columns that can be NULL
-- **RETURNING** — `fetchScalar` to get the inserted row's ID
+- **Connection pooling**: `newPool` / `withResource`
+- **Typed queries**: `fetchOne`, `fetchAll`, `fetchScalar`, `execute`
+- **Pipelined batch inserts**: `executeBatch` for high-throughput writes
+- **Transactions**: `withTransaction` with automatic commit/rollback
+- **Nullable columns**: `Maybe Text` for columns that can be NULL
+- **RETURNING**: `fetchScalar` to get the inserted row's ID
 
 ## Running
 

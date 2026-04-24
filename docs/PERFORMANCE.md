@@ -71,7 +71,7 @@ updates due to its per-query monad stack cost.
 | Day | 46 ns | 28 ns |
 | UTCTime | 300 ns | 58 ns |
 | Scientific | 596 ns | 102 ns |
-| UUID | — | — |
+| UUID | N/A | N/A |
 | Int32 array (1000 elems) | 66 μs | 46 μs |
 
 ### Pool performance
@@ -117,7 +117,7 @@ would not provide new information:
 
 **rel8** ([hackage](https://hackage.haskell.org/package/rel8)) is a
 type-safe query builder that generates SQL from a Haskell DSL. It builds
-entirely on hasql — every rel8 query goes through `Hasql.Connection.use`
+entirely on hasql. Every rel8 query goes through `Hasql.Connection.use`
 → `Hasql.Session` → libpq. The only thing rel8 adds is Haskell-side
 query construction (building the SQL string). Its execution performance
 is therefore hasql's numbers plus a few microseconds of DSL evaluation.
@@ -125,7 +125,7 @@ Since we already benchmark hasql directly, rel8 can only be equal or
 slower at runtime.
 
 **postgresql-typed** ([hackage](https://hackage.haskell.org/package/postgresql-typed))
-is the closest conceptual competitor to valiant — it validates SQL at
+is the closest conceptual competitor to valiant: it validates SQL at
 compile time using Template Haskell. However, at runtime it uses
 `postgresql-libpq` (the same C FFI as hasql and postgresql-simple),
 so its execution numbers would be roughly equal to those libraries.
@@ -144,7 +144,7 @@ postgresql-typed is architectural, not performance:
 
 **esqueleto** ([hackage](https://hackage.haskell.org/package/esqueleto))
 is a type-safe SQL DSL built on persistent. It uses the same
-`persistent` `SqlBackend` and `runSqlPool` execution path — esqueleto's
+`persistent` `SqlBackend` and `runSqlPool` execution path. Esqueleto's
 overhead is in query construction, not execution. The persistent
 benchmarks already capture the runtime cost.
 
@@ -162,7 +162,7 @@ the FFI marshaling overhead that valiant eliminates.
 
 PostgreSQL supports two result formats: text (human-readable) and binary
 (native machine representation). `postgresql-simple` uses text format,
-requiring string parsing for every value — `"12345"` must be parsed into
+requiring string parsing for every value: `"12345"` must be parsed into
 an integer. `hasql` uses binary format through `libpq`, but pays FFI
 marshaling costs moving data between C and Haskell heap.
 
@@ -361,7 +361,7 @@ cabal bench valiant-bench --benchmark-options='--match prefix codec'
 # Single-thread query benchmarks
 cabal bench valiant-bench --benchmark-options='--match prefix query'
 
-# Concurrent benchmarks (the async split showcase — use -N for capabilities)
+# Concurrent benchmarks (the async split showcase, use -N for capabilities)
 cabal bench valiant-bench --benchmark-options='+RTS -N -RTS --match prefix concurrent'
 
 # Pool benchmarks (contention, recycling methods)
@@ -386,7 +386,7 @@ auditing, and benchmarking. Here's the complete story.
 
 ### Pass 1: Wire-level optimizations
 
-The first pass focused on reducing network overhead — the biggest win
+The first pass focused on reducing network overhead, the biggest win
 for a database driver.
 
 **TCP_NODELAY.** Nagle's algorithm batches small TCP segments for
@@ -402,7 +402,7 @@ For a typical query this reduces 3 `send()` calls to 1.
 **Pipelined batch execution.** The PostgreSQL extended query protocol
 allows multiple Bind+Execute pairs before a single Sync. `executeBatch`
 exploits this to send N inserts in a single network round-trip. This
-alone delivered 40-100x speedups on batch writes — the single biggest
+alone delivered 40-100x speedups on batch writes, the single biggest
 improvement in the project.
 
 *Result: single-row latency dropped from ~30% slower than hasql to parity.*
@@ -454,7 +454,7 @@ fields, since `StrictData` makes them all strict) and
 Any space leak immediately stack-overflows, providing fail-fast leak
 detection in CI.
 
-*Result: all tests pass with K8K stack limit — zero hidden space leaks.*
+*Result: all tests pass with K8K stack limit. Zero hidden space leaks.*
 
 ### Pass 3: Allocation reduction
 
@@ -463,7 +463,7 @@ hottest code paths.
 
 **Direct byte writes.** The fixed-size encoders (`int16BE`, `int32BE`,
 `int64BE`, `floatBE`, `doubleBE`) were going through
-`Builder → toLazyByteString → toStrict` — three allocations for 4 bytes.
+`Builder → toLazyByteString → toStrict`, three allocations for 4 bytes.
 Replaced with `Data.ByteString.Internal.unsafeCreate` + `pokeByteOff`:
 
 ```haskell
@@ -507,7 +507,7 @@ by `reverse acc`). Replaced with difference lists (`acc . (val :)`
 followed by `acc []`), eliminating the O(n) reverse traversal.
 
 **Scientific encoder rewrite.** The numeric encoder used `String`
-(`[Char]`) for digit manipulation — linked lists of boxed characters.
+(`[Char]`) for digit manipulation, linked lists of boxed characters.
 Rewritten to use `ByteString` operations throughout (`BS8.pack`,
 `BS.replicate`, `BS.foldl'`, `BS.splitAt`).
 
@@ -520,7 +520,7 @@ The fourth pass targeted the protocol encoding and wire framing layers.
 
 **Pre-computed message sizes.** The `withTag` helper was materializing
 the payload `Builder` into a `ByteString` just to call `BS.length`,
-then wrapping it back into a `Builder` — copying the payload bytes
+then wrapping it back into a `Builder`, copying the payload bytes
 twice. Replaced with per-message-type size computation functions:
 
 ```haskell
@@ -576,7 +576,7 @@ Application threads put `Request`s into a `TBQueue`, then block on an
 via `sendMany`, and enqueues response MVars into a `TQueue`. The reader
 parses backend messages and fills MVars in FIFO order.
 
-PostgreSQL processes messages in strict order — the i-th response always
+PostgreSQL processes messages in strict order. The i-th response always
 corresponds to the i-th request. No correlation IDs needed.
 
 **Concurrent throughput (single connection, `SELECT` by PK + `COUNT`):**
@@ -594,11 +594,11 @@ long.
 
 **Key design decisions:**
 
-- *Startup stays serial* — async threads spawn after authentication.
-- *TBQueue capacity 64* — backpressure prevents unbounded memory growth.
-- *`link2` for thread death* — if reader or writer dies, both die. All
+- *Startup stays serial*: async threads spawn after authentication.
+- *TBQueue capacity 64*: backpressure prevents unbounded memory growth.
+- *`link2` for thread death*: if reader or writer dies, both die. All
   pending MVars are filled with `ConnectionDead`.
-- *COPY/cursors/folds use exclusive mode* — `submitExclusive` pauses
+- *COPY/cursors/folds use exclusive mode*: `submitExclusive` pauses
   the pipeline and gives the caller direct socket access, since these
   operations are streaming state machines that can't be multiplexed.
 
@@ -630,12 +630,12 @@ Subsequent executions (cache hit) were always 1 round-trip and are
 unchanged.
 
 The reader's row and command collectors skip `ParseComplete` the same
-way they skip `BindComplete` — no new collector types needed.
+way they skip `BindComplete`. No new collector types needed.
 
 **Flush instead of Sync for preparation.** The `ensurePrepared` path
 (used by Pipeline and Fold) now sends `Parse + Flush` instead of
 `Parse + Sync`. `Flush` makes Postgres send `ParseComplete` without
-the `ReadyForQuery` overhead — one fewer message per cold statement
+the `ReadyForQuery` overhead. One fewer message per cold statement
 preparation.
 
 *Result: first-execution latency halved (2 round-trips → 1). Matters
@@ -644,7 +644,7 @@ at application startup, new pool connections, and dynamic queries.*
 ### Pass 7: Allocation and batch streaming
 
 **Constant format vectors.** Every query allocated `V.singleton
-BinaryFormat` for parameter and result format codes — a fresh heap
+BinaryFormat` for parameter and result format codes, a fresh heap
 allocation per call for a value that never changes. Replaced with a
 module-level `{-# NOINLINE #-}` CAF:
 
@@ -684,8 +684,8 @@ allocation overhead in the two hottest paths: protocol encoding and
 DataRow parsing.
 
 **Fused Builder encoding.** `sendFrontendMsgs` previously called
-`buildFrontendMsg` per message — each doing `toLazyByteString` +
-`toStrict` independently — then passed the chunks to `sendMany`.
+`buildFrontendMsg` per message, each doing `toLazyByteString` +
+`toStrict` independently, then passed the chunks to `sendMany`.
 Replaced with `buildFrontendMsgsConcat`, which fuses all messages
 into a single `Builder`, materializes once, and sends with a single
 `send()`:
