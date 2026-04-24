@@ -107,7 +107,12 @@ fetchAllCursor wc txRef cursorName batchSize decode = go []
   where
     go !acc = do
       let fetchSql = "FETCH FORWARD " <> BS8.pack (show batchSize) <> " FROM " <> cursorName
-      sendFrontendMsg wc (Query fetchSql)
+      sendFrontendMsgs wc
+        [ Parse "" fetchSql V.empty
+        , Bind "" "" V.empty V.empty binaryFmtVec
+        , Execute "" 0
+        , Sync
+        ]
       rawRows <- collectFetchResults wc txRef
       if null rawRows
         then pure (reverse acc)
@@ -159,9 +164,12 @@ collectFetchResults wc txRef = go []
     go !acc = do
       msg <- recvBackendMsg wc
       case msg of
+        ParseComplete -> go acc
+        BindComplete -> go acc
         RowDescription _ -> go acc
         DataRow vals -> go (vals : acc)
         CommandComplete _ -> go acc
+        EmptyQueryResponse -> go acc
         ReadyForQuery status -> do
           writeIORef txRef status
           pure (reverse acc)

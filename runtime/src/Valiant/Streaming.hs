@@ -110,7 +110,12 @@ fetchBatch cs n = do
     then pure []
     else do
       let fetchSql = "FETCH FORWARD " <> BS8.pack (show n) <> " FROM " <> csName cs
-      sendFrontendMsg (csWire cs) (Query fetchSql)
+      sendFrontendMsgs (csWire cs)
+        [ Parse "" fetchSql V.empty
+        , Bind "" "" V.empty V.empty (V.singleton BinaryFormat)
+        , Execute "" 0
+        , Sync
+        ]
       rows <- collectFetchResults (csWire cs) (csTxRef cs)
       if null rows
         then do
@@ -140,6 +145,8 @@ collectFetchResults wc txRef = go []
     go !acc = do
       msg <- recvBackendMsg wc
       case msg of
+        ParseComplete -> go acc
+        BindComplete -> go acc
         RowDescription _ -> go acc
         DataRow vals -> go (vals : acc)
         CommandComplete _ -> go acc
