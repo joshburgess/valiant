@@ -155,7 +155,21 @@ jobs:
       - name: Run integration tests
         env:
           DATABASE_URL: postgres://valiant_test:valiant_test@/valiant_test?host=/var/run/postgresql
-        run: cabal test valiant-integration
+        run: |
+          cabal test valiant-integration
+          # Adapter suites whose cursor/fold paths hit the real DB.
+          # These were previously not wired into CI, which let a
+          # binary-format cursor bug survive in the streaming adapters
+          # for months (it only surfaced when a dev set DATABASE_URL
+          # locally and ran them by hand).
+          cabal test valiant-bluefin-test
+          cabal test valiant-effectful-test
+          cabal test valiant-fused-effects-test
+          cabal test valiant-mtl-test
+          cabal test valiant-conduit-test
+          cabal test valiant-pipes-test
+          cabal test valiant-streaming-test
+          cabal test valiant-streamly-test
 
   # ── HLint ─────────────────────────────────────────────────────────
   hlint:
