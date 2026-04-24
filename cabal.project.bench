@@ -1,0 +1,14 @@
+-- Benchmark-only project that adds bench-compare to the main project.
+--
+-- bench-compare depends on postgresql-simple, which requires the
+-- system libpq library. Keeping it out of the default cabal.project
+-- lets day-to-day builds stay libpq-free.
+--
+-- Install libpq first (macOS: `brew install libpq` and add its bin to
+-- PATH), then:
+--
+--   cabal build --project-file=cabal.project.bench all
+--   cabal run --project-file=cabal.project.bench bench-compare
+import: cabal.project
+
+packages: bench-compare

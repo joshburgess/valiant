@@ -354,7 +354,8 @@ cabal bench valiant-bench --benchmark-options='--match prefix query'
 cabal bench valiant-bench --benchmark-options='+RTS -N -RTS --match prefix concurrent'
 
 # Comparative benchmarks vs hasql and postgresql-simple
-cabal run bench-compare
+# (requires system libpq: `brew install libpq` on macOS, then add its bin to PATH)
+cabal run --project-file=cabal.project.bench bench-compare
 
 # Teardown
 docker compose down

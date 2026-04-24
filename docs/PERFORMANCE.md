@@ -371,7 +371,8 @@ cabal bench valiant-bench --benchmark-options='+RTS -N -RTS --match prefix pool'
 cabal bench valiant-bench --benchmark-options='+RTS -N -RTS'
 
 # Comparative benchmarks vs hasql and postgresql-simple
-cabal run bench-compare
+# (requires system libpq; see cabal.project.bench for details)
+cabal run --project-file=cabal.project.bench bench-compare
 
 # Teardown
 docker compose down
