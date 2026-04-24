@@ -6,7 +6,7 @@
 --
 -- 'ToParams' encodes query parameter tuples, while 'EncodeField' handles
 -- individual fields. @Maybe a@ encodes as SQL NULL when @Nothing@.
--- Instances are provided for @()@, single values, tuples up to 10,
+-- Instances are provided for @()@, single values, tuples up to 16,
 -- and any @Generic@ type via @DefaultSignatures@.
 --
 -- For custom record types, derive via @Generic@:

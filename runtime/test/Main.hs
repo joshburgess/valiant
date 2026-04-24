@@ -17,6 +17,7 @@ import Valiant.Binary.ScientificSpec qualified as ScientificSpec
 import Valiant.Binary.UUIDSpec qualified as UUIDSpec
 import Valiant.FromRowSpec qualified as FromRowSpec
 import Valiant.NamedParamsSpec qualified as NamedParamsSpec
+import Valiant.TupleSpec qualified as TupleSpec
 import Test.Hspec
 
 main :: IO ()
@@ -36,5 +37,6 @@ main = hspec $ do
   describe "Valiant.Binary.Newtype" NewtypeSpec.spec
   describe "Valiant.Binary.Property" PropertyHedgehogSpec.spec
   describe "Valiant.FromRow" FromRowSpec.spec
+  describe "Valiant.Tuple" TupleSpec.spec
   describe "Valiant.NamedParams" NamedParamsSpec.spec
   describe "Valiant.Error" ErrorSpec.spec

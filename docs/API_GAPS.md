@@ -134,10 +134,12 @@ using `numeric` instead. Users can `CAST(amount AS numeric)` in SQL.
 valiant-streamly, valiant-bluefin, valiant-effectful, valiant-fused-effects,
 valiant-mtl.
 
-### 3.8 Tuples Beyond 10
+### ~~3.8 Tuples Beyond 10~~ DONE
 
-postgresql-simple supports FromRow/ToRow for tuples up to 20 elements.
-We support up to 10. Extending to 16 would cover most realistic schemas.
+`FromRow` and `ToParams` instances extend to 16-tuples
+(`runtime/src/Valiant/FromRow.hs`, `runtime/src/Valiant/ToParams.hs`),
+with round-trip coverage in `runtime/test/Valiant/TupleSpec.hs`.
+postgresql-simple goes to 20; 16 covers the realistic-schema envelope.
 
 ### 3.9 refine Decoder Combinator
 

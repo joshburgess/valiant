@@ -115,6 +115,7 @@ test-suite valiant-test
     Valiant.ErrorSpec
     Valiant.FromRowSpec
     Valiant.NamedParamsSpec
+    Valiant.TupleSpec
 
   build-depends:
     , aeson
