@@ -45,7 +45,7 @@ main = hspec $ do
       withTestConnection $ \conn -> withSchema conn $ do
         insertTestUsers conn
         pool <- mkPool
-        let stmtDel = Valiant.mkStatement "DELETE FROM users WHERE id = $1" [23] [] "<test>" :: Valiant.Statement Int32 ()
+        let stmtDel = Valiant.mkStatement "DELETE FROM users_fused_effects WHERE id = $1" [23] [] "<test>" :: Valiant.Statement Int32 ()
         n <- runM . runValiantPool pool $ executeF stmtDel (1 :: Int32)
         closePool pool
         n `shouldBe` 1

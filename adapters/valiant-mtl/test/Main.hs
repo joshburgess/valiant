@@ -43,7 +43,7 @@ main = hspec $ do
       withTestConnection $ \conn -> withSchema conn $ do
         insertTestUsers conn
         pool <- mkPool
-        let stmtDel = Valiant.mkStatement "DELETE FROM users WHERE id = $1" [23] [] "<test>" :: Valiant.Statement Int32 ()
+        let stmtDel = Valiant.mkStatement "DELETE FROM users_mtl WHERE id = $1" [23] [] "<test>" :: Valiant.Statement Int32 ()
         n <- runValiant pool $ executeM stmtDel (1 :: Int32)
         closePool pool
         n `shouldBe` 1
@@ -52,7 +52,7 @@ main = hspec $ do
       withTestConnection $ \conn -> withSchema conn $ do
         insertTestUsers conn
         pool <- mkPool
-        let stmtCount = Valiant.mkStatement "SELECT count(*)::int4 FROM users" [] ["count"] "<test>" :: Valiant.Statement () Int32
+        let stmtCount = Valiant.mkStatement "SELECT count(*)::int4 FROM users_mtl" [] ["count"] "<test>" :: Valiant.Statement () Int32
         (users, count) <- runValiant pool $ do
           us <- fetchAllM stmtListAll ()
           c <- fetchScalarM stmtCount ()
@@ -80,8 +80,8 @@ main = hspec $ do
     it "withTransactionMtl commits" $ do
       withTestConnection $ \conn -> withSchema conn $ do
         pool <- mkPool
-        let stmtInsert = Valiant.mkStatement "INSERT INTO users (name, email) VALUES ($1, $2)" [25, 25] [] "<test>"
-            stmtCount = Valiant.mkStatement "SELECT count(*)::int4 FROM users" [] ["count"] "<test>" :: Valiant.Statement () Int32
+        let stmtInsert = Valiant.mkStatement "INSERT INTO users_mtl (name, email) VALUES ($1, $2)" [25, 25] [] "<test>"
+            stmtCount = Valiant.mkStatement "SELECT count(*)::int4 FROM users_mtl" [] ["count"] "<test>" :: Valiant.Statement () Int32
         _ <- runReaderT (withTransactionMtl $ \tx ->
           Valiant.execute (Valiant.txConn tx) stmtInsert ("MtlUser" :: Text, Just ("mtl@test.com" :: Text))) pool
         count <- runReaderT (fetchScalarMtl stmtCount ()) pool

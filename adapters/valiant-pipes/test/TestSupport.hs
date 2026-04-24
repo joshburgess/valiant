@@ -30,21 +30,21 @@ withTestConnection action = do
 
 withSchema :: Connection -> IO a -> IO a
 withSchema conn action = do
-  _ <- simpleQuery conn "DROP TABLE IF EXISTS users CASCADE"
+  _ <- simpleQuery conn "DROP TABLE IF EXISTS users_pipes CASCADE"
   _ <- simpleQuery conn
-    "CREATE TABLE users (\
+    "CREATE TABLE users_pipes (\
     \  id SERIAL PRIMARY KEY,\
     \  name TEXT NOT NULL,\
     \  email TEXT\
     \)"
   result <- action
-  _ <- simpleQuery conn "DROP TABLE IF EXISTS users CASCADE"
+  _ <- simpleQuery conn "DROP TABLE IF EXISTS users_pipes CASCADE"
   pure result
 
 insertTestUsers :: Connection -> IO ()
 insertTestUsers conn = do
   _ <- simpleQuery conn
-    "INSERT INTO users (name, email) VALUES \
+    "INSERT INTO users_pipes (name, email) VALUES \
     \('Alice', 'alice@example.com'),\
     \('Bob', 'bob@example.com'),\
     \('Carol', NULL),\
@@ -54,10 +54,10 @@ insertTestUsers conn = do
 
 stmtListAll :: Statement () (Int32, Text)
 stmtListAll = mkStatement
-  "SELECT id, name FROM users ORDER BY id"
+  "SELECT id, name FROM users_pipes ORDER BY id"
   [] ["id", "name"] "<test>"
 
 stmtSelectOne :: Statement Int32 (Int32, Text, Maybe Text)
 stmtSelectOne = mkStatement
-  "SELECT id, name, email FROM users WHERE id = $1"
+  "SELECT id, name, email FROM users_pipes WHERE id = $1"
   [23] ["id", "name", "email"] "<test>"

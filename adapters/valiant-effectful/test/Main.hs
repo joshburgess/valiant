@@ -46,7 +46,7 @@ main = hspec $ do
         withTestConnection $ \conn -> withSchema conn $ do
           insertTestUsers conn
           pool <- mkPool
-          let stmtDelete = Valiant.mkStatement "DELETE FROM users WHERE id = $1" [23] [] "<test>" :: Valiant.Statement Int32 ()
+          let stmtDelete = Valiant.mkStatement "DELETE FROM users_effectful WHERE id = $1" [23] [] "<test>" :: Valiant.Statement Int32 ()
           n <- runEff . runValiant pool $ executeEff stmtDelete (1 :: Int32)
           closePool pool
           n `shouldBe` 1
@@ -54,8 +54,8 @@ main = hspec $ do
       it "withTransactionEff commits" $ do
         withTestConnection $ \conn -> withSchema conn $ do
           pool <- mkPool
-          let stmtInsert = Valiant.mkStatement "INSERT INTO users (name, email) VALUES ($1, $2)" [25, 25] [] "<test>"
-              stmtCount = Valiant.mkStatement "SELECT count(*)::int4 FROM users" [] ["count"] "<test>" :: Valiant.Statement () Int32
+          let stmtInsert = Valiant.mkStatement "INSERT INTO users_effectful (name, email) VALUES ($1, $2)" [25, 25] [] "<test>"
+              stmtCount = Valiant.mkStatement "SELECT count(*)::int4 FROM users_effectful" [] ["count"] "<test>" :: Valiant.Statement () Int32
           _ <- runEff . runValiant pool $
             withTransactionEff $ \tx ->
               Valiant.execute (txConn tx) stmtInsert ("EffUser" :: Text, Just ("eff@test.com" :: Text))
