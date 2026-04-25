@@ -32,10 +32,8 @@ getConn = do
       writeIORef globalConn (Just c)
       -- Ensure schema + seed data
       _ <- simpleQuery c "CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT, is_active BOOLEAN NOT NULL DEFAULT true, created_at TIMESTAMPTZ NOT NULL DEFAULT now())"
-      (rows, _) <- simpleQuery c "SELECT count(*) FROM users"
-      case rows of
-        [[Just "0"]] -> insertBulkUsers c 1000
-        _ -> pure ()
+      _ <- simpleQuery c "TRUNCATE TABLE users RESTART IDENTITY"
+      insertBulkUsers c 10000
       pure c
 
 getPool :: IO Pool
@@ -44,6 +42,7 @@ getPool = do
   case mp of
     Just p -> pure p
     Nothing -> do
+      _ <- getConn  -- ensure schema + seed data exist
       url <- requireDatabaseUrl
       p <- newPool defaultPoolConfig
         { poolConnString = url
@@ -69,7 +68,7 @@ benchmarks =
         whnfIO (getConn >>= \c -> fetchAll c stmtListFive ())
 
     , bench "fetchAll 1000 rows" $
-        whnfIO (getConn >>= \c -> fetchAll c stmtListAllBulk ())
+        whnfIO (getConn >>= \c -> fetchAll c stmtListAll1k ())
 
     , bench "fetchScalar COUNT" $
         whnfIO (getConn >>= \c -> fetchScalar c stmtCount ())
@@ -88,13 +87,13 @@ benchmarks =
           withResource p $ \c -> simpleQuery c "SELECT 1"
 
     , bench "fetchAllVec 1000 rows" $
-        whnfIO (getConn >>= \c -> fetchAllVec c stmtListAllBulk ())
+        whnfIO (getConn >>= \c -> fetchAllVec c stmtListAll1k ())
 
     , bench "executeWithFold 1000 rows" $
-        whnfIO (getConn >>= \c -> executeWithFold c stmtListAllBulk () (RowFold (0 :: Int) (\n _ -> n + 1)))
+        whnfIO (getConn >>= \c -> executeWithFold c stmtListAll1k () (RowFold (0 :: Int) (\n _ -> n + 1)))
 
     , bench "forEach 1000 rows" $
-        whnfIO (getConn >>= \c -> forEach c stmtListAllBulk () (\_ -> pure ()))
+        whnfIO (getConn >>= \c -> forEach c stmtListAll1k () (\_ -> pure ()))
 
     , bench "executeBatch 100 inserts (pipelined)" $
         whnfIO $ do
@@ -132,22 +131,28 @@ benchmarks =
           withTransaction p $ \tx ->
             fetchScalar (txConn tx) stmtCount ()
 
-    , bench "cursor 1000 rows, batch 100" $
-        whnfIO (cursorDrain 100)
-    , bench "cursor 1000 rows, batch 500" $
-        whnfIO (cursorDrain 500)
-    , bench "cursor 1000 rows, batch 1000" $
-        whnfIO (cursorDrain 1000)
+    , bench "cursor 1k rows, batch 100" $
+        whnfIO (cursorDrain stmtListAll1k 100)
+    , bench "cursor 1k rows, batch 500" $
+        whnfIO (cursorDrain stmtListAll1k 500)
+    , bench "cursor 1k rows, batch 1000" $
+        whnfIO (cursorDrain stmtListAll1k 1000)
+    , bench "cursor 10k rows, batch 100" $
+        whnfIO (cursorDrain stmtListAll10k 100)
+    , bench "cursor 10k rows, batch 1000" $
+        whnfIO (cursorDrain stmtListAll10k 1000)
+    , bench "cursor 10k rows, batch 10000" $
+        whnfIO (cursorDrain stmtListAll10k 10000)
     ]
   ]
 
--- | Drain a 1000-row cursor with the given batch size. Returns the row
--- count so the benchmark can't optimize the fetch away.
-cursorDrain :: Int -> IO Int
-cursorDrain !batch = do
+-- | Drain a cursor with the given batch size. Returns the row count so
+-- the benchmark can't optimize the fetch away.
+cursorDrain :: Statement () (Int32, Text) -> Int -> IO Int
+cursorDrain !stmt !batch = do
   p <- getPool
   withTransaction p $ \tx ->
-    withCursor (txConn tx) stmtListAllBulk () batch $ \cs -> do
+    withCursor (txConn tx) stmt () batch $ \cs -> do
       let loop !n = do
             rows <- fetchBatch cs batch
             if null rows then pure n else loop (n + length rows)
@@ -168,9 +173,14 @@ stmtListFive = mkStatement
   "SELECT id, name FROM users ORDER BY id LIMIT 5"
   [] ["id", "name"] "<bench>"
 
-stmtListAllBulk :: Statement () (Int32, Text)
-stmtListAllBulk = mkStatement
-  "SELECT id, name FROM users ORDER BY id"
+stmtListAll1k :: Statement () (Int32, Text)
+stmtListAll1k = mkStatement
+  "SELECT id, name FROM users ORDER BY id LIMIT 1000"
+  [] ["id", "name"] "<bench>"
+
+stmtListAll10k :: Statement () (Int32, Text)
+stmtListAll10k = mkStatement
+  "SELECT id, name FROM users ORDER BY id LIMIT 10000"
   [] ["id", "name"] "<bench>"
 
 stmtInsertUser :: Statement (Text, Maybe Text) ()
