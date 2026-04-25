@@ -127,6 +127,7 @@ test-suite valiant-test
     , hspec-hedgehog >=0.1  && <0.3
     , valiant
     , pg-wire
+    , pg-wire:mockserver
     , scientific
     , text
     , uuid-types

@@ -341,6 +341,9 @@ import Valiant.Binary.Unbounded (Unbounded (..), finite, fromFinite)
 import Valiant.Binary.Interval (PgInterval (..))
 import Valiant.Binary.Range (PgRange (..), RangeBound (..))
 import Valiant.Copy (CopyResult (..), copyIn, copyInBinary, copyOut)
+-- Empty import: Valiant.Dynamic is intentionally not re-exported (see the
+-- "Dynamic SQL" haddock note above). The bare import ensures haddock can
+-- resolve the "Valiant.Dynamic" cross-reference link.
 import Valiant.Dynamic ()
 import Valiant.Error (ConstraintViolation (..), catchConstraintViolation, constraintViolation, isDeadlockError, isForeignKeyViolation, isSerializationError, isUniqueViolation, pgErrorOf, sqlState)
 import Valiant.Execute (execute, executeBatch, executeMany, executeReturning, executeReturningMany, fetchAll, fetchAllFast, fetchAllVec, fetchAllWith, fetchBatchAll, fetchBatchOne, fetchExists, fetchFirst, fetchOne, fetchOneFast, fetchOneOr, fetchOneOrThrow, fetchScalar, forEach, rawExecute, rawFetchAll, rawFetchOne)
@@ -363,6 +366,9 @@ import PgWire.Connection (Connection, close, connect, connectString, simpleQuery
 import PgWire.Connection.Config (ConnConfig (..), TlsMode (..), defaultConnConfig)
 import PgWire.Pool (Pool, PoolStats (..), closePool, drainPool, newPool, poolIsAlive, poolStats, resize, retain, setPostCreateHook, setOnAcquireHook, setPreReleaseHook, withResource, withResourceTimeout)
 import PgWire.Pool.Config (PoolConfig (..), PoolLogger, QueueMode (..), RecyclingMethod (..), defaultPoolConfig, nullPoolLogger)
+-- Empty import: PgWire.Pool.Observation is not re-exported (events are an
+-- opt-in observability surface, see haddock note above). The bare import
+-- ensures haddock can resolve the cross-reference link.
 import PgWire.Pool.Observation ()
 
 import Data.ByteString (ByteString)

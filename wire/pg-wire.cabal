@@ -36,7 +36,6 @@ library
     PgWire.Connection
     PgWire.Connection.Config
     PgWire.Error
-    PgWire.MockServer
     PgWire.Pool
     PgWire.Pool.Config
     PgWire.Pool.Observation
@@ -83,6 +82,27 @@ library
     , stm                   >=2.5     && <2.6
     , async                 >=2.2     && <2.3
 
+-- Mock PostgreSQL server for testing client behaviour without a real
+-- database. Sub-library so this isn't part of the public pg-wire API.
+library mockserver
+  import:           warnings
+  visibility:       public
+  hs-source-dirs:   mockserver
+  default-language: GHC2021
+  default-extensions:
+    DerivingStrategies
+    LambdaCase
+    OverloadedStrings
+    RecordWildCards
+    StrictData
+  exposed-modules:
+    PgWire.MockServer
+  build-depends:
+    , base                  >=4.17    && <5
+    , bytestring            >=0.11    && <0.13
+    , network               >=3.1     && <3.3
+    , pg-wire
+
 test-suite pg-wire-test
   import:           warnings
   type:             exitcode-stdio-1.0
@@ -123,4 +143,5 @@ test-suite pg-wire-test
     , memory
     , nothunks
     , pg-wire
+    , pg-wire:mockserver
     , vector

@@ -5,7 +5,11 @@ license:         BSD-3-Clause
 license-file:    ../LICENSE
 build-type:      Simple
 
+common warnings
+  ghc-options: -Wall -Wcompat -Wno-unticked-promoted-constructors
+
 executable bench-compare
+  import:           warnings
   hs-source-dirs:   src
   main-is:          Main.hs
   default-language: GHC2021
