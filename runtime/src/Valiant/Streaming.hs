@@ -22,6 +22,7 @@
 module Valiant.Streaming
   ( withCursor
   , fetchBatch
+  , fetchAllCursor
   , CursorState (..)
   ) where
 
@@ -138,6 +139,26 @@ fetchBatch cs n = do
           writeIORef (csExhausted cs) True
           pure []
         else pure rows
+
+-- | Open a cursor, drain every batch, decode and return all rows.
+--
+-- Convenience wrapper used by streaming adapters that need to materialise
+-- a cursor result as a list. Must be called inside a transaction.
+fetchAllCursor :: Connection -> Statement p r -> p -> Int -> IO [r]
+fetchAllCursor conn stmt params batchSize =
+  withCursor conn stmt params batchSize $ \cs ->
+    let go !acc = do
+          batch <- fetchBatch cs batchSize
+          if null batch
+            then pure (reverse acc)
+            else do
+              decoded <- mapM (decodeRow (stmtDecode stmt)) batch
+              go (reverse decoded ++ acc)
+    in go []
+  where
+    decodeRow decode row = case decode row of
+      Left err -> throwPgWire (DecodeError (BS8.pack err))
+      Right !val -> pure val
 
 -- Internal ------------------------------------------------------------------
 
