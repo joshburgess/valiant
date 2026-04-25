@@ -163,7 +163,9 @@ test-suite valiant-integration
     , async        >=2.2  && <2.3
     , base         >=4.17 && <5
     , bytestring
+    , containers
     , hspec        >=2.11 && <2.13
+    , nothunks     >=0.1  && <0.3
     , valiant
     , pg-wire
     , stm          >=2.5  && <2.6

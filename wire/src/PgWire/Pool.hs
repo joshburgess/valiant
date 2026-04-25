@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 -- | Thread-safe connection pool for PostgreSQL.
 --
 -- Manages a set of reusable 'Connection's with configurable pool size,
@@ -30,7 +32,7 @@ module PgWire.Pool
   ) where
 
 import GHC.Generics (Generic)
-import NoThunks.Class (NoThunks)
+import NoThunks.Class (NoThunks (..), OnlyCheckWhnfNamed (..), allNoThunks)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (Async, async, cancel, race)
 import Control.Concurrent.STM
@@ -89,13 +91,31 @@ data ConnMeta = ConnMeta
   }
   deriving stock (Generic)
 
-instance NoThunks ConnMeta
+-- | 'UTCTime' is treated as opaque (its internal 'Day'/'DiffTime' are
+-- lazy in the @time@ package). Bounded size, not a leak target.
+instance NoThunks ConnMeta where
+  showTypeOf _ = "ConnMeta"
+  wNoThunks ctx (ConnMeta createdAt deadline) = allNoThunks
+    [ noThunks ctx (OnlyCheckWhnfNamed @"UTCTime" createdAt)
+    , noThunks ctx (OnlyCheckWhnfNamed @"UTCTime" deadline)
+    ]
 
 data PoolEntry = PoolEntry
   { peConn :: Connection
   , peCreatedAt :: UTCTime
   , peLastUsed :: IORef UTCTime
   }
+
+-- | Treats 'Connection', the @IORef UTCTime@, and 'UTCTime' itself as
+-- opaque references (their internal state is not pool-bookkeeping and
+-- 'UTCTime' has lazy fields in the @time@ package).
+instance NoThunks PoolEntry where
+  showTypeOf _ = "PoolEntry"
+  wNoThunks ctx (PoolEntry conn createdAt lastUsed) = allNoThunks
+    [ noThunks ctx (OnlyCheckWhnfNamed @"Connection" conn)
+    , noThunks ctx (OnlyCheckWhnfNamed @"UTCTime" createdAt)
+    , noThunks ctx (OnlyCheckWhnfNamed @"IORef UTCTime" lastUsed)
+    ]
 
 -- | Snapshot of pool statistics at a point in time, obtained via 'poolStats'.
 data PoolStats = PoolStats
@@ -569,7 +589,7 @@ release pool conn = do
             Just cm -> cmCreatedAt cm
             Nothing -> now
       lastUsed <- newIORef now
-      let entry = PoolEntry conn createdAt lastUsed
+      let !entry = PoolEntry conn createdAt lastUsed
       atomically $ modifyTVar' (pIdle pool) (Seq.|> entry)
 
 -- | Try to deliver a connection to a waiting thread. Loops through waiters,
@@ -754,7 +774,7 @@ warmerThread pool = go
               modifyTVar' (pConnMeta pool) (Map.insert (connBackendPid conn) (ConnMeta now deadline))
             runHook (pOnCreate pool) conn
             lastUsed <- newIORef now
-            let entry = PoolEntry conn now lastUsed
+            let !entry = PoolEntry conn now lastUsed
             atomically $ modifyTVar' (pIdle pool) (Seq.|> entry)
             pure True
           else pure False

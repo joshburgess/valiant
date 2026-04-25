@@ -3,9 +3,12 @@ module PoolSpec (spec) where
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (async, mapConcurrently, wait)
 import Control.Concurrent.MVar
-import Control.Concurrent.STM (newTVarIO, readTVarIO, modifyTVar', atomically)
+import Control.Concurrent.STM (TVar, newTVarIO, readTVarIO, modifyTVar', atomically)
 import Control.Exception (SomeException, try)
+import Control.Monad (replicateM_)
 import Data.IORef
+import NoThunks.Class (NoThunks, ThunkInfo, noThunks)
+import PgWire.Pool (pActive, pClosed, pConnMeta, pEffectiveSize, pIdle, pTotalCreated, pTotalDestroyed, pTotalTimeouts)
 import Valiant
 import TestSupport
 import Test.Hspec
@@ -418,3 +421,47 @@ spec = do
       stats <- poolStats pool
       psTotalTimeouts stats `shouldBe` 1
       closePool pool
+
+  describe "no-thunks invariant under churn" $ do
+    -- Regression guard. Catches future bugs of the form
+    --   writeTVar (pTotalCreated pool) (oldVal + 1)
+    -- where the stored value is a thunk rather than WHNF. Existing
+    -- code uses modifyTVar' / strict-evaluated values everywhere, so
+    -- this should remain green.
+    it "pool bookkeeping TVars stay thunk-free after churn" $ do
+      url <- requireDatabaseUrl
+      let cfg = defaultPoolConfig
+            { poolConnString = url
+            , poolSize = 4
+            , poolAcquireTimeout = 5
+            , poolMaxLifeJitter = 0
+            }
+      pool <- newPool cfg
+      -- Serial churn: forces counter increments and idle/active updates.
+      replicateM_ 200 $ withResource pool $ \conn -> do
+        _ <- simpleQuery conn "SELECT 1"
+        pure ()
+      -- Concurrent churn: stresses contention paths.
+      _ <- mapConcurrently
+        (\_ -> withResource pool $ \conn -> simpleQuery conn "SELECT 1")
+        [1 :: Int .. 50]
+      thunks <- concat <$> sequence
+        [ checkTVar "pIdle"            (pIdle pool)
+        , checkTVar "pActive"          (pActive pool)
+        , checkTVar "pClosed"          (pClosed pool)
+        , checkTVar "pEffectiveSize"   (pEffectiveSize pool)
+        , checkTVar "pTotalCreated"    (pTotalCreated pool)
+        , checkTVar "pTotalDestroyed"  (pTotalDestroyed pool)
+        , checkTVar "pTotalTimeouts"   (pTotalTimeouts pool)
+        , checkTVar "pConnMeta"        (pConnMeta pool)
+        ]
+      closePool pool
+      case thunks of
+        [] -> pure ()
+        leaks -> expectationFailure $ "Found thunks in pool state: " <> show leaks
+
+checkTVar :: NoThunks a => String -> TVar a -> IO [(String, ThunkInfo)]
+checkTVar name tvar = do
+  v <- readTVarIO tvar
+  result <- noThunks [name] v
+  pure $ maybe [] (\info -> [(name, info)]) result
