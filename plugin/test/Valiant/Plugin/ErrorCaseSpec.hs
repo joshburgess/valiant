@@ -112,7 +112,7 @@ spec = beforeAll_ (createDirectoryIfMissing True "/tmp/valiant-error-tests") $ d
       -- from the cache file.
       -- For now, test that the plugin at least processes the query call
       -- (doesn't crash with ValiantPluginRequired TypeError).
-      (code, _, stderr) <- compileWith defaultOpts
+      (_, _, stderr) <- compileWith defaultOpts
         "module InlineRewrite where\n\
         \import Valiant.Statement (Statement, query)\n\
         \import Data.Int (Int32)\n\

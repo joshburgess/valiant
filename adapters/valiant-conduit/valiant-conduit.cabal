@@ -8,7 +8,7 @@ description:
   both producing @ConduitT () r IO ()@ values compatible with the conduit
   ecosystem.
 license:         BSD-3-Clause
-license-file:    ../../LICENSE
+license-file:    LICENSE
 build-type:      Simple
 
 common warnings

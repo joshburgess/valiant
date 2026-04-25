@@ -10,5 +10,17 @@ packages: . runtime wire example deps/entropy plugin
           adapters/valiant-streamly
 tests: True
 
+package pg-wire
+  flags: +werror
+
+package valiant
+  flags: +werror
+
+package valiant-cli
+  flags: +werror
+
+package valiant-plugin
+  flags: +werror
+
 package text
   flags: -simdutf

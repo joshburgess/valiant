@@ -14,7 +14,6 @@ import GHC.Data.FastString (fsLit, unpackFS)
 import GHC.Hs
 import GHC.Plugins (GenLocated (..), Outputable, ppr, showSDocUnsafe)
 import GHC.Types.PkgQual (RawPkgQual (..))
-import GHC.Unit.Types (IsBootInterface (..))
 import GHC.Types.Name.Occurrence (mkVarOcc, occNameString)
 import GHC.Types.Name.Reader (mkRdrQual, rdrNameOcc)
 import GHC.Types.SourceText (SourceText (..), mkIntegralLit)
@@ -89,7 +88,7 @@ rewriteLExpr config (L loc expr) = do
   pure (L loc expr', rewritten)
 
 rewriteExpr :: PluginConfig -> HsExpr GhcPs -> Hsc (HsExpr GhcPs, Bool)
-rewriteExpr config (HsApp appAnn (L fLoc func) (L aLoc arg))
+rewriteExpr config (HsApp _ (L _ func) (L _ arg))
   -- queryFile "path.sql" — load SQL from file, look up cache by path+hash
   | isQueryFileRdr func
   , Just path <- extractParsedStringLit arg = do

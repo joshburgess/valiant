@@ -1,6 +1,5 @@
 module Valiant.Plugin.CacheSpec (spec) where
 
-import Control.Exception (SomeException, try)
 import Valiant.Plugin.Cache
 import System.Directory (doesFileExist)
 import System.IO.Temp (withSystemTempDirectory)
@@ -47,7 +46,3 @@ spec = do
               length (ceParams entry) `shouldBe` 1
               length (ceColumns entry) `shouldSatisfy` (> 0)
             Left err -> expectationFailure $ "Failed to parse cache file: " <> err
-
-isLeft :: Either a b -> Bool
-isLeft (Left _) = True
-isLeft _ = False

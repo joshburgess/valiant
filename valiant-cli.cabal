@@ -8,10 +8,26 @@ description:
   type metadata for the GHC source plugin to consume at compile time.
 license:         BSD-3-Clause
 license-file:    LICENSE
+author:          Josh Burgess
+maintainer:      joshualoganburgess@gmail.com
+category:        Database
+homepage:        https://github.com/joshburgess/valiant
+bug-reports:     https://github.com/joshburgess/valiant/issues
 build-type:      Simple
 
+source-repository head
+  type:     git
+  location: https://github.com/joshburgess/valiant
+
+flag werror
+  description: Enable -Werror for development builds.
+  default:     False
+  manual:      True
+
 common warnings
-  ghc-options: -Wall -Wcompat -Werror -Wno-unticked-promoted-constructors -funbox-strict-fields -fspecialise-aggressively
+  ghc-options: -Wall -Wcompat -Wno-unticked-promoted-constructors -funbox-strict-fields -fspecialise-aggressively
+  if flag(werror)
+    ghc-options: -Werror
 
 library
   import:           warnings
@@ -58,7 +74,7 @@ library
     , filepath              >=1.4     && <1.6
     , Glob                  >=0.10    && <0.11
     , optparse-applicative  >=0.18    && <0.19
-    , pg-wire
+    , pg-wire               ==0.1.*
     , text                  >=2.0     && <2.2
     , time                  >=1.12    && <1.15
     , vector                >=0.13    && <0.14

@@ -7,7 +7,7 @@ description:
   Provides cursor-based and fold-based producers as
   @Producer r IO ()@ values.
 license:         BSD-3-Clause
-license-file:    ../../LICENSE
+license-file:    LICENSE
 build-type:      Simple
 
 common warnings

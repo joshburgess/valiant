@@ -21,7 +21,7 @@ description:
     runEff . runValiant pool $ myApp
   @
 license:         BSD-3-Clause
-license-file:    ../../LICENSE
+license-file:    LICENSE
 build-type:      Simple
 
 common warnings
