@@ -4,6 +4,7 @@ module Valiant.CLI.SqlMetadata
   , defaultMetadata
   ) where
 
+import Data.List qualified as List
 import Data.Text (Text)
 import Data.Text qualified as T
 
@@ -31,7 +32,7 @@ defaultMetadata =
 -- Only lines starting with @-- valiant:@ (with optional leading whitespace)
 -- are recognised. The directives must appear before the first SQL keyword.
 parseSqlMetadata :: Text -> SqlMetadata
-parseSqlMetadata = foldl applyDirective defaultMetadata . extractDirectives
+parseSqlMetadata = List.foldl' applyDirective defaultMetadata . extractDirectives
 
 extractDirectives :: Text -> [(Text, Text)]
 extractDirectives sql =

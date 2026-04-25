@@ -5,6 +5,7 @@ module Valiant.CLI.Command.Generate
 
 import Data.Char (toUpper)
 import Data.List (intercalate, nub, sort)
+import Data.List qualified as List
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as T
@@ -45,7 +46,7 @@ runGenerate env opts = do
 -- @users/find_by_id.sql@ → key @"users"@, @posts/insert.sql@ → key @"posts"@
 -- Files at the root go under key @""@.
 groupByDirectory :: [SqlFile] -> Map String [SqlFile]
-groupByDirectory = foldl go Map.empty
+groupByDirectory = List.foldl' go Map.empty
   where
     go acc sf =
       let dir = takeDirectory (sqlRelPath sf)
@@ -125,7 +126,7 @@ renderModule env moduleName pairs =
 renderImports :: [(SqlFile, CacheEntry)] -> [String]
 renderImports pairs =
   let -- Group by module and collect types
-      grouped = Map.toAscList $ foldl groupImport Map.empty (concatMap collectImports pairs)
+      grouped = Map.toAscList $ List.foldl' groupImport Map.empty (concatMap collectImports pairs)
    in map renderImportLine grouped
 
 collectImports :: (SqlFile, CacheEntry) -> [(String, String)]
