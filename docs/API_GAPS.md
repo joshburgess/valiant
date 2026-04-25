@@ -102,11 +102,14 @@ Nice to have, uncommon use cases.
 Implemented in `Valiant.LargeObject` with `withLargeObject` bracket,
 import/export, streaming. Soundness-audited (#6, #9, #20, #27).
 
-### 3.2 Geometric Type Codecs
+### 3.2 Geometric Type Codecs (deferred)
 
 `point` (OID 600) is implemented in `Valiant.Binary.Point`. Remaining
 types (`line`, `box`, `path`, `polygon`, `circle`) are uncommon outside
 GIS applications, and PostGIS users typically use extension types.
+**Status**: deferred. We will add codecs on request. Users who need
+them today can read these as text via `CAST(x AS text)` and parse in
+Haskell, or define their own `PgDecode` instance.
 
 ### ~~3.3 ZonedTime for timestamptz~~ DONE
 
@@ -116,17 +119,22 @@ Implemented in `Valiant.Binary.Encode`/`Decode`.
 
 Implemented as `(TimeOfDay, TimeZone)` in `Valiant.Binary.Encode`/`Decode`.
 
-### 3.5 Dynamic Statement Builder
+### 3.5 Dynamic Statement Builder (deferred)
 
 For cases like dynamic filtering, optional WHERE clauses, dynamic
 ORDER BY. hasql-dynamic-statements provides a `Snippet` type for this.
 Less relevant for valiant since users can write multiple `.sql` files,
 but some use cases genuinely need dynamic SQL composition.
+**Status**: deferred. The compile-time validation story would need
+work to extend over composed snippets. For now, users who need dynamic
+SQL can fall back to `mkStatement` (no compile-time check) plus
+`pg-wire`'s extended-query primitives.
 
-### 3.6 money Type
+### 3.6 money Type (deferred)
 
 PG `money` type (OID 790). Uncommon; the PostgreSQL docs recommend
 using `numeric` instead. Users can `CAST(amount AS numeric)` in SQL.
+**Status**: deferred. We will add it on request.
 
 ### ~~3.7 Conduit / Streaming Library Integration~~ DONE
 
@@ -141,11 +149,13 @@ valiant-mtl.
 with round-trip coverage in `runtime/test/Valiant/TupleSpec.hs`.
 postgresql-simple goes to 20; 16 covers the realistic-schema envelope.
 
-### 3.9 refine Decoder Combinator
+### ~~3.9 refine Decoder Combinator~~ DONE
 
-hasql has `refine :: (a -> Either Text b) -> Value a -> Value b` for
-post-decode validation. Less relevant for us since decoders are
-plugin-generated, but could be useful for custom types.
+`refine` and `refineWith` in `Valiant.Binary.Decode` (re-exported from
+`Valiant`) wrap any `PgDecode` instance with a post-decode validation
+function returning `Either String b`. `refineWith` additionally prepends
+a context label to the error message. Coverage:
+`runtime/test/Valiant/Binary/RefineSpec.hs`.
 
 ---
 

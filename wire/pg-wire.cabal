@@ -16,6 +16,7 @@ category:        Database
 homepage:        https://github.com/joshburgess/valiant
 bug-reports:     https://github.com/joshburgess/valiant/issues
 build-type:      Simple
+extra-doc-files: README.md
 
 source-repository head
   type:     git

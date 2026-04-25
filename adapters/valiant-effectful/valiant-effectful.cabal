@@ -22,10 +22,27 @@ description:
   @
 license:         BSD-3-Clause
 license-file:    LICENSE
+author:          Josh Burgess
+maintainer:      joshualoganburgess@gmail.com
+category:        Database
+homepage:        https://github.com/joshburgess/valiant
+bug-reports:     https://github.com/joshburgess/valiant/issues
 build-type:      Simple
 
+source-repository head
+  type:     git
+  location: https://github.com/joshburgess/valiant
+  subdir:   adapters/valiant-effectful
+
+flag werror
+  description: Enable -Werror for development builds.
+  default:     False
+  manual:      True
+
 common warnings
-  ghc-options: -Wall -Wcompat -Werror -Wno-unticked-promoted-constructors -funbox-strict-fields -fspecialise-aggressively
+  ghc-options: -Wall -Wcompat -Wno-unticked-promoted-constructors -funbox-strict-fields -fspecialise-aggressively
+  if flag(werror)
+    ghc-options: -Werror
 
 library
   import:           warnings
@@ -47,8 +64,8 @@ library
   build-depends:
     , base            >=4.17 && <5
     , effectful-core  >=2.3  && <2.6
-    , valiant
-    , pg-wire
+    , valiant         >=0.1  && <0.2
+    , pg-wire         >=0.1  && <0.2
     , vector          >=0.12 && <0.14
 
 test-suite valiant-effectful-test

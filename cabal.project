@@ -22,5 +22,29 @@ package valiant-cli
 package valiant-plugin
   flags: +werror
 
+package valiant-bluefin
+  flags: +werror
+
+package valiant-conduit
+  flags: +werror
+
+package valiant-effectful
+  flags: +werror
+
+package valiant-fused-effects
+  flags: +werror
+
+package valiant-mtl
+  flags: +werror
+
+package valiant-pipes
+  flags: +werror
+
+package valiant-streaming
+  flags: +werror
+
+package valiant-streamly
+  flags: +werror
+
 package text
   flags: -simdutf

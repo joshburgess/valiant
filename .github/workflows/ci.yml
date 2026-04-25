@@ -166,6 +166,36 @@ jobs:
           cabal test valiant-streaming-test
           cabal test valiant-streamly-test
 
+  # ── Hackage hygiene ───────────────────────────────────────────────
+  # Run `cabal check` in each publishable package and verify `cabal sdist`
+  # produces a tarball. Catches metadata regressions (missing bounds,
+  # missing category/maintainer, absent README) before they reach a
+  # release branch.
+  cabal-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{ env.PRIMARY_GHC }}
+          cabal-version: ${{ env.CABAL_VERSION }}
+      - name: cabal check (all publishable packages)
+        run: |
+          set -e
+          for d in . wire runtime plugin adapters/valiant-bluefin \
+                   adapters/valiant-conduit adapters/valiant-effectful \
+                   adapters/valiant-fused-effects adapters/valiant-mtl \
+                   adapters/valiant-pipes adapters/valiant-streaming \
+                   adapters/valiant-streamly; do
+            echo "=== cabal check in $d ==="
+            (cd "$d" && cabal check)
+          done
+      - name: cabal sdist (all packages)
+        run: |
+          cabal update
+          cabal sdist all
+
   # ── HLint ─────────────────────────────────────────────────────────
   hlint:
     runs-on: ubuntu-24.04

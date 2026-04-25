@@ -14,6 +14,7 @@ category:        Database
 homepage:        https://github.com/joshburgess/valiant
 bug-reports:     https://github.com/joshburgess/valiant/issues
 build-type:      Simple
+extra-doc-files: README.md
 
 source-repository head
   type:     git
@@ -224,4 +225,4 @@ benchmark valiant-bench
     , text
     , time
     , vector
-  ghc-options: -threaded -rtsopts -O2 "-with-rtsopts=-I0 -A32m"
+  ghc-options: -threaded -rtsopts "-with-rtsopts=-I0 -A32m"
