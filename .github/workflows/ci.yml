@@ -33,6 +33,12 @@ jobs:
           cabal-version: ${{ env.CABAL_VERSION }}
       - name: Pin GHC in cabal.project.local
         run: echo "with-compiler: ghc-${{ matrix.ghc }}" > cabal.project.local
+      - name: Drop cabal.project.freeze for non-primary GHC
+        # The freeze file pins versions resolved against the primary GHC
+        # (e.g. text-2.1 is incompatible with GHC 9.6's bundled text-2.0).
+        # For matrix GHCs, let the solver pick fresh versions.
+        if: matrix.ghc != env.PRIMARY_GHC
+        run: rm -f cabal.project.freeze
       - uses: actions/cache@v4
         with:
           path: |
@@ -72,6 +78,12 @@ jobs:
           cabal-version: ${{ env.CABAL_VERSION }}
       - name: Pin GHC in cabal.project.local
         run: echo "with-compiler: ghc-${{ matrix.ghc }}" > cabal.project.local
+      - name: Drop cabal.project.freeze for non-primary GHC
+        # The freeze file pins versions resolved against the primary GHC
+        # (e.g. text-2.1 is incompatible with GHC 9.6's bundled text-2.0).
+        # For matrix GHCs, let the solver pick fresh versions.
+        if: matrix.ghc != env.PRIMARY_GHC
+        run: rm -f cabal.project.freeze
       - uses: actions/cache/restore@v4
         with:
           path: |
