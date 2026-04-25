@@ -80,6 +80,8 @@ test-suite valiant-plugin-test
   default-extensions:
     OverloadedStrings
 
+  ghc-options: -rtsopts "-with-rtsopts=-K8K"
+
   other-modules:
     Valiant.Plugin.ConfigSpec
     Valiant.Plugin.CacheSpec
@@ -116,6 +118,7 @@ test-suite valiant-plugin-e2e
     -fplugin=Valiant.Plugin
     -fplugin-opt=Valiant.Plugin:sql-dir=../sql
     -fplugin-opt=Valiant.Plugin:cache-dir=../.valiant
+    -rtsopts "-with-rtsopts=-K8K"
 
   build-depends:
     , base           >=4.17 && <5

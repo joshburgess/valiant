@@ -107,6 +107,8 @@ test-suite valiant-cli-test
   default-extensions:
     OverloadedStrings
 
+  ghc-options: -rtsopts "-with-rtsopts=-K8K"
+
   other-modules:
     Valiant.CLI.CacheSpec
     Valiant.CLI.CustomTypesSpec

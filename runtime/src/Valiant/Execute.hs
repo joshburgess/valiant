@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-full-laziness #-}
+
 -- | Query execution functions using the PostgreSQL extended query protocol.
 --
 -- All functions use binary format for both parameters and results,
@@ -300,12 +302,14 @@ fetchAllFast :: (FromRowFast r) => Connection -> Statement p r -> p -> IO [r]
 fetchAllFast conn stmt params = do
   rows <- fetchRowsRaw conn stmt params
   pure (map fromRowFast rows)
+{-# INLINABLE fetchAllFast #-}
 
 -- | Like 'fetchOne' but uses 'FromRowFast' for faster decoding.
 fetchOneFast :: (FromRowFast r) => Connection -> Statement p r -> p -> IO (Maybe r)
 fetchOneFast conn stmt params = do
   mRow <- fetchFirstRowRaw conn stmt params
   pure (fmap fromRowFast mRow)
+{-# INLINABLE fetchOneFast #-}
 
 ------------------------------------------------------------------------
 -- Commands

@@ -81,6 +81,8 @@ test-suite valiant-effectful-test
     OverloadedStrings
     TypeOperators
 
+  ghc-options: -rtsopts "-with-rtsopts=-K8K"
+
   build-depends:
     , base            >=4.17 && <5
     , bytestring      >=0.11 && <0.13

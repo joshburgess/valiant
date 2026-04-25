@@ -387,14 +387,14 @@ retain pool predicate = do
 -- @SET statement_timeout@. If the hook throws, the exception is silently
 -- caught and the connection is still placed in the pool.
 setPostCreateHook :: Pool -> (Connection -> IO ()) -> IO ()
-setPostCreateHook pool = writeIORef (pOnCreate pool)
+setPostCreateHook pool hook = writeIORef (pOnCreate pool) $! hook
 
 -- | Set a hook called each time a connection is handed out to a caller via 'withResource'.
 --
 -- Runs after any recycling\/health checks have passed. If the hook throws, the
 -- exception is silently caught and the connection is still provided.
 setOnAcquireHook :: Pool -> (Connection -> IO ()) -> IO ()
-setOnAcquireHook pool = writeIORef (pOnAcquire pool)
+setOnAcquireHook pool hook = writeIORef (pOnAcquire pool) $! hook
 
 -- | Set a hook called before a connection is returned to the idle pool.
 --
@@ -403,7 +403,7 @@ setOnAcquireHook pool = writeIORef (pOnAcquire pool)
 -- such as @RESET ALL@ or @DISCARD TEMP@. If the hook throws, the exception is
 -- silently caught.
 setPreReleaseHook :: Pool -> (Connection -> IO ()) -> IO ()
-setPreReleaseHook pool = writeIORef (pOnRelease pool)
+setPreReleaseHook pool hook = writeIORef (pOnRelease pool) $! hook
 
 -- Internal ----------------------------------------------------------------
 

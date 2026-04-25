@@ -58,6 +58,8 @@ test-suite valiant-conduit-test
   default-extensions:
     OverloadedStrings
 
+  ghc-options: -rtsopts "-with-rtsopts=-K8K"
+
   other-modules:
     TestSupport
 

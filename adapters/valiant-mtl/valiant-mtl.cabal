@@ -73,7 +73,7 @@ test-suite valiant-mtl-test
   default-extensions:
     FlexibleInstances
     OverloadedStrings
-  ghc-options: -Wno-orphans
+  ghc-options: -Wno-orphans -rtsopts "-with-rtsopts=-K8K"
 
   other-modules:
     TestSupport

@@ -1,4 +1,5 @@
 {-# LANGUAGE ExistentialQuantification #-}
+{-# OPTIONS_GHC -fno-full-laziness #-}
 
 -- | Pipelined query execution for batching multiple independent queries
 -- into a single network round-trip.

@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-full-laziness #-}
+
 -- | Pipes streaming adapter for valiant.
 --
 -- Produces @Producer r IO ()@ values from query results, enabling

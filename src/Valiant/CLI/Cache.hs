@@ -11,8 +11,9 @@ module Valiant.CLI.Cache
   , ensureCacheDir
   ) where
 
-import Data.Aeson (FromJSON (..), ToJSON (..), Value (..), eitherDecode, object, withObject, withText, (.:), (.:?), (.=))
+import Data.Aeson (FromJSON (..), ToJSON (..), Value (..), eitherDecodeStrict, object, withObject, withText, (.:), (.:?), (.=))
 import Data.Aeson.Encode.Pretty (encodePretty)
+import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as LBS
 import Data.List (find, isSuffixOf)
 import Data.Text (Text)
@@ -190,8 +191,10 @@ writeCacheEntry cacheDir entry = do
 -- | Read a 'CacheEntry' from a JSON file.
 readCacheEntry :: FilePath -> IO (Either String CacheEntry)
 readCacheEntry path = do
-  bytes <- LBS.readFile path
-  pure (eitherDecode bytes)
+  -- Strict read: closes the handle before decoding, avoiding the
+  -- lazy-I/O handle leak when callers ignore the result on error.
+  bytes <- BS.readFile path
+  pure (eitherDecodeStrict bytes)
 
 -- | Find a cache file matching the given SQL file path and content hash.
 findCacheFile :: FilePath -> FilePath -> Text -> IO (Maybe CacheEntry)

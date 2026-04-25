@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-full-laziness #-}
+
 -- | Streaming adapter for valiant using the @streaming@ library.
 --
 -- Produces @Stream (Of r) IO ()@ values from query results, enabling

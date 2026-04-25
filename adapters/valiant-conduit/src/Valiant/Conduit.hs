@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-full-laziness #-}
+
 -- | Conduit streaming adapter for valiant.
 --
 -- Stream query results as @ConduitT@ sources, enabling integration with

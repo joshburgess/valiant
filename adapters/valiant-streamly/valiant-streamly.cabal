@@ -57,6 +57,8 @@ test-suite valiant-streamly-test
   default-extensions:
     OverloadedStrings
 
+  ghc-options: -rtsopts "-with-rtsopts=-K8K"
+
   other-modules:
     TestSupport
 

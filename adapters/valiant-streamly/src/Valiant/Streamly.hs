@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-full-laziness #-}
+
 -- | Streamly streaming adapter for valiant.
 --
 -- Produces @Stream IO r@ values from query results, enabling

@@ -12,8 +12,8 @@ module Valiant.Plugin.Cache
   , cacheFileName
   ) where
 
-import Data.Aeson (FromJSON (..), eitherDecode, withObject, withText, (.:), (.:?))
-import Data.ByteString.Lazy qualified as LBS
+import Data.Aeson (FromJSON (..), eitherDecodeStrict, withObject, withText, (.:), (.:?))
+import Data.ByteString qualified as BS
 import Data.List (find, isSuffixOf)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -108,7 +108,7 @@ instance FromJSON CacheColumn where
 -- File operations ---------------------------------------------------------
 
 readCacheEntry :: FilePath -> IO (Either String CacheEntry)
-readCacheEntry path = eitherDecode <$> LBS.readFile path
+readCacheEntry path = eitherDecodeStrict <$> BS.readFile path
 
 findCacheFile :: FilePath -> FilePath -> Text -> IO (Maybe CacheEntry)
 findCacheFile cacheDir sqlRelPath sqlHash = do
