@@ -143,6 +143,25 @@ benchmarks =
         whnfIO (cursorDrain stmtListAll10k 1000)
     , bench "cursor 10k rows, batch 10000" $
         whnfIO (cursorDrain stmtListAll10k 10000)
+
+    -- fetchAllCursor variants (decode + materialise the full result list).
+    -- Compared against cursorDrain (which only counts), the gap is
+    -- decode + accumulation cost.
+    , bench "fetchAllCursor 1k rows, batch 100" $
+        whnfIO $ do
+          p <- getPool
+          withTransaction p $ \tx ->
+            length <$> fetchAllCursor (txConn tx) stmtListAll1k () 100
+    , bench "fetchAllCursor 10k rows, batch 100" $
+        whnfIO $ do
+          p <- getPool
+          withTransaction p $ \tx ->
+            length <$> fetchAllCursor (txConn tx) stmtListAll10k () 100
+    , bench "fetchAllCursor 10k rows, batch 1000" $
+        whnfIO $ do
+          p <- getPool
+          withTransaction p $ \tx ->
+            length <$> fetchAllCursor (txConn tx) stmtListAll10k () 1000
     ]
   ]
 
