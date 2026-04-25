@@ -1,7 +1,9 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module Valiant.Binary.Decode
-  () where
+  ( refine
+  , refineWith
+  ) where
 
 import Data.Bits (shiftL, (.|.))
 import Data.ByteString (ByteString)
@@ -36,6 +38,25 @@ pgEpochOffsetSeconds = 946684800
 pgEpochDay :: Day
 pgEpochDay = fromGregorian 2000 1 1
 {-# INLINE pgEpochDay #-}
+
+-- Refinement --------------------------------------------------------------
+
+-- | Apply a refinement check after binary decode. Useful for types whose
+-- binary representation is the same as a primitive but which carry
+-- additional invariants (e.g. validated email, UUID-formatted Text,
+-- positive Int32, enum strings).
+refine :: PgDecode a => (a -> Either String b) -> ByteString -> Either String b
+refine check bs = pgDecode bs >>= check
+{-# INLINE refine #-}
+
+-- | Like 'refine' but prepends a context prefix to error messages.
+refineWith :: PgDecode a => String -> (a -> Either String b) -> ByteString -> Either String b
+refineWith ctx check bs = case pgDecode bs of
+  Left e -> Left (ctx <> ": " <> e)
+  Right a -> case check a of
+    Left e -> Left (ctx <> ": " <> e)
+    Right b -> Right b
+{-# INLINE refineWith #-}
 
 -- Helpers -----------------------------------------------------------------
 

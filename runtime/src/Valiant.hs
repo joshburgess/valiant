@@ -53,6 +53,7 @@ module Valiant
   , fetchOne
   , fetchAll
   , fetchAllVec
+  , fetchAllUnboxed
   , fetchAllWith
   , fetchScalar
   , fetchOneOrThrow
@@ -300,6 +301,24 @@ module Valiant
   , PgEncode (..)
   , PgDecode (..)
 
+    -- ** Refinement helpers
+    -- | Validate decoded values against extra invariants without writing a
+    -- full 'PgDecode' instance. Useful for newtypes whose binary
+    -- representation matches a primitive but whose values must satisfy a
+    -- predicate (e.g. non-empty 'Text', positive 'Int32', enum strings).
+    --
+    -- @
+    -- newtype Email = Email Text
+    --
+    -- instance PgDecode Email where
+    --   pgDecode = refineWith \"email\" $ \\t ->
+    --     if Text.elem \'@\' t
+    --       then Right (Email t)
+    --       else Left (\"missing @ in \" <> show t)
+    -- @
+  , refine
+  , refineWith
+
     -- * Binary types
     -- | PostgreSQL types that don't have a standard Haskell equivalent.
   , PgInet (..)
@@ -333,6 +352,7 @@ import GHC.Generics (Generic)
 import Valiant.Advisory (advisoryLock, advisoryLockTx, advisoryUnlock, withAdvisoryLock, withAdvisoryLockTry, withAdvisoryLockTx, withAdvisoryLockTxTry)
 import Valiant.Batch (fetchByIds)
 import Valiant.Binary.Composite (CompositeField (..))
+import Valiant.Binary.Decode (refine, refineWith)
 import Valiant.Binary.HStore (PgHStore (..), hstoreFromList, hstoreToList)
 import Valiant.Binary.Inet (PgInet (..), ipv4, ipv4Host, ipv6, ipv6Host, inetToText)
 import Valiant.Binary.MacAddr (PgMacAddr (..), macAddr, macAddrToText)
@@ -346,7 +366,7 @@ import Valiant.Copy (CopyResult (..), copyIn, copyInBinary, copyOut)
 -- resolve the "Valiant.Dynamic" cross-reference link.
 import Valiant.Dynamic ()
 import Valiant.Error (ConstraintViolation (..), catchConstraintViolation, constraintViolation, isDeadlockError, isForeignKeyViolation, isSerializationError, isUniqueViolation, pgErrorOf, sqlState)
-import Valiant.Execute (execute, executeBatch, executeMany, executeReturning, executeReturningMany, fetchAll, fetchAllFast, fetchAllVec, fetchAllWith, fetchBatchAll, fetchBatchOne, fetchExists, fetchFirst, fetchOne, fetchOneFast, fetchOneOr, fetchOneOrThrow, fetchScalar, forEach, rawExecute, rawFetchAll, rawFetchOne)
+import Valiant.Execute (execute, executeBatch, executeMany, executeReturning, executeReturningMany, fetchAll, fetchAllFast, fetchAllUnboxed, fetchAllVec, fetchAllWith, fetchBatchAll, fetchBatchOne, fetchExists, fetchFirst, fetchOne, fetchOneFast, fetchOneOr, fetchOneOrThrow, fetchScalar, forEach, rawExecute, rawFetchAll, rawFetchOne)
 import Valiant.FromRowFast (FromRowFast (..), DecodeColumnFast (..))
 import Valiant.Fold (RowFold (..), executeWithFold)
 import Valiant.LargeObject (LoFd (..), LoMode (..), loClose, loCreate, loExport, loImport, loOpen, loRead, loSeek, loTell, loTruncate, loUnlink, loWrite, withLargeObject)

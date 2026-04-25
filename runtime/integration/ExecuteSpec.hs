@@ -3,6 +3,7 @@ module ExecuteSpec (spec) where
 import Control.Exception (try)
 import Data.Int (Int32, Int64)
 import Data.Text (Text)
+import Data.Vector.Unboxed qualified as U
 import Valiant
 import PgWire.Error (PgWireError (..))
 import TestSupport
@@ -17,6 +18,11 @@ stmtListAll :: Statement () (Int32, Text)
 stmtListAll = mkStatement
   "SELECT id, name FROM users ORDER BY id"
   [] ["id", "name"] "<test>"
+
+stmtListIds :: Statement () Int32
+stmtListIds = mkStatement
+  "SELECT id FROM users ORDER BY id"
+  [] ["id"] "<test>"
 
 stmtInsert :: Statement (Text, Maybe Text) ()
 stmtInsert = mkStatement
@@ -67,6 +73,19 @@ spec = do
         insertTestUsers conn
         rows <- fetchAll conn stmtListAll ()
         length rows `shouldBe` 5
+
+  describe "fetchAllUnboxed" $ do
+    it "returns empty unboxed vector for no rows" $ do
+      withTestConnection $ \conn -> withSchema conn $ do
+        ids <- fetchAllUnboxed conn stmtListIds () :: IO (U.Vector Int32)
+        U.length ids `shouldBe` 0
+
+    it "returns all rows in an unboxed vector" $ do
+      withTestConnection $ \conn -> withSchema conn $ do
+        insertTestUsers conn
+        ids <- fetchAllUnboxed conn stmtListIds () :: IO (U.Vector Int32)
+        U.length ids `shouldBe` 5
+        U.toList ids `shouldSatisfy` all (> 0)
 
   describe "execute" $ do
     it "inserts a row and returns rows affected" $ do

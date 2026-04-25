@@ -13,6 +13,7 @@ import Valiant.Binary.JSONSpec qualified as JSONSpec
 import Valiant.Binary.NewtypeSpec qualified as NewtypeSpec
 import Valiant.Binary.PropertyHedgehogSpec qualified as PropertyHedgehogSpec
 import Valiant.Binary.RangeSpec qualified as RangeSpec
+import Valiant.Binary.RefineSpec qualified as RefineSpec
 import Valiant.Binary.ScientificSpec qualified as ScientificSpec
 import Valiant.Binary.UUIDSpec qualified as UUIDSpec
 import Valiant.FromRowSpec qualified as FromRowSpec
@@ -27,6 +28,7 @@ main = hspec $ do
   describe "Valiant.Binary.Array" ArraySpec.spec
   describe "Valiant.Binary.Composite" CompositeSpec.spec
   describe "Valiant.Binary.Range" RangeSpec.spec
+  describe "Valiant.Binary.Refine" RefineSpec.spec
   describe "Valiant.Binary.Scientific" ScientificSpec.spec
   describe "Valiant.Binary.HStore" HStoreSpec.spec
   describe "Valiant.Binary.Inet" InetSpec.spec

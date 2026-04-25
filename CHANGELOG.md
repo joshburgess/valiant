@@ -51,9 +51,18 @@ libraries: `valiant-bluefin`, `valiant-conduit`, `valiant-effectful`,
 - **Strict by default.** `StrictData`, `-funbox-strict-fields`, and
   `-fspecialise-aggressively` across all libraries. `-fno-full-laziness`
   on streaming-sensitive modules. `nothunks` invariants on the pool.
-- **Tested.** 267 unit tests in `pg-wire`, 275 in `valiant`, 99
+- **Tested.** 267 unit tests in `pg-wire`, 282 in `valiant`, 101
   integration tests against a real Postgres, plus property tests with
   hedgehog and a state-machine test for the connection pool.
+
+### Added (post-tag)
+
+- `refine` and `refineWith` combinators in `Valiant.Binary.Decode` for
+  validating decoded values against extra invariants without writing a
+  full `PgDecode` instance.
+- `fetchAllUnboxed`: an unboxed-vector variant of `fetchAllVec` for
+  fixed-size primitive result columns. Eliminates per-element pointer
+  indirection for `Int32`/`Int64`/`Double`/`Bool` and tuples of those.
 
 ### Documentation
 

@@ -127,6 +127,7 @@ test-suite valiant-test
     Valiant.Binary.NewtypeSpec
     Valiant.Binary.PropertyHedgehogSpec
     Valiant.Binary.RangeSpec
+    Valiant.Binary.RefineSpec
     Valiant.Binary.ScientificSpec
     Valiant.Binary.UUIDSpec
     Valiant.ErrorSpec

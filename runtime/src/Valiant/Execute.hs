@@ -15,6 +15,7 @@ module Valiant.Execute
     fetchOne
   , fetchAll
   , fetchAllVec
+  , fetchAllUnboxed
   , fetchAllWith
   , fetchScalar
   , fetchOneOrThrow
@@ -53,6 +54,7 @@ import Data.HashPSQ qualified as PSQ
 import Data.Maybe (fromMaybe)
 import Data.Vector (Vector)
 import Data.Vector qualified as V
+import Data.Vector.Unboxed qualified as U
 import Data.Word (Word32, Word64)
 import PgWire.Async (Request (..), Response (..), ResponseCollector (..), submitRequest, submitExclusive)
 import PgWire.Connection (Connection (..))
@@ -173,6 +175,43 @@ fetchAllVec conn stmt params = do
         Left err -> throwPgWire (DecodeError (BS8.pack err))
         Right !val -> pure val) rawVec
     _ -> throwPgWire (ProtocolError "fetchAllVec: unexpected response type")
+
+-- | Like 'fetchAllVec' but stores results in an unboxed 'Data.Vector.Unboxed.Vector'.
+-- Eliminates per-element pointer indirection for fixed-size primitive
+-- result types, reducing memory by 2-4x for queries returning large
+-- numbers of @Int32@, @Int64@, @Double@, scalar pairs, etc.
+--
+-- The result type must have an 'U.Unbox' instance. Common cases like
+-- 'Int32', 'Int64', 'Double', 'Bool', and tuples of those work out of
+-- the box; for newtype wrappers use @-XDeriveAnyClass@\/@-XDerivingVia@
+-- with @Data.Vector.Unboxed.Deriving@.
+--
+-- @
+-- ids :: U.Vector Int32 <- fetchAllUnboxed conn allUserIds ()
+-- @
+fetchAllUnboxed
+  :: U.Unbox r => Connection -> Statement p r -> p -> IO (U.Vector r)
+fetchAllUnboxed conn stmt params = do
+  (name, needsParse) <- lookupOrAllocStmt conn stmt
+  let encodedParams = stmtEncode stmt params
+      bindExec =
+        [ Bind "" name binaryFmtVec encodedParams binaryFmtVec
+        , Execute "" 0
+        , Sync
+        ]
+      msgs = if needsParse
+        then Parse name (stmtSQL stmt) (V.map Oid.unOid (stmtParamOids stmt)) : bindExec
+        else bindExec
+  resp <- submitRequest (connAsync conn) $ ReqExtendedQuery msgs CollectRowsVec
+  case resp of
+    RespRowsVec rawVec -> do
+      when needsParse $ cacheStmt conn (stmtSQL stmt) name
+      let decode = stmtDecode stmt
+      U.generateM (V.length rawVec) $ \i ->
+        case decode (V.unsafeIndex rawVec i) of
+          Left err -> throwPgWire (DecodeError (BS8.pack err))
+          Right !val -> pure val
+    _ -> throwPgWire (ProtocolError "fetchAllUnboxed: unexpected response type")
 
 -- | Like 'fetchAll' but applies a transformation to each decoded row.
 -- Useful for mapping database rows to domain types without an intermediate list.
