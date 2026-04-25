@@ -196,7 +196,7 @@ codec benchmarks, pool benchmarks, architecture comparison, optimization
 techniques, and the complete optimization journey. Archived numbers with
 CSV data are in [docs/benchmark-results/](docs/benchmark-results/README.md);
 the [`bench-compare`](bench-compare/README.md) suite reproduces them
-locally or via the weekly [Benchmarks workflow](.github/workflows/benchmarks.yml).
+locally or via the [Benchmarks workflow](.github/workflows/benchmarks.yml).
 
 ## Project structure
 
