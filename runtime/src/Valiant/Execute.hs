@@ -40,7 +40,10 @@ module Valiant.Execute
     -- * Pipelined batch reads
   , fetchBatchOne
   , fetchBatchAll
-    -- * Internal (used by other Valiant modules)
+    -- * Internal
+    -- | This export is only visible to other modules within @valiant@
+    -- (Pipeline, Fold). It is not part of the stable public API; do not
+    -- rely on it from downstream code.
   , ensurePrepared
   ) where
 

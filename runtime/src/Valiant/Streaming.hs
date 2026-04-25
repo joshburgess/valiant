@@ -23,7 +23,7 @@ module Valiant.Streaming
   ( withCursor
   , fetchBatch
   , fetchAllCursor
-  , CursorState (..)
+  , CursorState
   ) where
 
 import Control.Exception (SomeException, catch, onException)

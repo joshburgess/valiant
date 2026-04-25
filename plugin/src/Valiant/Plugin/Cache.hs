@@ -1,3 +1,6 @@
+-- | Internal: cache entry types for the @valiant-plugin@. The public
+-- entry point is "Valiant.Plugin"; this module is exposed only so
+-- the plugin's test suite can exercise it. Not stable API.
 module Valiant.Plugin.Cache
   ( CacheEntry (..)
   , CacheParam (..)

@@ -9,6 +9,7 @@ module Valiant.Logging
   , poolLoggerFromLogger
   ) where
 
+import Control.Exception (SomeException, displayException, throwIO, try)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.Time (NominalDiffTime, diffUTCTime, getCurrentTime)
@@ -60,16 +61,23 @@ stderrLogger minLevel level event
   | level >= minLevel = hPutStrLn stderr (formatEvent level event)
   | otherwise = pure ()
 
--- | Bracket a query with timing and logging.
+-- | Bracket a query with timing and logging. Emits 'QueryStart',
+-- then either 'QueryComplete' on success or 'QueryError' on
+-- exception. Exceptions are re-raised after logging.
 withQueryLogging :: Logger -> ByteString -> IO a -> IO a
 withQueryLogging logger sql action = do
   logger Debug (QueryStart sql)
   start <- getCurrentTime
-  result <- action
+  outcome <- try action
   end <- getCurrentTime
   let elapsed = diffUTCTime end start
-  logger Debug (QueryComplete sql elapsed 0)
-  pure result
+  case outcome of
+    Right result -> do
+      logger Debug (QueryComplete sql elapsed 0)
+      pure result
+    Left (e :: SomeException) -> do
+      logger Warn (QueryError sql elapsed (BS8.pack (displayException e)))
+      throwIO e
 
 -- | Create a 'PoolLogger' that forwards pool events to a 'Logger' as
 -- structured 'LogEvent's. Pass this as the @poolLogger@ field when

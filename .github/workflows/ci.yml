@@ -180,21 +180,29 @@ jobs:
         with:
           ghc-version: ${{ env.PRIMARY_GHC }}
           cabal-version: ${{ env.CABAL_VERSION }}
-      - name: cabal check (all publishable packages)
+      - name: cabal check + sdist (publishable packages only)
+        # `cabal sdist all` would also produce tarballs for the vendored
+        # `deps/entropy` and the `valiant-example` sample, neither of
+        # which we publish. Iterate the publishable list explicitly.
         run: |
           set -e
-          for d in . wire runtime plugin adapters/valiant-bluefin \
-                   adapters/valiant-conduit adapters/valiant-effectful \
-                   adapters/valiant-fused-effects adapters/valiant-mtl \
-                   adapters/valiant-pipes adapters/valiant-streaming \
-                   adapters/valiant-streamly; do
-            echo "=== cabal check in $d ==="
-            (cd "$d" && cabal check)
-          done
-      - name: cabal sdist (all packages)
-        run: |
           cabal update
-          cabal sdist all
+          for pkg in pg-wire valiant valiant-plugin valiant-cli \
+                     valiant-bluefin valiant-conduit valiant-effectful \
+                     valiant-fused-effects valiant-mtl valiant-pipes \
+                     valiant-streaming valiant-streamly; do
+            echo "=== cabal check ($pkg) ==="
+            case "$pkg" in
+              valiant-cli)        dir=. ;;
+              pg-wire)            dir=wire ;;
+              valiant)            dir=runtime ;;
+              valiant-plugin)     dir=plugin ;;
+              valiant-*)          dir="adapters/$pkg" ;;
+            esac
+            (cd "$dir" && cabal check)
+            echo "=== cabal sdist ($pkg) ==="
+            cabal sdist "$pkg"
+          done
 
   # ── HLint ─────────────────────────────────────────────────────────
   hlint:

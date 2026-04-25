@@ -14,6 +14,7 @@ homepage:        https://github.com/joshburgess/valiant
 bug-reports:     https://github.com/joshburgess/valiant/issues
 build-type:      Simple
 extra-doc-files: README.md
+tested-with:     GHC ==9.6.7 || ==9.8.4 || ==9.10.3
 
 source-repository head
   type:     git
@@ -44,8 +45,12 @@ library
   exposed-modules:
     Valiant.Plugin
     Valiant.Plugin.Cache
-    Valiant.Plugin.Compat
     Valiant.Plugin.Config
+
+  -- Internal modules. Exposed only because the test suite imports a
+  -- subset; treat as private and subject to change without notice.
+  other-modules:
+    Valiant.Plugin.Compat
     Valiant.Plugin.Errors
     Valiant.Plugin.Hash
     Valiant.Plugin.Rewrite

@@ -232,7 +232,7 @@ module Valiant
     -- | Stream large result sets using server-side cursors, fetching
     -- rows in batches without loading everything into memory.
     -- Must be used inside a transaction.
-  , CursorState (..)
+  , CursorState
   , withCursor
   , fetchBatch
   , fetchAllCursor
@@ -377,7 +377,7 @@ import Valiant.NamedParams (NamedStatement, ToNamedParams (..), mkStatementNamed
 import Valiant.Notify (Notification (..), listen, unlisten, waitForNotification, waitForNotificationTimeout)
 import Valiant.Pipeline (Pipeline, pipeFetchOne, pipeFetchAll, pipeFetchScalar, pipeExecute, runPipeline)
 import Valiant.Statement (Statement (..), mkStatement, query, queryFile, queryFileAs)
-import Valiant.Streaming (CursorState (..), fetchAllCursor, fetchBatch, withCursor)
+import Valiant.Streaming (CursorState, fetchAllCursor, fetchBatch, withCursor)
 import Valiant.ToParams (EncodeField (..), ToParams (..))
 import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
 import Valiant.Transaction (IsolationLevel (..), Transaction (..), TransactionMode (..), defaultTransactionMode, withDeferrableTransaction, withReadOnlyTransaction, withSavepoint, withTransaction, withTransactionConn, withTransactionLevel, withTransactionLevelConn, withTransactionMode, withTransactionModeConn, withTransactionRetry, withTransactionRetryIf, withTransaction_)

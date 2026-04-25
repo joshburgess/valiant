@@ -22,8 +22,8 @@ libraries.
   query execution, server-side cursor streaming, pipelined execution,
   COPY in/out, large objects, LISTEN/NOTIFY, advisory locks, transactions,
   and re-exports from `pg-wire`.
-- **valiant-cli** 0.1.0.0: `valiant` CLI with `prepare`, `migrate`, and
-  `generate` commands.
+- **valiant-cli** 0.1.0.0: `valiant` CLI with `prepare`, `check`,
+  `types`, `generate`, and `watch` commands.
 - **valiant-plugin** 0.1.0.0: GHC source plugin that validates SQL files
   against the `.valiant/` cache at compile time.
 

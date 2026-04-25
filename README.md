@@ -365,13 +365,14 @@ docker compose down
 
 ## Building from source
 
-Requires GHC 9.10 and Cabal 3.0+.
+Requires GHC 9.6+ and Cabal 3.0+. CI tests against GHC 9.6.7, 9.8.4,
+and 9.10.3.
 
 ```bash
 git clone https://github.com/joshburgess/valiant.git
 cd valiant
 cabal build all
-cabal test pg-wire-test valiant-test valiant-cli-test
+cabal test pg-wire-test valiant-test valiant-cli-test valiant-plugin-test
 ```
 
 All packages compile with `-Werror`.

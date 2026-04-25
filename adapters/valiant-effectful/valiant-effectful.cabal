@@ -28,6 +28,7 @@ category:        Database
 homepage:        https://github.com/joshburgess/valiant
 bug-reports:     https://github.com/joshburgess/valiant/issues
 build-type:      Simple
+tested-with:     GHC ==9.6.7 || ==9.8.4 || ==9.10.3
 
 source-repository head
   type:     git
