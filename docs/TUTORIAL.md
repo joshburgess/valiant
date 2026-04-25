@@ -223,9 +223,13 @@ total <- withResource pool $ \conn ->
 
 -- Server-side cursor for batch-at-a-time processing
 withTransaction pool $ \tx ->
-  withCursor (txConn tx) Q.listAll () 100 $ \cursor -> do
-    batch <- fetchBatch cursor
-    -- process batch...
+  withCursor (txConn tx) Q.listAll () 100 $ \cursor ->
+    let loop = do
+          batch <- fetchBatch cursor 100
+          unless (null batch) $ do
+            mapM_ processRow batch
+            loop
+    in loop
 ```
 
 ## 12. COPY for bulk data

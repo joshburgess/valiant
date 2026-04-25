@@ -730,6 +730,61 @@ saves 20 cons cells per row.
 *Result: eliminated per-message and per-row intermediate allocations
 in the two highest-frequency code paths.*
 
+### Pass 9: Cursor FETCH preparation reuse
+
+Cursor draining hits the wire pattern `Bind/Execute/Sync` repeatedly,
+once per batch. The original implementation rebuilt the FETCH statement
+by reparsing every batch:
+
+```haskell
+-- Before: every fetchBatch call sent Parse + Bind + Execute + Sync
+fetchBatch cs n = sendFrontendMsgs wc
+  [ Parse "" ("FETCH FORWARD " <> show n <> " FROM " <> name) V.empty
+  , Bind  "" "" V.empty V.empty (V.singleton BinaryFormat)
+  , Execute "" 0
+  , Sync
+  ]
+```
+
+`Parse` of an unnamed statement holds for the duration of the exclusive
+wire session, so we can prepare it once at `DECLARE` time and reuse it
+for every batch:
+
+```haskell
+-- After: DECLARE pipelines the FETCH parse with itself
+withCursor conn stmt params batchSize action =
+  submitExclusive (connAsync conn) $ \wc txRef -> do
+    sendFrontendMsgs wc
+      [ Parse "" ("DECLARE " <> name <> " ... " <> stmtSQL stmt) paramOids
+      , Bind  "" "" binaryFmt encodedParams V.empty
+      , Execute "" 0
+      , Parse "" ("FETCH FORWARD " <> show batchSize <> " FROM " <> name) V.empty
+      , Sync
+      ]
+    -- subsequent fetchBatch calls send only Bind/Execute/Sync
+```
+
+`fetchBatch` only re-parses if the requested batch size differs from
+the size baked into the prepared FETCH (rare in practice, since callers
+typically pick one batch size and stick with it). The state lives in
+`csPreparedBatch :: IORef Int` on the cursor.
+
+For a 1000-row drain at batch=100 (10 round-trips), this eliminates 9
+`Parse` operations (~50µs each on local Postgres). Measured impact on
+`runtime/bench/BenchQuery.hs`:
+
+| Workload (1k rows)        | Before | After  | Delta |
+|---------------------------|--------|--------|-------|
+| cursor 1000 rows, batch 100  | 1.72ms | 1.19ms | -31% |
+| cursor 1000 rows, batch 500  | 0.84ms | 0.70ms | -17% |
+| cursor 1000 rows, batch 1000 | 0.66ms | 0.65ms |  ~0% |
+
+The 1000/1000 case is unchanged, as expected: a single round-trip
+already only does one Parse.
+
+*Result: cursor draining at small/medium batch sizes is now bounded by
+round-trip latency rather than redundant parse cost.*
+
 ### Summary: encode path improvement
 
 | Stage | Int32 encode | Cumulative |
@@ -755,6 +810,7 @@ in the two highest-frequency code paths.*
 | Execute | Fused decode + DList accumulation | Eliminated intermediate list + reverse |
 | Batch | Pipelined Bind+Execute | 40-100x for N inserts |
 | Batch | Streaming chunks for large batches | Bounded memory regardless of size |
+| Cursor | Prepare FETCH once per cursor, reuse across batches | -31% on 1k-rows / batch-100 |
 | Alloc | Constant format vectors (`binaryFmtVec`) | Eliminated per-query Vector alloc |
 | Encode | Fused Builder (`buildFrontendMsgsConcat`) | 1 alloc + 1 send per batch, not N |
 | Decode | Direct-to-Vector DataRow (`V.create`) | Eliminated per-row list intermediate |

@@ -4,7 +4,7 @@ This document tracks features missing from the valiant/pg-wire
 implementation, performance improvements, and architectural changes
 planned for future releases.
 
-Last updated: 2026-03-24
+Last updated: 2026-04-24
 
 ---
 
@@ -18,6 +18,8 @@ Last updated: 2026-03-24
 - **Savepoints**: `withSavepoint` with auto rollback/release
 - **Prepared statement eviction**: LRU cache, max 256 per connection
 - **Parameterized cursors**: Extended query protocol for DECLARE
+- **Cursor FETCH preparation reuse**: FETCH parsed once per cursor and
+  reused across batches, eliminating redundant Parse round-trips
 - **UUID binary codec**: 16-byte round-trip via `uuid-types`
 - **JSON/JSONB binary codec**: json (raw UTF-8) and jsonb (version byte)
 - **INLINE pragmas**: All codec, protocol, and wire hot paths

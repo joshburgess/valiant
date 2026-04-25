@@ -159,7 +159,7 @@ Features where valiant matches or exceeds all competitors:
 | Binary protocol | hasql uses libpq binary; pg-simple uses text; we use our own binary |
 | Pipelined batch writes | 40-100x faster than competitors |
 | Pipeline Applicative | Combines independent reads in one round-trip |
-| Server-side cursors | Built-in `withCursor` + `fetchBatch` |
+| Server-side cursors | Built-in `withCursor` + `fetchBatch`; `fetchAllCursor` for drain-into-list |
 | Constant-memory fold | `RowFold` / `executeWithFold` |
 | COPY IN/OUT | Text, CSV, and binary formats |
 | LISTEN/NOTIFY | `listen`, `unlisten`, `waitForNotification` with timeout |
