@@ -150,9 +150,12 @@ test-suite valiant-integration
     ConnectionFeaturesSpec
     CopySpec
     ExecuteSpec
+    LargeObjectSpec
+    NotifySpec
     PipelineSpec
     PoolSpec
     SoundnessSpec
+    StreamingSpec
     TestSupport
     TransactionSpec
 

@@ -1,8 +1,22 @@
 -- | LISTEN/NOTIFY support for PostgreSQL asynchronous notifications.
 --
--- Notifications are dispatched by the reader thread as they arrive,
--- calling the registered handler inline. 'waitForNotification' blocks
--- the caller by registering a one-shot callback.
+-- == Delivery model
+--
+-- valiant's reader thread parks between queries, so NOTIFY messages that
+-- arrive while the connection is idle are not dispatched until the next
+-- query wakes the reader. 'waitForNotification' and its timeout variant
+-- issue an empty simple query to flush pending NOTIFYs, then block on a
+-- one-shot MVar filled by the handler.
+--
+-- In practice this means:
+--
+-- * Call 'waitForNotificationTimeout' (not 'waitForNotification') in
+--   production code. A hung delivery returns 'Nothing' after the
+--   deadline rather than blocking the caller forever.
+--
+-- * For fire-and-forget \"wake me whenever a NOTIFY arrives\" semantics,
+--   poll: call 'waitForNotificationTimeout' in a loop with a short
+--   timeout. Every iteration re-flushes the socket.
 module Valiant.Notify
   ( Notification (..)
   , listen
@@ -50,8 +64,11 @@ unlisten conn channel = do
 
 -- | Block until a notification arrives on any subscribed channel.
 --
--- Registers a one-shot handler on the connection's notification callback.
--- The reader thread will fill the MVar when a NotificationResponse arrives.
+-- Registers a one-shot handler, sends an empty simple query to flush
+-- any NOTIFYs already queued on the socket, then blocks on the handler.
+-- If no NOTIFY was already pending at the time of the flush, this call
+-- blocks until the next query on this connection wakes the reader.
+-- Prefer 'waitForNotificationTimeout' for production use.
 waitForNotification :: Connection -> IO Notification
 waitForNotification conn = do
   notifVar <- newEmptyMVar

@@ -5,9 +5,12 @@ import ConnectionSpec qualified
 import ConnectionFeaturesSpec qualified
 import CopySpec qualified
 import ExecuteSpec qualified
+import LargeObjectSpec qualified
+import NotifySpec qualified
 import PipelineSpec qualified
 import PoolSpec qualified
 import SoundnessSpec qualified
+import StreamingSpec qualified
 import TransactionSpec qualified
 import Test.Hspec
 
@@ -20,5 +23,8 @@ main = hspec $ do
   describe "Transaction" TransactionSpec.spec
   describe "Copy" CopySpec.spec
   describe "Pipeline" PipelineSpec.spec
+  describe "Streaming" StreamingSpec.spec
+  describe "Notify" NotifySpec.spec
+  describe "LargeObject" LargeObjectSpec.spec
   describe "Soundness" SoundnessSpec.spec
   describe "Chaos" ChaosSpec.spec
