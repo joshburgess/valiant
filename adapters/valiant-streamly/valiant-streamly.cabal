@@ -45,7 +45,7 @@ test-suite valiant-streamly-test
   build-depends:
     , base            >=4.17 && <5
     , bytestring      >=0.11 && <0.13
-    , hspec           >=2.11 && <2.12
+    , hspec           >=2.11 && <2.13
     , valiant
     , valiant-streamly
     , pg-wire

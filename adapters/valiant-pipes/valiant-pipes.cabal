@@ -45,7 +45,7 @@ test-suite valiant-pipes-test
   build-depends:
     , base            >=4.17 && <5
     , bytestring
-    , hspec           >=2.11 && <2.12
+    , hspec           >=2.11 && <2.13
     , valiant
     , valiant-pipes
     , pg-wire

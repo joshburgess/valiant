@@ -68,7 +68,7 @@ test-suite valiant-plugin-test
     , bytestring
     , directory
     , filepath
-    , hspec         >=2.11 && <2.12
+    , hspec         >=2.11 && <2.13
     , valiant-plugin
     , process       >=1.6  && <1.8
     , temporary     >=1.3  && <1.4

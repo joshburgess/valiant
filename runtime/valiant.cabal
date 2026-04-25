@@ -123,7 +123,7 @@ test-suite valiant-test
     , bytestring
     , containers
     , hedgehog       >=1.2  && <1.6
-    , hspec          >=2.11 && <2.12
+    , hspec          >=2.11 && <2.13
     , hspec-hedgehog >=0.1  && <0.3
     , valiant
     , pg-wire
@@ -159,7 +159,7 @@ test-suite valiant-integration
     , async        >=2.2  && <2.3
     , base         >=4.17 && <5
     , bytestring
-    , hspec        >=2.11 && <2.12
+    , hspec        >=2.11 && <2.13
     , valiant
     , pg-wire
     , stm          >=2.5  && <2.6
@@ -193,7 +193,7 @@ benchmark valiant-bench
     , base         >=4.17 && <5
     , bytestring
     , containers
-    , criterion    >=1.6  && <1.7
+    , criterion    >=1.6  && <1.8
     , valiant
     , pg-wire
     , scientific

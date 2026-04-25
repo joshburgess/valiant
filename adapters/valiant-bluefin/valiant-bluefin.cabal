@@ -36,7 +36,7 @@ library
 
   build-depends:
     , base            >=4.17 && <5
-    , bluefin         >=0.0  && <0.1
+    , bluefin         >=0.0  && <0.2
     , valiant
     , pg-wire
 
@@ -55,7 +55,7 @@ test-suite valiant-bluefin-test
   build-depends:
     , base            >=4.17 && <5
     , bytestring
-    , hspec           >=2.11 && <2.12
+    , hspec           >=2.11 && <2.13
     , valiant
     , valiant-bluefin
     , pg-wire

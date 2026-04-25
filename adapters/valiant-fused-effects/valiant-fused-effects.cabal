@@ -72,7 +72,7 @@ test-suite valiant-fused-effects-test
     , base            >=4.17 && <5
     , bytestring
     , fused-effects
-    , hspec           >=2.11 && <2.12
+    , hspec           >=2.11 && <2.13
     , valiant
     , valiant-fused-effects
     , pg-wire

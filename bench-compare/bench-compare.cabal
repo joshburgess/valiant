@@ -22,7 +22,7 @@ executable bench-compare
     , base                   >=4.17 && <5
     , bytestring
     , contravariant
-    , criterion              >=1.6  && <1.7
+    , criterion              >=1.6  && <1.8
     , text
     , vector
 
