@@ -13,27 +13,33 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GHC_VERSION: '9.10.3'
+  PRIMARY_GHC: '9.10.3'
   CABAL_VERSION: '3.12'
 
 jobs:
-  # ── Build (shared cache) ──────────────────────────────────────────
+  # ── Build (matrixed across supported GHC versions) ────────────────
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        ghc: ['9.6.7', '9.8.4', '9.10.3']
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
         with:
-          ghc-version: ${{ env.GHC_VERSION }}
+          ghc-version: ${{ matrix.ghc }}
           cabal-version: ${{ env.CABAL_VERSION }}
+      - name: Pin GHC in cabal.project.local
+        run: echo "with-compiler: ghc-${{ matrix.ghc }}" > cabal.project.local
       - uses: actions/cache@v4
         with:
           path: |
             ~/.cabal/store
             dist-newstyle
-          key: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}
-          restore-keys: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-
+          key: ci-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project', '**/*.cabal') }}
+          restore-keys: ci-${{ runner.os }}-${{ matrix.ghc }}-
       - name: Build all packages
         run: |
           cabal update
@@ -45,67 +51,44 @@ jobs:
           path: |
             ~/.cabal/store
             dist-newstyle
-          key: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
+          key: ci-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
 
   # ── Unit tests (no database needed) ───────────────────────────────
-  test-pg-wire:
+  # Each suite runs across the full GHC matrix to catch version-specific
+  # regressions in pg-wire, the runtime, the CLI, and the plugin.
+  unit-tests:
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        ghc: ['9.6.7', '9.8.4', '9.10.3']
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
         with:
-          ghc-version: ${{ env.GHC_VERSION }}
+          ghc-version: ${{ matrix.ghc }}
           cabal-version: ${{ env.CABAL_VERSION }}
+      - name: Pin GHC in cabal.project.local
+        run: echo "with-compiler: ghc-${{ matrix.ghc }}" > cabal.project.local
       - uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cabal/store
             dist-newstyle
-          key: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
-          restore-keys: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-
+          key: ci-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
+          restore-keys: ci-${{ runner.os }}-${{ matrix.ghc }}-
       - run: cabal test pg-wire-test
-
-  test-valiant:
-    needs: build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: haskell-actions/setup@v2
-        with:
-          ghc-version: ${{ env.GHC_VERSION }}
-          cabal-version: ${{ env.CABAL_VERSION }}
-      - uses: actions/cache/restore@v4
-        with:
-          path: |
-            ~/.cabal/store
-            dist-newstyle
-          key: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
-          restore-keys: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-
       - run: cabal test valiant-test
-
-  test-cli:
-    needs: build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: haskell-actions/setup@v2
-        with:
-          ghc-version: ${{ env.GHC_VERSION }}
-          cabal-version: ${{ env.CABAL_VERSION }}
-      - uses: actions/cache/restore@v4
-        with:
-          path: |
-            ~/.cabal/store
-            dist-newstyle
-          key: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
-          restore-keys: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-
       - run: cabal test valiant-cli-test
+      - run: cabal test valiant-plugin-test
 
-  test-plugin:
+  # ── Plugin end-to-end (compile-time SQL validation) ──────────────
+  # The e2e suite GHC-compiles fixture modules with the Valiant plugin
+  # loaded against the committed .valiant/ cache and sql/ fixtures.
+  # No database is needed: the cache is pre-generated.
+  test-plugin-e2e:
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -113,16 +96,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
         with:
-          ghc-version: ${{ env.GHC_VERSION }}
+          ghc-version: ${{ env.PRIMARY_GHC }}
           cabal-version: ${{ env.CABAL_VERSION }}
       - uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cabal/store
             dist-newstyle
-          key: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
-          restore-keys: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-
-      - run: cabal test valiant-plugin-test
+          key: ci-${{ runner.os }}-${{ env.PRIMARY_GHC }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
+          restore-keys: ci-${{ runner.os }}-${{ env.PRIMARY_GHC }}-
+      - run: cabal test valiant-plugin-e2e
 
   # ── Integration tests (need Postgres) ─────────────────────────────
   test-integration:
@@ -133,15 +116,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
         with:
-          ghc-version: ${{ env.GHC_VERSION }}
+          ghc-version: ${{ env.PRIMARY_GHC }}
           cabal-version: ${{ env.CABAL_VERSION }}
       - uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cabal/store
             dist-newstyle
-          key: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
-          restore-keys: ci-${{ runner.os }}-${{ env.GHC_VERSION }}-
+          key: ci-${{ runner.os }}-${{ env.PRIMARY_GHC }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
+          restore-keys: ci-${{ runner.os }}-${{ env.PRIMARY_GHC }}-
       - name: Setup Postgres
         run: |
           sudo apt-get update -qq

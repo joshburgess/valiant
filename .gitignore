@@ -5,4 +5,5 @@ dist-newstyle/
 *.dyn_o
 *.hie
 .env
+cabal.project.local
 example/.valiant/
