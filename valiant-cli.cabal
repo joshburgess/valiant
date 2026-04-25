@@ -33,8 +33,13 @@ common warnings
   if flag(werror)
     ghc-options: -Werror
 
-library
+-- The valiant-cli package ships an executable (`valiant`). The CLI's
+-- implementation modules live in a private sublibrary so they don't
+-- pollute the Hackage public API surface; the executable and the test
+-- suite both depend on it directly.
+library cli-internal
   import:           warnings
+  visibility:       private
   hs-source-dirs:   src
   default-language: GHC2021
   default-extensions:
@@ -90,7 +95,7 @@ executable valiant
   default-language: GHC2021
   build-depends:
     , base       >=4.17 && <5
-    , valiant-cli
+    , valiant-cli:cli-internal
   ghc-options:      -threaded -rtsopts
 
 test-suite valiant-cli-test
@@ -124,4 +129,4 @@ test-suite valiant-cli-test
     , temporary        >=1.3  && <1.4
     , text
     , time
-    , valiant-cli
+    , valiant-cli:cli-internal

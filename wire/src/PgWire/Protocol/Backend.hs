@@ -1,3 +1,10 @@
+-- | Decoded backend (server-to-client) message types from the
+-- PostgreSQL v3 wire protocol.
+--
+-- __Audience:__ exposed for downstream library authors that want to
+-- decode raw protocol responses or build alternative pipeline
+-- abstractions. Most application code only sees these types
+-- indirectly via "PgWire.Connection" results and "PgWire.Error".
 module PgWire.Protocol.Backend
   ( BackendMsg (..)
   , FieldInfo (..)

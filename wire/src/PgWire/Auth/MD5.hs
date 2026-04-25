@@ -1,3 +1,8 @@
+-- | MD5 password authentication (legacy PostgreSQL auth method).
+--
+-- __Audience:__ exposed for downstream library authors. The standard
+-- authentication flow is driven from "PgWire.Connection"; this module
+-- is only useful if you are reimplementing handshake.
 module PgWire.Auth.MD5
   ( md5Auth
   , md5Password

@@ -1,3 +1,9 @@
+-- | PostgreSQL type OIDs and convenience constants.
+--
+-- Used when writing custom 'PgWire.Binary.Types.PgEncode' /
+-- 'PgWire.Binary.Types.PgDecode' instances and when inspecting
+-- raw 'PgWire.Protocol.Backend.FieldInfo' descriptions. This is
+-- part of the public extensibility surface, not an internal module.
 module PgWire.Protocol.Oid
   ( Oid (..)
   , oidBool

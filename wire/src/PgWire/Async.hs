@@ -2,6 +2,13 @@
 
 -- | Asynchronous sender/receiver split for PostgreSQL connections.
 --
+-- __Audience:__ this module is exposed for downstream library authors
+-- (the @valiant@ runtime, custom adapters). Most application code
+-- should reach for "PgWire.Connection" instead. The types and
+-- functions here are public and stable, but they sit below the
+-- request/response abstraction and require knowledge of the v3 wire
+-- protocol to use safely.
+--
 -- Each connection spawns two green threads after startup:
 --
 -- * __Writer thread__ — drains the send queue, batches messages via

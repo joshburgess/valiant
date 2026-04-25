@@ -1,3 +1,8 @@
+-- | Parsers for backend (server-to-client) protocol messages.
+--
+-- __Audience:__ exposed for downstream library authors that decode
+-- raw protocol bytes themselves. Most application code consumes
+-- decoded results via "PgWire.Connection".
 module PgWire.Protocol.Parsers
   ( parseBackendMsg
   , parseCommandTag

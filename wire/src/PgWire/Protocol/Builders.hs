@@ -1,3 +1,9 @@
+-- | Encoders for frontend (client-to-server) messages.
+--
+-- __Audience:__ exposed for downstream library authors that need to
+-- emit raw protocol bytes (e.g. custom pipelining or proxies). Most
+-- application code drives these encoders indirectly through
+-- "PgWire.Connection".
 module PgWire.Protocol.Builders
   ( buildFrontendMsg
   , buildFrontendMsgsConcat

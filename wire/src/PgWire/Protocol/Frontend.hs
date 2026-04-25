@@ -1,3 +1,9 @@
+-- | Frontend (client-to-server) message types from the PostgreSQL v3
+-- wire protocol.
+--
+-- __Audience:__ exposed for downstream library authors that need to
+-- assemble protocol messages directly. Most application code uses
+-- "PgWire.Connection" instead.
 module PgWire.Protocol.Frontend
   ( FrontendMsg (..)
   , StartupParams (..)
