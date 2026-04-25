@@ -193,8 +193,10 @@ for the full head-to-head comparison.
 
 See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the full deep-dive:
 codec benchmarks, pool benchmarks, architecture comparison, optimization
-techniques, and the complete optimization journey. Recorded results with
-CSV data are in [docs/benchmark-results/](docs/benchmark-results/).
+techniques, and the complete optimization journey. Archived numbers with
+CSV data are in [docs/benchmark-results/](docs/benchmark-results/README.md);
+the [`bench-compare`](bench-compare/README.md) suite reproduces them
+locally or via the weekly [Benchmarks workflow](.github/workflows/benchmarks.yml).
 
 ## Project structure
 
@@ -215,7 +217,7 @@ valiant is a multi-package Cabal project:
 | `valiant-fused-effects` | Fused-effects effect system adapter |
 | `valiant-mtl` | MTL monad transformer adapter |
 | `valiant-example` | Example REST API using valiant + scotty |
-| `bench-compare` | Comparative benchmarks against hasql and postgresql-simple |
+| [`bench-compare`](bench-compare/README.md) | Comparative benchmarks against hasql, postgresql-simple, persistent, and asyncpg |
 
 ```
 valiant/

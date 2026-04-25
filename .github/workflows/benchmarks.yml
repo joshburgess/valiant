@@ -15,6 +15,11 @@ on:
         description: 'Benchmark mode: all | codec | query | concurrent | pool | asyncpg-compare | asyncpg-valiant | asyncpg-baseline | comparative | quick'
         required: false
         default: 'all'
+  schedule:
+    # Refresh published numbers weekly. Sunday 06:00 UTC = quiet time
+    # for both US and EU runners. Keeps docs/benchmark-results/ from
+    # going stale across driver upgrades and GHC bumps.
+    - cron: '0 6 * * 0'
 
 concurrency:
   group: benchmarks-${{ github.ref }}
