@@ -32,7 +32,8 @@ jobs:
           ghc-version: ${{ matrix.ghc }}
           cabal-version: ${{ env.CABAL_VERSION }}
       - name: Pin GHC in cabal.project.local
-        run: echo "with-compiler: ghc-${{ matrix.ghc }}" > cabal.project.local
+        run: |
+          echo "with-compiler: ghc-${{ matrix.ghc }}" > cabal.project.local
       - name: Drop cabal.project.freeze for non-primary GHC
         # The freeze file pins versions resolved against the primary GHC
         # (e.g. text-2.1 is incompatible with GHC 9.6's bundled text-2.0).
@@ -77,7 +78,8 @@ jobs:
           ghc-version: ${{ matrix.ghc }}
           cabal-version: ${{ env.CABAL_VERSION }}
       - name: Pin GHC in cabal.project.local
-        run: echo "with-compiler: ghc-${{ matrix.ghc }}" > cabal.project.local
+        run: |
+          echo "with-compiler: ghc-${{ matrix.ghc }}" > cabal.project.local
       - name: Drop cabal.project.freeze for non-primary GHC
         # The freeze file pins versions resolved against the primary GHC
         # (e.g. text-2.1 is incompatible with GHC 9.6's bundled text-2.0).
@@ -201,7 +203,48 @@ jobs:
             esac
             (cd "$dir" && cabal check)
             echo "=== cabal sdist ($pkg) ==="
-            cabal sdist "$pkg"
+            # Use the pkg: target prefix so the package "valiant" is not
+            # mistaken for the executable target named "valiant" defined
+            # in valiant-cli.
+            cabal sdist "pkg:$pkg"
+          done
+
+  # ── Haddock build (catches malformed haddock pre-Hackage) ─────────
+  # Runs `cabal haddock --haddock-for-hackage` against every publishable
+  # package. Hackage rebuilds haddock on its own infrastructure, but if
+  # that build fails the package page shows "Documentation: not yet
+  # available" and won't link types/sources properly. Catching this
+  # before upload is much cheaper than re-uploading a corrected version.
+  haddock:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{ env.PRIMARY_GHC }}
+          cabal-version: ${{ env.CABAL_VERSION }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cabal/store
+            dist-newstyle
+          key: ci-${{ runner.os }}-${{ env.PRIMARY_GHC }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
+          restore-keys: ci-${{ runner.os }}-${{ env.PRIMARY_GHC }}-
+      - name: Build haddock for every publishable package
+        run: |
+          set -e
+          cabal update
+          # --haddock-for-hackage exercises the same generation path
+          # Hackage uses, including hyperlinked source rendering. Anything
+          # that compiles but produces malformed haddock will fail here.
+          for pkg in pg-wire valiant valiant-plugin valiant-cli \
+                     valiant-bluefin valiant-conduit valiant-effectful \
+                     valiant-fused-effects valiant-mtl valiant-pipes \
+                     valiant-streaming valiant-streamly; do
+            echo "=== cabal haddock ($pkg) ==="
+            cabal haddock "pkg:$pkg" --haddock-for-hackage
           done
 
   # ── HLint ─────────────────────────────────────────────────────────
