@@ -13,15 +13,17 @@
 - ignore: {name: "Reduce duplication"}             # too subjective, left to code review
 - ignore: {name: "Parse error"}                    # false positive on CPP/PatternSynonyms
 
-# Suggestions that require enabling a language extension purely for
-# cosmetic gain. We don't want to flip TupleSections or LambdaCase on
-# files where it would otherwise be noise.
-- ignore: {name: "Use lambda-case"}
-- ignore: {name: "Use tuple-section"}
-
-# `head` is partial; the suggestion to replace `args !! 0` with `head args`
-# is not an improvement. We use explicit pattern matching instead.
+# `Use head` would push us toward a partial function. We ban head outright
+# below; the right fix at any `args !! 0` site is an explicit pattern match
+# or `listToMaybe`, not `head`.
 - ignore: {name: "Use head"}
+
+# ── Custom hints: prefer total functions ───────────────────────────
+# When you want "the first element if any," reach for listToMaybe, not
+# head. When you want "the first element and the rest," use uncons or
+# pattern match.
+- warn: {lhs: "head x", rhs: "Data.Maybe.listToMaybe x", name: "Avoid partial head — use listToMaybe"}
+- warn: {lhs: "T.head x", rhs: "fst <$> Data.Text.uncons x", name: "Avoid partial T.head — use T.uncons"}
 
 # ── Module-scoped ignores ───────────────────────────────────────────
 # Performance-critical modules: don't change evaluation semantics
@@ -38,8 +40,25 @@
   - {name: traceShowId, within: [], message: "Remove debug traceShowId"}
   - {name: traceM, within: [], message: "Remove debug traceM"}
 
-  # Partial functions (use safe alternatives)
-  - {name: "Data.List.nub", within: [Valiant.CLI.Discover, Valiant.CLI.Command.Generate], message: "Use nubOrd from containers or Data.List.nub is O(n^2)"}
+  # Partial functions: forbidden in committed code. If you need "the first
+  # element if any" use listToMaybe; if you need "head and tail" use uncons
+  # or a pattern match. NonEmpty.head/last/tail/init are total and fine.
+  - {name: "Prelude.head",       within: [], message: "Use Data.Maybe.listToMaybe, Data.List.NonEmpty.head, or pattern match"}
+  - {name: "Data.List.head",     within: [], message: "Use Data.Maybe.listToMaybe, Data.List.NonEmpty.head, or pattern match"}
+  - {name: "Prelude.tail",       within: [], message: "Use Data.List.uncons, Data.List.NonEmpty.tail, or pattern match"}
+  - {name: "Data.List.tail",     within: [], message: "Use Data.List.uncons, Data.List.NonEmpty.tail, or pattern match"}
+  - {name: "Prelude.init",       within: [], message: "Use Data.List.NonEmpty.init or pattern match"}
+  - {name: "Data.List.init",     within: [], message: "Use Data.List.NonEmpty.init or pattern match"}
+  - {name: "Prelude.last",       within: [], message: "Use Data.List.NonEmpty.last or pattern match"}
+  - {name: "Data.List.last",     within: [], message: "Use Data.List.NonEmpty.last or pattern match"}
+  - {name: "Prelude.!!",         within: [], message: "Use Data.List.lookup, Data.Vector.(!?), or pattern match"}
+  - {name: "Data.List.!!",       within: [], message: "Use Data.List.lookup, Data.Vector.(!?), or pattern match"}
+  - {name: "Data.Maybe.fromJust", within: [], message: "Use pattern match or fromMaybe with a sensible default"}
+  - {name: "Prelude.read",       within: [], message: "Use Text.Read.readMaybe — read crashes on parse failure"}
+  - {name: "Prelude.error",      within: [Valiant.NamedParams], message: "Use throwPgWire or Either; reserve error for true invariant violations"}
+
+  # nub is O(n^2); the safe-and-fast alternative is nubOrd from containers
+  - {name: "Data.List.nub", within: [Valiant.CLI.Discover, Valiant.CLI.Command.Generate], message: "Use Data.Containers.ListUtils.nubOrd — Data.List.nub is O(n^2)"}
 
   # Unsafe functions (allowed only in specific modules)
   - {name: unsafePerformIO, within: [Valiant.Streaming, Valiant.Binary.Inet, PgWire.Async, Valiant.Conduit, Valiant.Pipes, Valiant.Stream, Valiant.Streamly, Valiant.Transaction, BenchQuery, BenchConcurrent, BenchPool, BenchAsyncpgCompare]}

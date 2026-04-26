@@ -110,11 +110,10 @@ findCallsInExpr sp expr =
 -- We collect all args from a left-nested application spine,
 -- check the head is mkStatement, and take the 4th arg as the path.
 extractMkStatementCall :: HsExpr GhcTc -> Maybe String
-extractMkStatementCall expr = do
-  let (f, args) = collectArgs expr
-  if isMkStatementExpr f && length args == 4
-    then extractStringLit (unLHsExpr (args !! 3))
-    else Nothing
+extractMkStatementCall expr = case collectArgs expr of
+  (f, [_sql, _oids, _cols, path]) | isMkStatementExpr f ->
+    extractStringLit (unLHsExpr path)
+  _ -> Nothing
 
 -- | Collect the function and arguments from a left-nested application spine.
 -- (((f a1) a2) a3) → (f, [a1, a2, a3])

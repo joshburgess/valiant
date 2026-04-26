@@ -18,7 +18,7 @@ import Valiant.CLI.Output
 import Valiant.CLI.SqlMetadata (SqlMetadata (..), parseSqlMetadata)
 import System.Directory (createDirectoryIfMissing, renameFile)
 import System.Exit (ExitCode (..))
-import System.FilePath (dropExtension, splitDirectories, takeBaseName, takeDirectory, (</>))
+import System.FilePath (takeBaseName, takeDirectory, (</>))
 
 data GenerateOpts = GenerateOpts
   { genModulePrefix :: String
@@ -173,9 +173,7 @@ renderBinding (sf, entry) =
 
 -- | Convert @users/find_by_id.sql@ → @findById@
 sqlFileToBindingName :: FilePath -> String
-sqlFileToBindingName path =
-  let base = dropExtension (last (splitDirectories path))
-   in snakeToCamel base
+sqlFileToBindingName path = snakeToCamel (takeBaseName path)
 
 snakeToCamel :: String -> String
 snakeToCamel [] = []

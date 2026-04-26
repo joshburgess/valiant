@@ -1,4 +1,5 @@
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE LambdaCase #-}
 {-# OPTIONS_GHC -fno-full-laziness #-}
 
 -- | Pipelined query execution for batching multiple independent queries
@@ -60,12 +61,11 @@ instance Applicative Pipeline where
 
 -- | Pipeline a query that returns zero or one row.
 pipeFetchOne :: Statement p r -> p -> Pipeline (Maybe r)
-pipeFetchOne stmt params = QueryP stmt params $ \rows ->
-  case rows of
-    [] -> pure Nothing
-    (row : _) -> case stmtDecode stmt row of
-      Left err -> throwPgWire (DecodeError (BS8.pack err))
-      Right val -> pure (Just val)
+pipeFetchOne stmt params = QueryP stmt params $ \case
+  [] -> pure Nothing
+  (row : _) -> case stmtDecode stmt row of
+    Left err -> throwPgWire (DecodeError (BS8.pack err))
+    Right val -> pure (Just val)
 {-# INLINE pipeFetchOne #-}
 
 -- | Pipeline a query that returns all rows.
@@ -78,13 +78,12 @@ pipeFetchAll stmt params = QueryP stmt params $ \rows ->
 
 -- | Pipeline a query that returns a single scalar value.
 pipeFetchScalar :: Statement p r -> p -> Pipeline r
-pipeFetchScalar stmt params = QueryP stmt params $ \rows ->
-  case rows of
-    [row] -> case stmtDecode stmt row of
-      Left err -> throwPgWire (DecodeError (BS8.pack err))
-      Right val -> pure val
-    [] -> throwPgWire (DecodeError "pipeFetchScalar: no rows")
-    _ -> throwPgWire (DecodeError "pipeFetchScalar: more than one row")
+pipeFetchScalar stmt params = QueryP stmt params $ \case
+  [row] -> case stmtDecode stmt row of
+    Left err -> throwPgWire (DecodeError (BS8.pack err))
+    Right val -> pure val
+  [] -> throwPgWire (DecodeError "pipeFetchScalar: no rows")
+  _ -> throwPgWire (DecodeError "pipeFetchScalar: more than one row")
 {-# INLINE pipeFetchScalar #-}
 
 -- | Pipeline a command (INSERT\/UPDATE\/DELETE).

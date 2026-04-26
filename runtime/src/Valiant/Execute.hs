@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# OPTIONS_GHC -fno-full-laziness #-}
 
 -- | Query execution functions using the PostgreSQL extended query protocol.
@@ -584,7 +585,7 @@ fetchBatchOne conn stmt paramsList = do
   case resp of
     RespBatchRows results -> do
       when needsParse $ cacheStmt conn (stmtSQL stmt) name
-      mapM (\rows -> case rows of
+      mapM (\case
         [] -> pure Nothing
         (row : _) -> case stmtDecode stmt row of
           Left err -> throwPgWire (DecodeError (BS8.pack err))

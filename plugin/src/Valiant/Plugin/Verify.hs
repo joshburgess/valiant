@@ -3,6 +3,7 @@ module Valiant.Plugin.Verify
   ( verifyQueryFile
   ) where
 
+import Data.List.NonEmpty qualified as NE
 import Data.Text (Text)
 import Data.Text qualified as T
 import GHC.Core.TyCon qualified as TyCon
@@ -152,6 +153,6 @@ stripQualifiers t =
   -- "Data.Int.Int32" -> "Int32", "Maybe Data.Text.Text" -> "Maybe Text"
   T.unwords [lastPart w | w <- T.words t]
   where
-    lastPart w = case T.splitOn "." w of
-      [] -> w
-      parts -> last parts
+    lastPart w = case NE.nonEmpty (T.splitOn "." w) of
+      Nothing    -> w
+      Just parts -> NE.last parts

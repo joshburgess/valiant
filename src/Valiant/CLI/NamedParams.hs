@@ -79,7 +79,7 @@ rewrite = go mempty Map.empty 1
             | c == ':', Just (':', _) <- T.uncons rest ->
                 go (acc <> "::") seen nextIdx (T.drop 1 rest)
             -- Named parameter
-            | c == ':', not (T.null rest), isParamStart (T.head rest) ->
+            | c == ':', Just (h, _) <- T.uncons rest, isParamStart h ->
                 let (name, after) = T.span isParamChar rest
                  in case Map.lookup name seen of
                       Just idx ->

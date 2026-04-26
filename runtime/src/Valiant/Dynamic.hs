@@ -1,3 +1,5 @@
+{-# LANGUAGE TupleSections #-}
+
 -- | Dynamic SQL statement builder for queries that cannot be expressed
 -- as static @.sql@ files.
 --
@@ -64,7 +66,7 @@ instance Semigroup Snippet where
   {-# INLINE (<>) #-}
 
 instance Monoid Snippet where
-  mempty = Snippet { snipBuilder = \n -> (mempty, n), snipParams = [] }
+  mempty = Snippet { snipBuilder = (mempty,), snipParams = [] }
   {-# INLINE mempty #-}
 
 -- | A raw SQL fragment with no parameters.
@@ -74,7 +76,7 @@ instance Monoid Snippet where
 -- @
 sql :: ByteString -> Snippet
 sql s = Snippet
-  { snipBuilder = \n -> (B.byteString s, n)
+  { snipBuilder = (B.byteString s,)
   , snipParams = []
   }
 {-# INLINE sql #-}

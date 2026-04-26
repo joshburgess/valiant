@@ -206,9 +206,10 @@ shuffleHosts xs = do
     go ((_, x) : _rest) 0 = pure [x]
     go items i = do
       j <- randomRIO (0, i)
-      let picked = snd (items !! j)
-          remaining = take j items ++ drop (j + 1) items
-      (picked :) <$> go remaining (i - 1)
+      let (before, rest) = splitAt j items
+      case rest of
+        []                   -> pure (map snd before)  -- unreachable: j <= length items - 1
+        (_, picked) : after  -> (picked :) <$> go (before ++ after) (i - 1)
 
 connectSingleHost :: ConnConfig -> IO Connection
 connectSingleHost cfg = do
