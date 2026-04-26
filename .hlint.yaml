@@ -55,7 +55,18 @@
   - {name: "Data.List.!!",       within: [], message: "Use Data.List.lookup, Data.Vector.(!?), or pattern match"}
   - {name: "Data.Maybe.fromJust", within: [], message: "Use pattern match or fromMaybe with a sensible default"}
   - {name: "Prelude.read",       within: [], message: "Use Text.Read.readMaybe — read crashes on parse failure"}
-  - {name: "Prelude.error",      within: [Valiant.NamedParams], message: "Use throwPgWire or Either; reserve error for true invariant violations"}
+  # `error` is reserved for true invariant violations. Allowed in:
+  #   - Valiant.NamedParams: ill-formed compile-time SQL
+  #   - Valiant.Statement: plugin placeholder shims that should never be called
+  #     at runtime (the plugin rewrites them away at compile time)
+  #   - Valiant.FromRowFast: decoder invariants (column index out of range,
+  #     unexpected NULL after schema check)
+  #   - PgWire.Pool: initialization placeholder for IORef holding the reaper
+  #     thread before it's spawned
+  #   - Valiant.CLI.Describe: top-level CLI command failure path
+  #   - TestSupport / Main: adapter test bootstrap (DATABASE_URL missing fails
+  #     loudly so CI/operator notices)
+  - {name: "Prelude.error",      within: [Valiant.NamedParams, Valiant.Statement, Valiant.FromRowFast, PgWire.Pool, Valiant.CLI.Describe, TestSupport, Main], message: "Use throwPgWire or Either; reserve error for true invariant violations"}
 
   # nub is O(n^2); the safe-and-fast alternative is nubOrd from containers
   - {name: "Data.List.nub", within: [Valiant.CLI.Discover, Valiant.CLI.Command.Generate], message: "Use Data.Containers.ListUtils.nubOrd — Data.List.nub is O(n^2)"}

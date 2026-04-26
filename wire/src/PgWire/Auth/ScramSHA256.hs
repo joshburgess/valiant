@@ -10,6 +10,7 @@ module PgWire.Auth.ScramSHA256
   ) where
 
 import Control.Monad (unless)
+import Text.Read (readMaybe)
 import Crypto.Hash (SHA256 (..), hashWith)
 import Crypto.KDF.PBKDF2 qualified as PBKDF2
 import Crypto.MAC.HMAC (HMAC, hmac)
@@ -71,7 +72,9 @@ scramAuthInternal wc user password mCertHash = do
   saltB64 <- lookupField "s" serverFields
   iterStr <- lookupField "i" serverFields
 
-  let iterations = read (BS8.unpack iterStr) :: Int
+  iterations <- case readMaybe (BS8.unpack iterStr) :: Maybe Int of
+    Just n | n > 0 -> pure n
+    _ -> throwPgWire (AuthError ("Bad SCRAM iteration count: " <> iterStr))
   salt <- case B64.decode saltB64 of
     Left err -> throwPgWire (AuthError ("Bad salt base64: " <> BS8.pack err))
     Right s -> pure s

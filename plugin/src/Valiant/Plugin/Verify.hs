@@ -153,6 +153,4 @@ stripQualifiers t =
   -- "Data.Int.Int32" -> "Int32", "Maybe Data.Text.Text" -> "Maybe Text"
   T.unwords [lastPart w | w <- T.words t]
   where
-    lastPart w = case NE.nonEmpty (T.splitOn "." w) of
-      Nothing    -> w
-      Just parts -> NE.last parts
+    lastPart w = maybe w NE.last (NE.nonEmpty (T.splitOn "." w))
