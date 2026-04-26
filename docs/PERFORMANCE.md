@@ -37,11 +37,11 @@ pg-simple on multi-row reads due to its monad transformer stack.
 
 | Rows | valiant (pipelined) | valiant (seq) | hasql | pg-simple | persistent |
 |------|-------------------|-------------|-------|-----------|------------|
-| 100 | **2.5 ms** | 104 ms | 111 ms | 118 ms | 106 ms |
-| 1,000 | **13.0 ms** | 1.14 s | 1.15 s | 1.12 s | ~1.1 s |
-| 5,000 | **53.5 ms** | 5.26 s | 5.16 s | 5.91 s | ~5.5 s |
+| 100 | **2.5 ms** | 100 ms | 101 ms | 106 ms | 98 ms |
+| 1,000 | **10.0 ms** | 1.05 s | 964 ms | 1.01 s | 990 ms |
+| 5,000 | **39.9 ms** | 5.24 s | 5.29 s | 6.36 s | 5.07 s |
 
-Pipelined batch inserts (`executeBatch`) are **40-100x faster** than
+Pipelined batch inserts (`executeBatch`) are **40-130x faster** than
 sequential inserts with any library. Sequential inserts are equivalent
 across all libraries (dominated by per-row round-trip time).
 
@@ -71,7 +71,6 @@ updates due to its per-query monad stack cost.
 | Day | 46 ns | 28 ns |
 | UTCTime | 300 ns | 58 ns |
 | Scientific | 596 ns | 102 ns |
-| UUID | N/A | N/A |
 | Int32 array (1000 elems) | 66 μs | 46 μs |
 
 ### Pool performance
@@ -337,7 +336,7 @@ type family Nullable (a :: Type) :: Bool where
 |---|---|---|
 | Single-row latency | Baseline | **Matching** (0.97ms vs 0.99ms) |
 | Multi-row throughput | Baseline | **2x faster** at 10K rows |
-| Batch writes | No pipelining | **40-100x faster** with `executeBatch` |
+| Batch writes | No pipelining | **40-130x faster** with `executeBatch` |
 | Binary decoding | C heap → Haskell copy | Direct from buffer |
 | Fixed-size encoding | N/A | 30ns per Int32 (5.9x improvement) |
 | COPY protocol | Requires libpq support | Native |
@@ -403,7 +402,7 @@ For a typical query this reduces 3 `send()` calls to 1.
 **Pipelined batch execution.** The PostgreSQL extended query protocol
 allows multiple Bind+Execute pairs before a single Sync. `executeBatch`
 exploits this to send N inserts in a single network round-trip. This
-alone delivered 40-100x speedups on batch writes, the single biggest
+alone delivered 40-130x speedups on batch writes, the single biggest
 improvement in the project.
 
 *Result: single-row latency dropped from ~30% slower than hasql to parity.*
@@ -808,7 +807,7 @@ round-trip latency rather than redundant parse cost.*
 | Async | Sender/receiver split (writer+reader threads) | 7.2x at 32 concurrent threads |
 | Async | Reader error recovery | Query errors no longer kill connection |
 | Execute | Fused decode + DList accumulation | Eliminated intermediate list + reverse |
-| Batch | Pipelined Bind+Execute | 40-100x for N inserts |
+| Batch | Pipelined Bind+Execute | 40-130x for N inserts |
 | Batch | Streaming chunks for large batches | Bounded memory regardless of size |
 | Cursor | Prepare FETCH once per cursor, reuse across batches | -31% on 1k-rows / batch-100 |
 | Alloc | Constant format vectors (`binaryFmtVec`) | Eliminated per-query Vector alloc |

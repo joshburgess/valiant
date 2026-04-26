@@ -4,7 +4,7 @@ A step-by-step guide to using valiant in a Haskell project.
 
 ## Prerequisites
 
-- GHC 9.10
+- GHC 9.6 or newer (CI tests against 9.6.7, 9.8.4, and 9.10.3)
 - Cabal 3.0+
 - A running PostgreSQL instance
 
@@ -234,37 +234,50 @@ withTransaction pool $ \tx ->
 
 ## 12. COPY for bulk data
 
-```haskell
--- COPY IN from CSV
-copyIn conn "COPY users (name, email) FROM STDIN WITH (FORMAT csv)" $
-  [ "Alice,alice@example.com\n"
-  , "Bob,bob@example.com\n"
-  ]
+`copyIn` takes a producer callback that is invoked with a `sendChunk`
+function. `copyOut` takes a consumer callback that is invoked once per
+data chunk received from the server. Both return a `CopyResult`.
 
--- COPY OUT
-rows <- copyOut conn "COPY users TO STDOUT WITH (FORMAT csv)"
+```haskell
+import Data.ByteString qualified as BS
+import Data.ByteString.Char8 qualified as BS8
+
+-- COPY IN from CSV
+_ <- copyIn conn "COPY users (name, email) FROM STDIN WITH (FORMAT csv)" $ \sendChunk -> do
+  sendChunk "Alice,alice@example.com\n"
+  sendChunk "Bob,bob@example.com\n"
+
+-- COPY OUT, streaming chunks to stdout
+_ <- copyOut conn "COPY users TO STDOUT WITH (FORMAT csv)" $ \chunk ->
+  BS8.putStr chunk
 ```
 
 ## 13. LISTEN/NOTIFY
 
+`waitForNotification` blocks until a `NOTIFY` arrives. For a deadline,
+use `waitForNotificationTimeout` which returns `Maybe Notification`.
+
 ```haskell
 withResource pool $ \conn -> do
   listen conn "user_events"
-  waitForNotification conn $ \notif ->
-    putStrLn $ "Channel: " <> show (nChannel notif)
-              <> " Payload: " <> show (nPayload notif)
+  notif <- waitForNotification conn
+  putStrLn $ "Channel: " <> show (notifChannel notif)
+          <> " Payload: " <> show (notifPayload notif)
 ```
 
-## 14. The Valiant monad
+## 14. The Valiant monad (valiant-mtl)
 
-For convenience, `Valiant` is a `ReaderT Pool IO` monad that threads the
-pool implicitly:
+The `valiant-mtl` adapter package provides a `Valiant` monad that is
+`ReaderT Pool IO`, threading the pool implicitly. Add `valiant-mtl` to
+your `build-depends` and import `Valiant.Monad`:
 
 ```haskell
+import Valiant.Monad
+
 app :: Valiant ()
 app = do
   users <- fetchAllM Q.listAll ()
-  withTransactionM $ \tx ->
+  withTransactionM $ \_tx ->
     executeM Q.insert ("NewUser", Nothing)
 
 main :: IO ()

@@ -50,5 +50,5 @@ There is also a `Valiant.Monad` module re-exported from this package
 that provides the same operations specialised to
 `ReaderT Pool IO`.
 
-See the [valiant tutorial](https://github.com/joshburgess/valiant/blob/main/docs/tutorial.md)
+See the [valiant tutorial](https://github.com/joshburgess/valiant/blob/main/docs/TUTORIAL.md)
 for `Statement` definitions and the `valiant prepare` workflow.

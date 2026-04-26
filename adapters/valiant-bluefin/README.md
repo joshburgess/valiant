@@ -32,5 +32,5 @@ main = do
 - Transactions: `withTransactionB`
 - Raw access: `withConnectionB`
 
-See the [valiant tutorial](https://github.com/joshburgess/valiant/blob/main/docs/tutorial.md)
+See the [valiant tutorial](https://github.com/joshburgess/valiant/blob/main/docs/TUTORIAL.md)
 for the underlying `Statement` and `valiant prepare` workflow.

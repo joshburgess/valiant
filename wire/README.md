@@ -16,7 +16,9 @@ C dependencies.
   cancellation.
 - Binary format type classes: `PgEncode`, `PgDecode`, OID metadata.
   Codecs for individual types live in the `valiant` runtime library.
-- Errors: 9 structured error types with column-by-column diagnostics.
+- Errors: 8 structured error constructors (`ConnectionError`,
+  `AuthError`, `ProtocolError`, `QueryError`, `DecodeError`,
+  `PoolTimeout`, `PoolClosed`, `ConnectionDead`).
 
 ## When to use this directly
 

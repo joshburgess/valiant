@@ -29,5 +29,5 @@ Both functions accumulate one result set at a time before yielding.
 For truly incremental memory use, drive `Valiant.withCursor` /
 `Valiant.fetchBatch` directly.
 
-See the [valiant tutorial](https://github.com/joshburgess/valiant/blob/main/docs/tutorial.md)
+See the [valiant tutorial](https://github.com/joshburgess/valiant/blob/main/docs/TUTORIAL.md)
 for `Statement` definitions and the `valiant prepare` workflow.

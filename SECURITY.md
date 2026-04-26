@@ -72,11 +72,12 @@ Out of scope:
 ## Cryptography
 
 Valiant uses [`crypton`](https://hackage.haskell.org/package/crypton)
-for SCRAM-SHA-256 (PBKDF2 + HMAC-SHA-256) and MD5 hashing, and
-[`crypton-connection`](https://hackage.haskell.org/package/crypton-connection)
-for TLS. The library does not implement its own primitives. If you
-believe the protocol implementation misuses these libraries, that is in
-scope.
+for SCRAM-SHA-256 (PBKDF2 + HMAC-SHA-256) and MD5 hashing, and the
+[`tls`](https://hackage.haskell.org/package/tls) package (with
+`crypton-x509-store` and `crypton-x509-system` for certificate
+handling) for TLS. The library does not implement its own primitives.
+If you believe the protocol implementation misuses these libraries,
+that is in scope.
 
 ## Hardening checklist (for users)
 

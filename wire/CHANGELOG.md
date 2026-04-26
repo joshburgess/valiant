@@ -8,8 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Initial release. Pure-Haskell implementation of the PostgreSQL v3 wire
 protocol.
 
-- Connection setup over TCP and Unix sockets, TLS 1.2/1.3, MD5 and
-  SCRAM-SHA-256 authentication, multi-host failover
+- Connection setup over TCP and Unix sockets, TLS 1.2/1.3,
+  cleartext / MD5 / SCRAM-SHA-256 authentication, multi-host failover
   (`target_session_attrs`, `load_balance_hosts`), startup parameters.
 - Connection pool with idle reaping, health checks, jittered max-life,
   queue mode (LIFO/FIFO), recycling modes (always/on-error), lifecycle

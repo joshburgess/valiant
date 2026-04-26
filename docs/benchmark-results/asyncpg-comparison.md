@@ -65,7 +65,7 @@ in a single network round-trip.
 | Benchmark | asyncpg | valiant |
 |-----------|---------|-------|
 | SELECT 1+1 (10 conns × 1000) | 30,279/s | **31,056/s** |
-| fetch 1000 rows (10 conns × 100) | 2,819/s | **3,084/s** |
+| fetch 1000 rows (10 conns × 100) | 2,819/s | **3,091/s** |
 
 ## Summary
 
@@ -97,7 +97,7 @@ binary format with optimized decoders.
 **For real applications:** The SELECT 1+1 gap (28%) is irrelevant
 because real queries spend 1-100ms in server-side execution. A 0.03ms
 driver overhead difference is noise. The batch pipelining advantage
-(7.5x) is relevant for any application that does bulk writes.
+(7.7x) is relevant for any application that does bulk writes.
 
 ## Reproducibility
 

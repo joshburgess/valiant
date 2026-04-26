@@ -5,7 +5,7 @@ All notable changes to the valiant project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0.0] - 2026-04-24
+## [0.1.0.0] - 2026-04-25
 
 Initial release. The project ships four primary packages plus eight adapter
 libraries.
@@ -46,7 +46,7 @@ libraries: `valiant-bluefin`, `valiant-conduit`, `valiant-effectful`,
 - **Wire protocol features.** Extended query protocol with binary
   format, statement caching, prepared statements, server-side cursors,
   pipelining, COPY in/out (including CSV), large objects,
-  LISTEN/NOTIFY, query cancellation, MD5 and SCRAM-SHA-256
+  LISTEN/NOTIFY, query cancellation, cleartext, MD5, and SCRAM-SHA-256
   authentication.
 - **Strict by default.** `StrictData`, `-funbox-strict-fields`, and
   `-fspecialise-aggressively` across all libraries. `-fno-full-laziness`

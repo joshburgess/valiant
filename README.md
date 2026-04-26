@@ -137,7 +137,7 @@ Benchmarks against [hasql](https://hackage.haskell.org/package/hasql)
 (libpq FFI, binary) and [postgresql-simple](https://hackage.haskell.org/package/postgresql-simple)
 (libpq FFI, text). Single connection, native Postgres 16.
 
-**Reads** (Linux, Postgres 16, Unix socket, [CI-verified](docs/benchmark-results/)):
+**Reads** (Linux benchmark host, Postgres 16, Unix socket):
 
 | Rows | valiant | hasql | pg-simple | vs hasql | vs pg-simple |
 |------|-------|-------|-----------|----------|--------------|
@@ -159,12 +159,12 @@ nothing to pipeline) but **5x faster** once row decoding dominates.
 Pipelined batch inserts are **9.9x faster** than hasql and **16.6x faster**
 than postgresql-simple.
 
-**vs asyncpg (Python)** (same CI runner, same Postgres, same Unix socket):
+**vs asyncpg (Python)** (CI-verified on the same GitHub Actions runner, Postgres 16, Unix socket):
 
 | Benchmark | asyncpg | valiant |
 |-----------|---------|-------|
 | SELECT 1+1 throughput (10 conns) | 30,279/s | **31,056/s** |
-| fetch 1000 rows throughput | 2,819/s | **3,084/s** |
+| fetch 1000 rows throughput | 2,819/s | **3,091/s** |
 | batch insert 1000 (pipelined) | N/A | **173.8/s** |
 
 See [docs/benchmark-results/asyncpg-comparison.md](docs/benchmark-results/asyncpg-comparison.md)
@@ -194,9 +194,11 @@ for the full head-to-head comparison.
 See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the full deep-dive:
 codec benchmarks, pool benchmarks, architecture comparison, optimization
 techniques, and the complete optimization journey. Archived numbers with
-CSV data are in [docs/benchmark-results/](docs/benchmark-results/README.md);
-the [`bench-compare`](bench-compare/README.md) suite reproduces them
-locally or via the [Benchmarks workflow](.github/workflows/benchmarks.yml).
+CSV data (Apple Silicon / macOS / Docker Postgres) are in
+[docs/benchmark-results/](docs/benchmark-results/README.md); the
+[`bench-compare`](bench-compare/README.md) suite reproduces the read,
+insert, and asyncpg comparisons locally or via the
+[Benchmarks workflow](.github/workflows/benchmarks.yml).
 
 ## Project structure
 
@@ -257,7 +259,7 @@ valiant/
 - Directory structure maps to Haskell module structure
 
 ### Compile-time validation
-- 9 structured error types with column-by-column diagnostics
+- 6 structured error codes (`VALIANT-001`..`006`) with column-by-column diagnostics
 - Nullability inference from `pg_attribute`
 - Did-you-mean suggestions for mistyped file paths (Levenshtein distance)
 - Type inference (no signature required) or typed hole discovery
