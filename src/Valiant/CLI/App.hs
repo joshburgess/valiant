@@ -98,16 +98,14 @@ commandParser =
   subparser
     ( command "prepare"
         ( info
-            ( CmdPrepare
-                <$> ( PrepareOpts
-                        <$> many
-                          ( strOption
-                              ( long "inline"
-                                  <> metavar "DIR"
-                                  <> help "Scan .hs files in DIR for inline query \"...\" calls"
-                              )
-                          )
-                    )
+            ( CmdPrepare . PrepareOpts
+                <$> many
+                  ( strOption
+                      ( long "inline"
+                          <> metavar "DIR"
+                          <> help "Scan .hs files in DIR for inline query \"...\" calls"
+                      )
+                  )
             )
             (progDesc "Prepare all .sql files (and inline queries) against the database")
         )

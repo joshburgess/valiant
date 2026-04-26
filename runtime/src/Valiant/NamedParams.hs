@@ -149,7 +149,7 @@ encodeNamed paramNames p =
         ([], []) ->
           V.fromListN n (map (\name -> Map.findWithDefault Nothing name pairMap) paramNames)
         _ ->
-          error $ unlines $ filter (not . null) $ concat
+          error $ unlines $ concatMap (filter (not . null))
             [ [ "valiant: named parameter mismatch"
               , ""
               , "  SQL parameters:   " <> showNames paramNames

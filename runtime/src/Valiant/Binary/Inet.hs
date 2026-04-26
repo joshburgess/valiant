@@ -101,7 +101,7 @@ renderIPv4 :: ByteString -> Text
 renderIPv4 bs =
   T.pack $
     intercalate "." $
-      map (\i -> show (BS.index bs i)) [0 .. 3]
+      map (show . BS.index bs) [0 .. 3]
 
 renderIPv6 :: ByteString -> Text
 renderIPv6 bs =

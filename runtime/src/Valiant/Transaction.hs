@@ -28,6 +28,7 @@ module Valiant.Transaction
   ) where
 
 import Control.Exception (SomeException, catch, mask, onException, throwIO, try)
+import Control.Monad (void)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
@@ -281,7 +282,7 @@ withSavepoint tx action = do
 
 rollback :: Connection -> IO ()
 rollback conn =
-  (simpleQuery conn "ROLLBACK" >> pure ()) `catch` \(_ :: SomeException) -> pure ()
+  void (simpleQuery conn "ROLLBACK") `catch` \(_ :: SomeException) -> pure ()
 
 beginStatement :: IsolationLevel -> ByteString
 beginStatement = \case

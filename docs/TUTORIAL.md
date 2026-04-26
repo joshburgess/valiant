@@ -4,7 +4,8 @@ A step-by-step guide to using valiant in a Haskell project.
 
 ## Prerequisites
 
-- GHC 9.6 or newer (CI tests against 9.6.7, 9.8.4, and 9.10.3)
+- GHC 9.10.3 (the only version v0.1 ships against; multi-GHC support
+  is on the 0.1.x roadmap)
 - Cabal 3.0+
 - A running PostgreSQL instance
 

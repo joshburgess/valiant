@@ -9,6 +9,7 @@ module PgWire.Auth.ScramSHA256
   , scramAuthWithChannelBinding
   ) where
 
+import Control.Monad (unless)
 import Crypto.Hash (SHA256 (..), hashWith)
 import Crypto.KDF.PBKDF2 qualified as PBKDF2
 import Crypto.MAC.HMAC (HMAC, hmac)
@@ -76,9 +77,8 @@ scramAuthInternal wc user password mCertHash = do
     Right s -> pure s
 
   -- Verify server nonce starts with our client nonce
-  if not (clientNonce `BS.isPrefixOf` serverNonce)
-    then throwPgWire (AuthError "Server nonce doesn't start with client nonce")
-    else pure ()
+  unless (clientNonce `BS.isPrefixOf` serverNonce) $
+    throwPgWire (AuthError "Server nonce doesn't start with client nonce")
 
   -- Compute proofs
   let saltedPassword = hi password salt iterations

@@ -585,9 +585,7 @@ release pool conn = do
     else do
       -- Look up creation time from the tracking map (fixes maxLife bug)
       meta <- Map.lookup (connBackendPid conn) <$> readTVarIO (pConnMeta pool)
-      let createdAt = case meta of
-            Just cm -> cmCreatedAt cm
-            Nothing -> now
+      let createdAt = maybe now cmCreatedAt meta
       lastUsed <- newIORef now
       let !entry = PoolEntry conn createdAt lastUsed
       atomically $ modifyTVar' (pIdle pool) (Seq.|> entry)

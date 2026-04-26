@@ -8,7 +8,7 @@ module Valiant.Plugin
   ( plugin
   ) where
 
-import Control.Monad (forM_)
+import Control.Monad (forM_, when)
 import Data.ByteString qualified as BS
 import GHC.Driver.Env.Types (Hsc)
 import GHC.Driver.Plugins (ParsedResult (..))
@@ -78,9 +78,7 @@ processQueryFileCall config call
       -- file exists so GHC recompiles when it appears.
       let sqlPath = pcSqlDir config </> qfcFilePath call
       sqlExists <- liftIO $ doesFileExist sqlPath
-      if sqlExists
-        then addFileDependency sqlPath
-        else pure ()
+      when sqlExists $ addFileDependency sqlPath
   | otherwise = do
       let sqlDir = pcSqlDir config
           cacheDir = pcCacheDir config

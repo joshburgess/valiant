@@ -367,8 +367,9 @@ docker compose down
 
 ## Building from source
 
-Requires GHC 9.6+ and Cabal 3.0+. CI tests against GHC 9.6.7, 9.8.4,
-and 9.10.3.
+Requires GHC 9.10.3 and Cabal 3.0+. v0.1 ships against a single GHC
+version; multi-GHC support (9.6, 9.8, and newer) is planned for 0.1.x
+once the plugin's GHC AST shims are in place.
 
 ```bash
 git clone https://github.com/joshburgess/valiant.git

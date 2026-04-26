@@ -47,7 +47,7 @@ copyIn conn sql producer =
   submitExclusive (connAsync conn) $ \wc txRef -> do
     sendFrontendMsg wc (Query sql)
     waitCopyIn wc
-    producer (\chunk -> sendFrontendMsg wc (CopyData chunk))
+    producer (sendFrontendMsg wc . CopyData)
       `catch` \(e :: SomeException) -> do
         -- Best-effort: send CopyFail and drain to ReadyForQuery so the
         -- connection is usable. If the wire is dead, ignore the cleanup

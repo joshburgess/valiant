@@ -42,6 +42,7 @@ import Control.Concurrent.Async (Async, async, cancel, link2)
 import Control.Concurrent.MVar
 import Control.Concurrent.STM
 import Control.Exception (SomeException, catch, mask, onException, throwIO, try)
+import Control.Monad (void)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
@@ -646,24 +647,24 @@ drainTBQueue q = loop id
 drainPendingWithError :: AsyncWireConn -> PgWireError -> IO ()
 drainPendingWithError awc err = do
   pendings <- atomically $ flushTQueue (awcPending awc)
-  mapM_ (\pr -> tryPutMVar (prMVar pr) (Left err) >> pure ()) pendings
+  mapM_ (\pr -> void (tryPutMVar (prMVar pr) (Left err))) pendings
   queued <- atomically $ drainTBQueue (awcSendQueue awc)
-  mapM_ (\(_, mv) -> tryPutMVar mv (Left err) >> pure ()) queued
+  mapM_ (\(_, mv) -> void (tryPutMVar mv (Left err))) queued
   mExcl <- atomically $ tryTakeTMVar (awcExclusive awc)
   case mExcl of
-    Just mv -> tryPutMVar mv (Left err) >> pure ()
+    Just mv -> void (tryPutMVar mv (Left err))
     Nothing -> pure ()
 
 -- | Like 'drainPendingWithError' but operates on 'AsyncCore' (used by threads).
 drainPendingWithErrorCore :: AsyncCore -> PgWireError -> IO ()
 drainPendingWithErrorCore ac err = do
   pendings <- atomically $ flushTQueue (acPending ac)
-  mapM_ (\pr -> tryPutMVar (prMVar pr) (Left err) >> pure ()) pendings
+  mapM_ (\pr -> void (tryPutMVar (prMVar pr) (Left err))) pendings
   queued <- atomically $ drainTBQueue (acSendQueue ac)
-  mapM_ (\(_, mv) -> tryPutMVar mv (Left err) >> pure ()) queued
+  mapM_ (\(_, mv) -> void (tryPutMVar mv (Left err))) queued
   mExcl <- atomically $ tryTakeTMVar (acExclusive ac)
   case mExcl of
-    Just mv -> tryPutMVar mv (Left err) >> pure ()
+    Just mv -> void (tryPutMVar mv (Left err))
     Nothing -> pure ()
 
 tagRows :: CommandTag -> Int64

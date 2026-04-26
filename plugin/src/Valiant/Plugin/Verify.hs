@@ -46,9 +46,9 @@ decomposeStatementType :: Type -> Maybe (Type, Type)
 decomposeStatementType ty = do
   (tyCon, args) <- splitTyConApp_maybe ty
   let tcName = occNameString (nameOccName (tyConName tyCon))
-  if tcName == "Statement" && length args == 2
-    then Just (args !! 0, args !! 1)
-    else Nothing
+  case args of
+    [a, b] | tcName == "Statement" -> Just (a, b)
+    _ -> Nothing
 
 -- | Verify parameter types match.
 verifyParams :: SrcSpan -> FilePath -> Type -> [CacheParam] -> TcM ()

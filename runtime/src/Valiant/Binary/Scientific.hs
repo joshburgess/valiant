@@ -32,7 +32,7 @@ signNaN = fromIntegral (0xC000 :: Int)
 -- Encoding ------------------------------------------------------------------
 
 instance PgEncode Scientific where
-  pgEncode s = encodeNumeric s
+  pgEncode = encodeNumeric
   pgOid _ = oidNumeric
 
 encodeNumeric :: Scientific -> ByteString

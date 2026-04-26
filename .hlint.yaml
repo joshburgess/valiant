@@ -13,6 +13,16 @@
 - ignore: {name: "Reduce duplication"}             # too subjective, left to code review
 - ignore: {name: "Parse error"}                    # false positive on CPP/PatternSynonyms
 
+# Suggestions that require enabling a language extension purely for
+# cosmetic gain. We don't want to flip TupleSections or LambdaCase on
+# files where it would otherwise be noise.
+- ignore: {name: "Use lambda-case"}
+- ignore: {name: "Use tuple-section"}
+
+# `head` is partial; the suggestion to replace `args !! 0` with `head args`
+# is not an improvement. We use explicit pattern matching instead.
+- ignore: {name: "Use head"}
+
 # ── Module-scoped ignores ───────────────────────────────────────────
 # Performance-critical modules: don't change evaluation semantics
 - ignore: {name: "Eta reduce", within: [Valiant.Transaction, Valiant.Execute, Valiant.FromRow, Valiant.FromRowFast]}

@@ -440,9 +440,7 @@ rawFetchAll conn sql oids params = do
   (name, needsParse) <- lookupOrAllocRaw conn sql
   let paramVec = V.fromList params
       msgs =
-        (if needsParse
-          then [Parse name sql (V.fromList oids)]
-          else [])
+        [Parse name sql (V.fromList oids) | needsParse]
           ++ [ Bind "" name binaryFmtVec paramVec binaryFmtVec
              , Execute "" 0
              , Sync
@@ -488,9 +486,7 @@ rawExecute conn sql oids params = do
   (name, needsParse) <- lookupOrAllocRaw conn sql
   let paramVec = V.fromList params
       msgs =
-        (if needsParse
-          then [Parse name sql (V.fromList oids)]
-          else [])
+        [Parse name sql (V.fromList oids) | needsParse]
           ++ [ Bind "" name binaryFmtVec paramVec V.empty
              , Execute "" 0
              , Sync

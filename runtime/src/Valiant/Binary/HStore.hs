@@ -24,6 +24,7 @@ import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Builder qualified as B
 import Data.ByteString.Lazy qualified as LBS
+import Data.Bifunctor (second)
 import Data.Bits (shiftL, (.|.))
 import Data.Int (Int32)
 import Data.Map.Strict (Map)
@@ -51,7 +52,7 @@ instance NFData PgHStore
 -- hstoreFromList [(\"color\", \"red\"), (\"size\", \"large\")]
 -- @
 hstoreFromList :: [(Text, Text)] -> PgHStore
-hstoreFromList = PgHStore . Map.fromList . map (\(k, v) -> (k, Just v))
+hstoreFromList = PgHStore . Map.fromList . map (second Just)
 
 -- | Extract non-NULL key/value pairs as a list.
 hstoreToList :: PgHStore -> [(Text, Text)]

@@ -17,36 +17,26 @@ env:
   CABAL_VERSION: '3.12'
 
 jobs:
-  # ── Build (matrixed across supported GHC versions) ────────────────
+  # ── Build ─────────────────────────────────────────────────────────
+  # v0.1.0.0 is single-GHC. The plugin's GHC API usage tracks 9.10's
+  # parsed-AST extension fields and renamer error API; restoring
+  # 9.6/9.8 support is a 0.1.x task that needs CPP shims.
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        ghc: ['9.6.7', '9.8.4', '9.10.3']
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
         with:
-          ghc-version: ${{ matrix.ghc }}
+          ghc-version: ${{ env.PRIMARY_GHC }}
           cabal-version: ${{ env.CABAL_VERSION }}
-      - name: Pin GHC in cabal.project.local
-        run: |
-          echo "with-compiler: ghc-${{ matrix.ghc }}" > cabal.project.local
-      - name: Drop cabal.project.freeze for non-primary GHC
-        # The freeze file pins versions resolved against the primary GHC
-        # (e.g. text-2.1 is incompatible with GHC 9.6's bundled text-2.0).
-        # For matrix GHCs, let the solver pick fresh versions.
-        if: matrix.ghc != env.PRIMARY_GHC
-        run: rm -f cabal.project.freeze
       - uses: actions/cache@v4
         with:
           path: |
             ~/.cabal/store
             dist-newstyle
-          key: ci-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project', '**/*.cabal') }}
-          restore-keys: ci-${{ runner.os }}-${{ matrix.ghc }}-
+          key: ci-${{ runner.os }}-${{ env.PRIMARY_GHC }}-${{ hashFiles('cabal.project', '**/*.cabal') }}
+          restore-keys: ci-${{ runner.os }}-${{ env.PRIMARY_GHC }}-
       - name: Build all packages
         run: |
           cabal update
@@ -58,41 +48,26 @@ jobs:
           path: |
             ~/.cabal/store
             dist-newstyle
-          key: ci-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
+          key: ci-${{ runner.os }}-${{ env.PRIMARY_GHC }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
 
   # ── Unit tests (no database needed) ───────────────────────────────
-  # Each suite runs across the full GHC matrix to catch version-specific
-  # regressions in pg-wire, the runtime, the CLI, and the plugin.
   unit-tests:
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        ghc: ['9.6.7', '9.8.4', '9.10.3']
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
         with:
-          ghc-version: ${{ matrix.ghc }}
+          ghc-version: ${{ env.PRIMARY_GHC }}
           cabal-version: ${{ env.CABAL_VERSION }}
-      - name: Pin GHC in cabal.project.local
-        run: |
-          echo "with-compiler: ghc-${{ matrix.ghc }}" > cabal.project.local
-      - name: Drop cabal.project.freeze for non-primary GHC
-        # The freeze file pins versions resolved against the primary GHC
-        # (e.g. text-2.1 is incompatible with GHC 9.6's bundled text-2.0).
-        # For matrix GHCs, let the solver pick fresh versions.
-        if: matrix.ghc != env.PRIMARY_GHC
-        run: rm -f cabal.project.freeze
       - uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cabal/store
             dist-newstyle
-          key: ci-${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
-          restore-keys: ci-${{ runner.os }}-${{ matrix.ghc }}-
+          key: ci-${{ runner.os }}-${{ env.PRIMARY_GHC }}-${{ hashFiles('cabal.project', '**/*.cabal') }}-${{ github.sha }}
+          restore-keys: ci-${{ runner.os }}-${{ env.PRIMARY_GHC }}-
       - run: cabal test pg-wire-test
       - run: cabal test valiant-test
       - run: cabal test valiant-cli-test

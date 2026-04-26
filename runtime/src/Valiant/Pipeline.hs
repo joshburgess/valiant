@@ -51,7 +51,7 @@ data Pipeline a
 
 instance Functor Pipeline where
   fmap f (PureP a) = PureP (f a)
-  fmap f (QueryP s p dec) = QueryP s p (\rows -> f <$> dec rows)
+  fmap f (QueryP s p dec) = QueryP s p (fmap f . dec)
   fmap f (ApP pf px) = ApP (fmap (f .) pf) px
 
 instance Applicative Pipeline where
