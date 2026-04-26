@@ -223,32 +223,32 @@ valiant is a multi-package Cabal project:
 
 ```
 valiant/
-├── wire/                 # pg-wire: wire protocol, connection, pool, auth, TLS
-│   ├── src/PgWire/       # Protocol messages, builders, parsers, async I/O
-│   └── test/             # Wire protocol unit tests
-├── runtime/              # valiant: runtime library
-│   ├── src/Valiant/        # Binary codecs, execute, batch, pipeline, fold, copy, streaming
-│   ├── bench/            # Codec + concurrent benchmarks (criterion)
-│   ├── integration/      # Integration tests (require Postgres)
-│   └── test/             # Codec unit tests
-├── src/                  # valiant-cli source
-│   └── Valiant/CLI/        # Commands, cache, type map, discovery, nullability
-├── plugin/               # GHC source plugin
-│   └── src/Valiant/Plugin/ # AST traversal, verification, error messages
-├── adapters/             # Streaming and effect system adapters (8 packages)
-│   ├── valiant-conduit/    # Conduit adapter
-│   ├── valiant-pipes/      # Pipes adapter
-│   ├── valiant-streaming/  # streaming library adapter
-│   ├── valiant-streamly/   # Streamly adapter
-│   ├── valiant-bluefin/    # Bluefin effect system adapter
-│   ├── valiant-effectful/  # Effectful effect system adapter
+├── wire/                      # pg-wire: wire protocol, connection, pool, auth, TLS
+│   ├── src/PgWire/            # Protocol messages, builders, parsers, async I/O
+│   └── test/                  # Wire protocol unit tests
+├── runtime/                   # valiant: runtime library
+│   ├── src/Valiant/           # Binary codecs, execute, batch, pipeline, fold, copy, streaming
+│   ├── bench/                 # Codec + concurrent benchmarks (criterion)
+│   ├── integration/           # Integration tests (require Postgres)
+│   └── test/                  # Codec unit tests
+├── src/                       # valiant-cli source
+│   └── Valiant/CLI/           # Commands, cache, type map, discovery, nullability
+├── plugin/                    # GHC source plugin
+│   └── src/Valiant/Plugin/    # AST traversal, verification, error messages
+├── adapters/                  # Streaming and effect system adapters (8 packages)
+│   ├── valiant-conduit/       # Conduit adapter
+│   ├── valiant-pipes/         # Pipes adapter
+│   ├── valiant-streaming/     # streaming library adapter
+│   ├── valiant-streamly/      # Streamly adapter
+│   ├── valiant-bluefin/       # Bluefin effect system adapter
+│   ├── valiant-effectful/     # Effectful effect system adapter
 │   ├── valiant-fused-effects/ # Fused-effects adapter
-│   └── valiant-mtl/        # MTL monad transformer adapter
-├── example/              # Example REST API (scotty)
-├── bench-compare/        # Comparative benchmarks vs hasql, pg-simple
-├── scripts/              # pg-setup.sh, pg-teardown.sh
-├── docs/                 # TUTORIAL.md, PERFORMANCE.md, ASYNC_ARCHITECTURE.md
-└── .valiant/               # Cached query metadata (committed to VCS)
+│   └── valiant-mtl/           # MTL monad transformer adapter
+├── example/                   # Example REST API (scotty)
+├── bench-compare/             # Comparative benchmarks vs hasql, pg-simple
+├── scripts/                   # pg-setup.sh, pg-teardown.sh
+├── docs/                      # TUTORIAL.md, PERFORMANCE.md, ASYNC_ARCHITECTURE.md
+└── .valiant/                  # Cached query metadata (committed to VCS)
 ```
 
 ## Features
