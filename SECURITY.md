@@ -20,7 +20,7 @@ backported.
 
 Please **do not** file a public GitHub issue for security reports.
 
-Email `joshualoganburgess@gmail.com` with:
+Email `joshburgess.webdev@gmail.com` with:
 
 - A description of the issue and its impact.
 - Steps to reproduce, ideally with a minimal test case.
