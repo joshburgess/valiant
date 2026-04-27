@@ -11,8 +11,8 @@ constructors.
 
 ```haskell
 import Control.Carrier.Lift (runM)
+import Valiant (newPool, defaultPoolConfig, poolConnString)
 import Valiant.FusedEffects
-import PgWire.Pool (newPool, defaultPoolConfig, poolConnString)
 
 myApp :: (Has (Reader Pool) sig m, MonadIO m) => m [User]
 myApp = do

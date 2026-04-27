@@ -208,8 +208,8 @@ Combine independent queries into one network round-trip with `Pipeline`:
 ```haskell
 (user, posts) <- withResource pool $ \conn ->
   runPipeline conn $
-    (,) <$> pipeFetchOne conn Q.findUserById 42
-        <*> pipeFetchAll conn Q.listPostsByUser 42
+    (,) <$> pipeFetchOne Q.findUserById 42
+        <*> pipeFetchAll Q.listPostsByUser 42
 ```
 
 ## 11. Streaming large result sets

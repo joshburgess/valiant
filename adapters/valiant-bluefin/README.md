@@ -10,8 +10,8 @@ pass to functions that need database access.
 ## Quick start
 
 ```haskell
+import Valiant (newPool, defaultPoolConfig, poolConnString)
 import Valiant.Bluefin
-import PgWire.Pool (newPool, defaultPoolConfig, poolConnString)
 
 myApp :: ValiantHandle e -> IO [User]
 myApp db = fetchAllB db listUsers ()

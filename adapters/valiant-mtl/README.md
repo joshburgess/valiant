@@ -12,8 +12,8 @@ just `Pool`.
 
 ```haskell
 import Control.Monad.Reader
+import Valiant (newPool, defaultPoolConfig, poolConnString)
 import Valiant.Mtl
-import PgWire.Pool (newPool, defaultPoolConfig, poolConnString)
 
 data AppEnv = AppEnv
   { appPool   :: Pool

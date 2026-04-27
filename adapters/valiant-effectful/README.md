@@ -10,8 +10,8 @@ via `Valiant :> es`, plus a pool-based handler.
 
 ```haskell
 import Effectful
+import Valiant (newPool, defaultPoolConfig, poolConnString)
 import Valiant.Effectful
-import PgWire.Pool (newPool, defaultPoolConfig, poolConnString)
 
 myApp :: (Valiant :> es, IOE :> es) => Eff es [User]
 myApp = do
