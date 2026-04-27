@@ -30,12 +30,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: ${{ env.GHC_VERSION }}
           cabal-version: ${{ env.CABAL_VERSION }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.cabal/store
@@ -47,7 +47,7 @@ jobs:
           cabal update
           cabal build valiant-bench bench-compare -O2
       - name: Save build artifacts
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: |
             ~/.cabal/store
@@ -64,12 +64,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: ${{ env.GHC_VERSION }}
           cabal-version: ${{ env.CABAL_VERSION }}
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v5
         with:
           path: |
             ~/.cabal/store
@@ -79,7 +79,7 @@ jobs:
       - name: Run codec benchmarks
         run: |
           cabal bench valiant-bench --benchmark-options='--match prefix codec --time-limit 3 --csv codec.csv' 2>&1 | tee codec-output.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: bench-codec
@@ -94,12 +94,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: ${{ env.GHC_VERSION }}
           cabal-version: ${{ env.CABAL_VERSION }}
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v5
         with:
           path: |
             ~/.cabal/store
@@ -123,7 +123,7 @@ jobs:
           DATABASE_URL: postgres://valiant_test:valiant_test@/valiant_test?host=/var/run/postgresql
         run: |
           cabal bench valiant-bench --benchmark-options='--match prefix query --time-limit 3 --csv query.csv' 2>&1 | tee query-output.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: bench-query
@@ -138,12 +138,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: ${{ env.GHC_VERSION }}
           cabal-version: ${{ env.CABAL_VERSION }}
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v5
         with:
           path: |
             ~/.cabal/store
@@ -168,7 +168,7 @@ jobs:
           DATABASE_URL: postgres://valiant_test:valiant_test@/valiant_test?host=/var/run/postgresql
         run: |
           cabal bench valiant-bench --benchmark-options='+RTS -N -RTS --match prefix concurrent --time-limit 2 --csv concurrent.csv' 2>&1 | tee concurrent-output.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: bench-concurrent
@@ -183,12 +183,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: ${{ env.GHC_VERSION }}
           cabal-version: ${{ env.CABAL_VERSION }}
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v5
         with:
           path: |
             ~/.cabal/store
@@ -213,7 +213,7 @@ jobs:
           DATABASE_URL: postgres://valiant_test:valiant_test@/valiant_test?host=/var/run/postgresql
         run: |
           cabal bench valiant-bench --benchmark-options='+RTS -N -RTS --match prefix pool --time-limit 2 --csv pool.csv' 2>&1 | tee pool-output.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: bench-pool
@@ -228,12 +228,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: ${{ env.GHC_VERSION }}
           cabal-version: ${{ env.CABAL_VERSION }}
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v5
         with:
           path: |
             ~/.cabal/store
@@ -258,7 +258,7 @@ jobs:
           DATABASE_URL: postgres://valiant_test:valiant_test@/valiant_test?host=/var/run/postgresql
         run: |
           cabal bench valiant-bench --benchmark-options='+RTS -N -RTS --match prefix asyncpg-compare --time-limit 5 --csv asyncpg-compare.csv' 2>&1 | tee asyncpg-compare-output.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: bench-asyncpg-valiant
@@ -273,12 +273,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: ${{ env.GHC_VERSION }}
           cabal-version: ${{ env.CABAL_VERSION }}
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v5
         with:
           path: |
             ~/.cabal/store
@@ -302,7 +302,7 @@ jobs:
           DATABASE_URL: postgres://valiant_test:valiant_test@/valiant_test?host=/var/run/postgresql
         run: |
           BENCH_MODE=quick cabal run bench-compare -- --time-limit 3 --csv comparative.csv 2>&1 | tee comparative-output.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: bench-comparative
@@ -317,7 +317,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Setup Postgres
         run: |
           sudo apt-get update -qq
@@ -340,7 +340,7 @@ jobs:
           DATABASE_URL: postgres://valiant_test@/valiant_test?host=/var/run/postgresql
         run: |
           python3 bench-compare/asyncpg-bench.py "$DATABASE_URL" 2>&1 | tee asyncpg-baseline-output.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: bench-asyncpg-baseline
@@ -354,7 +354,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: bench-*
           merge-multiple: true
@@ -374,7 +374,7 @@ jobs:
               echo "" >> $GITHUB_STEP_SUMMARY
             fi
           done
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: benchmark-results-all
           path: "*.csv"

@@ -25,12 +25,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: ${{ env.PRIMARY_GHC }}
           cabal-version: ${{ env.CABAL_VERSION }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.cabal/store
@@ -43,7 +43,7 @@ jobs:
           cabal build pg-wire valiant valiant-plugin valiant-cli
           cabal build valiant-mtl valiant-effectful valiant-bluefin valiant-fused-effects
           cabal build valiant-conduit valiant-streaming valiant-streamly valiant-pipes
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v5
         with:
           path: |
             ~/.cabal/store
@@ -56,12 +56,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: ${{ env.PRIMARY_GHC }}
           cabal-version: ${{ env.CABAL_VERSION }}
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v5
         with:
           path: |
             ~/.cabal/store
@@ -82,12 +82,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: ${{ env.PRIMARY_GHC }}
           cabal-version: ${{ env.CABAL_VERSION }}
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v5
         with:
           path: |
             ~/.cabal/store
@@ -102,12 +102,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: ${{ env.PRIMARY_GHC }}
           cabal-version: ${{ env.CABAL_VERSION }}
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v5
         with:
           path: |
             ~/.cabal/store
@@ -152,7 +152,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: ${{ env.PRIMARY_GHC }}
@@ -195,12 +195,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: haskell-actions/setup@v2
         with:
           ghc-version: ${{ env.PRIMARY_GHC }}
           cabal-version: ${{ env.CABAL_VERSION }}
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v5
         with:
           path: |
             ~/.cabal/store
@@ -223,11 +223,16 @@ jobs:
           done
 
   # ── HLint ─────────────────────────────────────────────────────────
+  # haskell-actions/hlint-setup and hlint-run are still on Node 20 in
+  # their v2 release. The default branch has been updated to Node 24
+  # but no v3 tag exists yet. Until upstream cuts a release, GitHub
+  # will surface a Node 20 deprecation warning here. The deadline is
+  # September 2026, so revisit if no v3 has shipped by mid-2026.
   hlint:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: haskell-actions/hlint-setup@v2
         with:
           version: '3.10'
