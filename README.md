@@ -2,7 +2,7 @@
 
 **Compile-time checked SQL for Haskell.**
 
-Inspired by Rust's [sqlx](https://github.com/launchbadge/sqlx), built from scratch for Haskell. No Template Haskell. No `libpq`. No C dependencies. Raw `.sql` files validated against a live Postgres database at prepare time, with a GHC source plugin that enforces type safety at compile time. The fastest Haskell PostgreSQL library: 5x faster than hasql on multi-row reads, 10x faster on pipelined batch writes, competitive with asyncpg (Python) on throughput.
+Inspired by Rust's [sqlx](https://github.com/launchbadge/sqlx) & [resolute](https://github.com/joshburgess/resolute), built from scratch for Haskell. No Template Haskell. No `libpq`. No C dependencies. Raw `.sql` files validated against a live Postgres database at prepare time, with a GHC source plugin that enforces type safety at compile time. The fastest Haskell PostgreSQL library: 5x faster than hasql on multi-row reads, 10x faster on pipelined batch writes, competitive with asyncpg (Python) on throughput.
 
 ## How it works
 
