@@ -170,6 +170,9 @@ module Valiant
   , withTransactionRetry
   , withTransactionRetryIf
   , withSavepoint
+  , setLocal
+  , setLocals
+  , withTransactionContext
 
     -- * Valiant monad (optional convenience)
     -- | For the @ReaderT Pool IO@ monad with lifted @*M@ functions,
@@ -288,6 +291,7 @@ module Valiant
   , isForeignKeyViolation
   , isSerializationError
   , isDeadlockError
+  , isFatal
 
     -- * Binary codec type classes
     -- | Low-level encode\/decode classes for individual PostgreSQL types.
@@ -365,7 +369,7 @@ import Valiant.Copy (CopyResult (..), copyIn, copyInBinary, copyOut)
 -- "Dynamic SQL" haddock note above). The bare import ensures haddock can
 -- resolve the "Valiant.Dynamic" cross-reference link.
 import Valiant.Dynamic ()
-import Valiant.Error (ConstraintViolation (..), catchConstraintViolation, constraintViolation, isDeadlockError, isForeignKeyViolation, isSerializationError, isUniqueViolation, pgErrorOf, sqlState)
+import Valiant.Error (ConstraintViolation (..), catchConstraintViolation, constraintViolation, isDeadlockError, isFatal, isForeignKeyViolation, isSerializationError, isUniqueViolation, pgErrorOf, sqlState)
 import Valiant.Execute (execute, executeBatch, executeMany, executeReturning, executeReturningMany, fetchAll, fetchAllFast, fetchAllUnboxed, fetchAllVec, fetchAllWith, fetchBatchAll, fetchBatchOne, fetchExists, fetchFirst, fetchOne, fetchOneFast, fetchOneOr, fetchOneOrThrow, fetchScalar, forEach, rawExecute, rawFetchAll, rawFetchOne)
 import Valiant.FromRowFast (FromRowFast (..), DecodeColumnFast (..))
 import Valiant.Fold (RowFold (..), executeWithFold)
@@ -380,7 +384,7 @@ import Valiant.Statement (Statement (..), mkStatement, query, queryFile, queryFi
 import Valiant.Streaming (CursorState, fetchAllCursor, fetchBatch, withCursor)
 import Valiant.ToParams (EncodeField (..), ToParams (..))
 import PgWire.Binary.Types (PgDecode (..), PgEncode (..))
-import Valiant.Transaction (IsolationLevel (..), Transaction (..), TransactionMode (..), defaultTransactionMode, withDeferrableTransaction, withReadOnlyTransaction, withSavepoint, withTransaction, withTransactionConn, withTransactionLevel, withTransactionLevelConn, withTransactionMode, withTransactionModeConn, withTransactionRetry, withTransactionRetryIf, withTransaction_)
+import Valiant.Transaction (IsolationLevel (..), Transaction (..), TransactionMode (..), defaultTransactionMode, setLocal, setLocals, withDeferrableTransaction, withReadOnlyTransaction, withSavepoint, withTransaction, withTransactionConn, withTransactionContext, withTransactionLevel, withTransactionLevelConn, withTransactionMode, withTransactionModeConn, withTransactionRetry, withTransactionRetryIf, withTransaction_)
 import PgWire.Cancel (cancelQuery, withQueryTimeout)
 import PgWire.Connection (Connection, close, connect, connectString, simpleQuery, withConnection)
 import PgWire.Connection.Config (ConnConfig (..), TlsMode (..), defaultConnConfig)

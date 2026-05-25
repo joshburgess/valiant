@@ -2,6 +2,7 @@ module Main where
 
 import PgWire.Auth.MD5Spec qualified as MD5Spec
 import PgWire.Auth.ScramFieldsSpec qualified as ScramFieldsSpec
+import PgWire.Cache.SieveSpec qualified as SieveSpec
 import PgWire.CancelSpec qualified as CancelSpec
 import PgWire.Connection.ConfigSpec qualified as ConfigSpec
 import PgWire.ErrorSpec qualified as ErrorSpec
@@ -29,6 +30,7 @@ main = hspec $ do
   describe "PgWire.Error" ErrorSpec.spec
   describe "PgWire.Auth.MD5" MD5Spec.spec
   describe "PgWire.Auth.ScramFields" ScramFieldsSpec.spec
+  describe "PgWire.Cache.Sieve" SieveSpec.spec
   describe "PgWire.Cancel" CancelSpec.spec
   describe "PgWire.Connection.Features" FeaturesSpec.spec
   describe "PgWire.Connection.Escaping" EscapingSpec.spec

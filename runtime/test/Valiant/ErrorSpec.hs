@@ -141,3 +141,97 @@ spec = do
             _ -> pure "wrong type")
           (simpleQuery conn "INSERT" >> pure "no error")
         result `shouldBe` ("caught" :: String)
+
+  describe "isFatal" $ do
+    it "ConnectionError is fatal" $
+      isFatal (ConnectionError "test") `shouldBe` True
+
+    it "AuthError is fatal" $
+      isFatal (AuthError "bad password") `shouldBe` True
+
+    it "ProtocolError is fatal" $
+      isFatal (ProtocolError "unexpected message") `shouldBe` True
+
+    it "ConnectionDead is fatal" $
+      isFatal ConnectionDead `shouldBe` True
+
+    it "PoolTimeout is not fatal" $
+      isFatal PoolTimeout `shouldBe` False
+
+    it "PoolClosed is not fatal" $
+      isFatal PoolClosed `shouldBe` False
+
+    it "DecodeError is not fatal" $
+      isFatal (DecodeError "bad row") `shouldBe` False
+
+    it "constraint violation (23505) is not fatal" $ do
+      let cfg = defaultMockConfig
+            { mockQueryHandler = errorHandler "23505" "duplicate key"
+            }
+      withMockConn cfg $ \conn -> do
+        err <- triggerError conn
+        isFatal err `shouldBe` False
+
+    it "syntax error (42601) is not fatal" $ do
+      let cfg = defaultMockConfig
+            { mockQueryHandler = errorHandler "42601" "syntax error"
+            }
+      withMockConn cfg $ \conn -> do
+        err <- triggerError conn
+        isFatal err `shouldBe` False
+
+    it "serialization failure (40001) is not fatal" $ do
+      let cfg = defaultMockConfig
+            { mockQueryHandler = errorHandler "40001" "could not serialize"
+            }
+      withMockConn cfg $ \conn -> do
+        err <- triggerError conn
+        isFatal err `shouldBe` False
+
+    it "connection exception (08006) is fatal" $ do
+      let cfg = defaultMockConfig
+            { mockQueryHandler = errorHandler "08006" "connection failure"
+            }
+      withMockConn cfg $ \conn -> do
+        err <- triggerError conn
+        isFatal err `shouldBe` True
+
+    it "admin shutdown (57P01) is fatal" $ do
+      let cfg = defaultMockConfig
+            { mockQueryHandler = errorHandler "57P01" "admin shutdown"
+            }
+      withMockConn cfg $ \conn -> do
+        err <- triggerError conn
+        isFatal err `shouldBe` True
+
+    it "crash recovery (57P02) is fatal" $ do
+      let cfg = defaultMockConfig
+            { mockQueryHandler = errorHandler "57P02" "crash shutdown"
+            }
+      withMockConn cfg $ \conn -> do
+        err <- triggerError conn
+        isFatal err `shouldBe` True
+
+    it "system IO error (58030) is fatal" $ do
+      let cfg = defaultMockConfig
+            { mockQueryHandler = errorHandler "58030" "io_error"
+            }
+      withMockConn cfg $ \conn -> do
+        err <- triggerError conn
+        isFatal err `shouldBe` True
+
+    it "internal error (XX000) is fatal" $ do
+      let cfg = defaultMockConfig
+            { mockQueryHandler = errorHandler "XX000" "internal error"
+            }
+      withMockConn cfg $ \conn -> do
+        err <- triggerError conn
+        isFatal err `shouldBe` True
+
+    it "undefined table (42P01) is not fatal" $ do
+      let cfg = defaultMockConfig
+            { mockQueryHandler = errorHandler "42P01" "relation does not exist"
+            }
+      withMockConn cfg $ \conn -> do
+        err <- triggerError conn
+        isFatal err `shouldBe` False

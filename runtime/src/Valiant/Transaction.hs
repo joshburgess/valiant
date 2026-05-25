@@ -25,6 +25,15 @@ module Valiant.Transaction
   , withTransactionRetry
   , withTransactionRetryIf
   , withSavepoint
+
+    -- * Session variables (SET LOCAL)
+    -- | Set transaction-scoped configuration parameters using @SET LOCAL@.
+    -- Values are automatically reset when the transaction ends (commit or
+    -- rollback). This is the standard mechanism for passing context to
+    -- Row Level Security (RLS) policies in multi-tenant applications.
+  , setLocal
+  , setLocals
+  , withTransactionContext
   ) where
 
 import Control.Exception (SomeException, catch, mask, onException, throwIO, try)
@@ -33,7 +42,7 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
 import Data.Word (Word64)
-import PgWire.Connection (Connection, simpleQuery)
+import PgWire.Connection (Connection, escapeLiteral, simpleQuery)
 import PgWire.Error (PgWireError (..))
 import PgWire.Protocol.Backend (PgError (..))
 import PgWire.Pool (Pool, withResource)
@@ -310,3 +319,72 @@ freshSavepointName :: IO ByteString
 freshSavepointName = do
   n <- atomicModifyIORef' savepointCounter (\n -> (n + 1, n))
   pure ("valiant_sp_" <> BS8.pack (show n))
+
+------------------------------------------------------------------------
+-- SET LOCAL helpers
+------------------------------------------------------------------------
+
+-- | Set a transaction-scoped configuration parameter using @SET LOCAL@.
+--
+-- The value is automatically reset when the transaction ends. The value is
+-- safely escaped to prevent SQL injection.
+--
+-- This is the standard way to pass context to PostgreSQL Row Level Security
+-- (RLS) policies, e.g. setting the current tenant or user claims.
+--
+-- @
+-- withTransaction pool $ \\tx -> do
+--   setLocal tx \"app.current_tenant\" \"acme-corp\"
+--   setLocal tx \"request.jwt.claim.sub\" \"user-123\"
+--   fetchAll (txConn tx) tenantQuery ()
+-- @
+--
+-- Must be called within a transaction — @SET LOCAL@ outside a transaction
+-- has no effect (the value is discarded immediately).
+setLocal :: Transaction -> ByteString -> ByteString -> IO ()
+setLocal tx name value = do
+  let conn = txConn tx
+      escaped = escapeLiteral conn value
+      stmt = "SET LOCAL " <> name <> " = " <> escaped
+  void $ simpleQuery conn stmt
+
+-- | Set multiple transaction-scoped parameters at once.
+--
+-- @
+-- withTransaction pool $ \\tx -> do
+--   setLocals tx
+--     [ (\"app.current_tenant\", tenantId)
+--     , (\"app.current_role\", role)
+--     , (\"request.jwt.claim.sub\", userId)
+--     ]
+--   fetchAll (txConn tx) rlsQuery ()
+-- @
+setLocals :: Transaction -> [(ByteString, ByteString)] -> IO ()
+setLocals tx = mapM_ (uncurry (setLocal tx))
+
+-- | Run a transaction with pre-set context variables.
+--
+-- Combines 'withTransaction' and 'setLocals' into a single call. The context
+-- variables are set immediately after @BEGIN@ and before the action runs.
+--
+-- This is the recommended pattern for multi-tenant applications using
+-- Row Level Security:
+--
+-- @
+-- withTransactionContext pool
+--   [ (\"app.current_tenant\", tenantId)
+--   , (\"request.jwt.claim.sub\", userId)
+--   ]
+--   $ \\tx -> do
+--     users <- fetchAll (txConn tx) listTenantUsers ()
+--     ...
+-- @
+withTransactionContext
+  :: Pool
+  -> [(ByteString, ByteString)]
+  -> (Transaction -> IO a)
+  -> IO a
+withTransactionContext pool ctx action =
+  withTransaction pool $ \tx -> do
+    setLocals tx ctx
+    action tx

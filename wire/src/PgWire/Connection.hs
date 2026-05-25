@@ -65,14 +65,13 @@ import System.Random (randomRIO)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
-import Data.HashPSQ (HashPSQ)
-import Data.HashPSQ qualified as PSQ
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Int (Int32)
 import Data.Vector qualified as V
 import Data.Vector (Vector)
 import Data.Word (Word32, Word64)
+import PgWire.Cache.Sieve (SieveCache, newSieveCache)
 import PgWire.Async (AsyncWireConn (..), Request (..), Response (..), spawnAsyncWireConn, shutdownAsyncWireConn, submitRequest, submitExclusive)
 import PgWire.Auth.Cleartext (cleartextAuth)
 import PgWire.Auth.MD5 (md5Auth)
@@ -95,13 +94,12 @@ data Connection = Connection
   , connConfig :: !ConnConfig
   , connBackendPid :: {-# UNPACK #-} !Int32
   , connBackendKey :: {-# UNPACK #-} !Int32
-  , connStmtCache :: !(IORef (HashPSQ ByteString Word64 ByteString))
-  -- ^ LRU prepared statement cache. Keys are SQL text, priorities are
-  -- monotonic access ticks (lower = least recently used), values are
-  -- server-side statement names.
+  , connStmtCache :: !(SieveCache ByteString ByteString)
+  -- ^ Prepared statement cache (SIEVE eviction). Keys are SQL text,
+  -- values are server-side statement names. Eviction is driven by
+  -- per-entry visited bits and a sweep hand; lookups are O(1) and
+  -- mutate only the visited bit, not the linked list.
   , connStmtCounter :: !(IORef Word64)
-  , connStmtTick :: !(IORef Word64)
-  -- ^ Monotonic tick counter for LRU cache priorities.
   , connSslActive :: !Bool
   , connPreparedStatements :: !Bool
   -- ^ Whether to use named prepared statements (default: True).
@@ -281,9 +279,9 @@ connectSingleHost cfg = do
 
   pid <- readIORef pidRef
   key <- readIORef keyRef
-  stmtCache <- newIORef PSQ.empty
+  let !cap = max 1 (ccMaxPreparedStatements cfg)
+  stmtCache <- newSieveCache cap
   stmtCounter <- newIORef 0
-  stmtTick <- newIORef 0
   let sslActive = case ccTls cfg of
         TlsDisable -> False
         _ -> True
@@ -299,10 +297,9 @@ connectSingleHost cfg = do
       , connBackendKey = key
       , connStmtCache = stmtCache
       , connStmtCounter = stmtCounter
-      , connStmtTick = stmtTick
       , connSslActive = sslActive
       , connPreparedStatements = ccPreparedStatements cfg
-      , connMaxPreparedStatements = max 1 (ccMaxPreparedStatements cfg)
+      , connMaxPreparedStatements = cap
       }
 
 -- | Connect using a connection string.

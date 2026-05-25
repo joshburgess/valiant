@@ -1,6 +1,6 @@
 cabal-version:   3.0
 name:            valiant-mtl
-version:         0.1.0.0
+version:         0.1.0.1
 synopsis:        MTL-style adapter for valiant
 description:
   Provides valiant database operations as MTL-style functions that work in
@@ -62,7 +62,7 @@ library
     , base            >=4.17 && <5
     , valiant         >=0.1  && <0.2
     , mtl             >=2.2  && <2.4
-    , pg-wire         >=0.1  && <0.2
+    , pg-wire         >=0.2  && <0.3
     , time            >=1.12 && <1.15
     , transformers    >=0.6  && <0.7
     , vector          >=0.12 && <0.14

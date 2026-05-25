@@ -1,6 +1,6 @@
 cabal-version:   3.0
 name:            valiant-effectful
-version:         0.1.0.0
+version:         0.1.0.1
 synopsis:        Effectful adapter for valiant
 description:
   Provides an @Valiant@ effect for the @effectful@ effect system, enabling
@@ -69,7 +69,7 @@ library
     , base            >=4.17 && <5
     , effectful-core  >=2.3  && <2.6
     , valiant         >=0.1  && <0.2
-    , pg-wire         >=0.1  && <0.2
+    , pg-wire         >=0.2  && <0.3
     , vector          >=0.12 && <0.14
 
 test-suite valiant-effectful-test

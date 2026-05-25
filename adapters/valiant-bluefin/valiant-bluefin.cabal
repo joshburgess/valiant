@@ -1,6 +1,6 @@
 cabal-version:   3.0
 name:            valiant-bluefin
-version:         0.1.0.0
+version:         0.1.0.1
 synopsis:        Bluefin effect adapter for valiant
 description:
   Provides an @Valiant@ effect handle for the @bluefin@ effect system,
@@ -59,7 +59,7 @@ library
     , base            >=4.17 && <5
     , bluefin         >=0.0  && <0.2
     , valiant         >=0.1  && <0.2
-    , pg-wire         >=0.1  && <0.2
+    , pg-wire         >=0.2  && <0.3
 
 test-suite valiant-bluefin-test
   import:           warnings

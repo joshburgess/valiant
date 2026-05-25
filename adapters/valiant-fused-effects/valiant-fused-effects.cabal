@@ -1,6 +1,6 @@
 cabal-version:   3.0
 name:            valiant-fused-effects
-version:         0.1.0.0
+version:         0.1.0.1
 synopsis:        Fused-effects adapter for valiant
 description:
   Provides an @Valiant@ effect and @ValiantPoolC@ carrier for the
@@ -75,7 +75,7 @@ library
     , base            >=4.17 && <5
     , fused-effects   >=1.1  && <1.3
     , valiant         >=0.1  && <0.2
-    , pg-wire         >=0.1  && <0.2
+    , pg-wire         >=0.2  && <0.3
 
 test-suite valiant-fused-effects-test
   import:           warnings

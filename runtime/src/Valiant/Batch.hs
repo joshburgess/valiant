@@ -25,11 +25,11 @@ module Valiant.Batch
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
-import Data.HashPSQ qualified as PSQ
 import Data.Vector (Vector)
 import Data.Vector qualified as V
-import Data.Word (Word32, Word64)
+import Data.Word (Word32)
 import PgWire.Async (Request (..), Response (..), ResponseCollector (..), submitRequest)
+import PgWire.Cache.Sieve qualified as Sieve
 import PgWire.Binary.Types (PgEncode (..))
 import PgWire.Connection (Connection (..))
 import PgWire.Error (PgWireError (..), throwPgWire)
@@ -102,39 +102,24 @@ arrayOidFor oid        = oid       -- fallback: use as-is
 
 -- Internal helpers --------------------------------------------------------
 
--- | Bump the monotonic tick counter and return the new value.
-nextTick :: Connection -> IO Word64
-nextTick conn = atomicModifyIORef' (connStmtTick conn) (\n -> (n + 1, n + 1))
-
 ensurePreparedRaw :: Connection -> ByteString -> Vector Word32 -> IO ByteString
 ensurePreparedRaw conn sql oids = do
-  cache <- readIORef (connStmtCache conn)
-  case PSQ.lookup sql cache of
-    Just (_prio, name) -> do
-      tick <- nextTick conn
-      modifyIORef' (connStmtCache conn) (PSQ.insert sql tick name)
-      pure name
+  mname <- Sieve.lookup (connStmtCache conn) sql
+  case mname of
+    Just name -> pure name
     Nothing -> do
-      evictIfNeeded conn cache
       counter <- atomicModifyIORef' (connStmtCounter conn) (\n -> (n + 1, n))
       let name = "s" <> BS8.pack (show counter)
       resp <- submitRequest (connAsync conn) $ ReqPrepare (Parse name sql oids)
       case resp of
         RespParsed -> do
-          tick <- nextTick conn
-          modifyIORef' (connStmtCache conn) (PSQ.insert sql tick name)
+          evicted <- Sieve.insert (connStmtCache conn) sql name
+          case evicted of
+            Nothing -> pure ()
+            Just (_oldSql, oldName) -> do
+              cresp <- submitRequest (connAsync conn) $ ReqClose (Close DescribeStatement oldName)
+              case cresp of
+                RespClosed -> pure ()
+                _ -> pure ()  -- best effort
           pure name
         _ -> throwPgWire (ProtocolError "ensurePreparedRaw: unexpected response type")
-
--- | Evict the least recently used statement if the cache is full.
-evictIfNeeded :: Connection -> PSQ.HashPSQ ByteString Word64 ByteString -> IO ()
-evictIfNeeded conn cache
-  | PSQ.size cache < connMaxPreparedStatements conn = pure ()
-  | otherwise = case PSQ.findMin cache of
-      Nothing -> pure ()
-      Just (oldSql, _prio, oldName) -> do
-        resp <- submitRequest (connAsync conn) $ ReqClose (Close DescribeStatement oldName)
-        case resp of
-          RespClosed -> pure ()
-          _ -> pure () -- best effort
-        modifyIORef' (connStmtCache conn) (PSQ.delete oldSql)

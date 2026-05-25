@@ -36,7 +36,7 @@ import NoThunks.Class (NoThunks (..), OnlyCheckWhnfNamed (..), allNoThunks)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (Async, async, cancel, race)
 import Control.Concurrent.STM
-import Control.Exception (AsyncException, SomeException, catch, mask, onException, throwIO, try)
+import Control.Exception (AsyncException, SomeException, catch, fromException, mask, onException, throwIO, try)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
 import Data.Int (Int32)
@@ -45,10 +45,10 @@ import Data.Map.Strict qualified as Map
 import Data.Sequence (Seq (..))
 import Data.Sequence qualified as Seq
 import Data.Time (NominalDiffTime, UTCTime, addUTCTime, diffUTCTime, getCurrentTime)
-import Data.HashPSQ qualified as PSQ
 import PgWire.Async (AsyncWireConn (..))
+import PgWire.Cache.Sieve qualified as Sieve
 import PgWire.Connection (Connection (..), close, connectString, simpleQuery)
-import PgWire.Error (PgWireError (..), throwPgWire)
+import PgWire.Error (PgWireError (..), isFatal, throwPgWire)
 import PgWire.Pool.Config (PoolConfig (..), QueueMode (..), RecyclingMethod (..))
 import PgWire.Pool.Observation (PoolEvent (ConnectionAcquired, ConnectionCreated, ConnectionDestroyed, ConnectionRecycled, ConnectionReleased, HealthCheckFailed, AcquireTimeout, ReaperSwept, WarmerCreated, PoolResized, PoolShutdown))
 import PgWire.TypeCache (TypeCache, newTypeCache)
@@ -279,10 +279,23 @@ withResource pool action = mask $ \restore -> do
   conn <- acquire pool
   t1 <- getCurrentTime
   observe pool (ConnectionAcquired (diffUTCTime t1 t0))
-  result <- restore (action conn) `onException` destroyConn pool conn "exception"
-  release pool conn
-  observe pool ConnectionReleased
-  pure result
+  result <- try (restore (action conn))
+  case result of
+    Right val -> do
+      release pool conn
+      observe pool ConnectionReleased
+      pure val
+    Left ex -> do
+      -- Recoverable PgWire errors (constraint violations, syntax errors,
+      -- serialization failures) leave the connection healthy: return it
+      -- to the pool. Anything else (fatal PgWireError, async exceptions,
+      -- user IOExceptions) destroys the connection.
+      case fromException ex of
+        Just pgErr | not (isFatal pgErr) -> do
+          release pool conn
+          observe pool ConnectionReleased
+        _ -> destroyConn pool conn "exception"
+      throwIO (ex :: SomeException)
 
 -- | Like 'withResource' but with a custom acquire timeout.
 --
@@ -301,10 +314,19 @@ withResourceTimeout pool timeout action = mask $ \restore -> do
   conn <- acquireWithTimeout pool timeout
   t1 <- getCurrentTime
   observe pool (ConnectionAcquired (diffUTCTime t1 t0))
-  result <- restore (action conn) `onException` destroyConn pool conn "exception"
-  release pool conn
-  observe pool ConnectionReleased
-  pure result
+  result <- try (restore (action conn))
+  case result of
+    Right val -> do
+      release pool conn
+      observe pool ConnectionReleased
+      pure val
+    Left ex -> do
+      case fromException ex of
+        Just pgErr | not (isFatal pgErr) -> do
+          release pool conn
+          observe pool ConnectionReleased
+        _ -> destroyConn pool conn "exception"
+      throwIO (ex :: SomeException)
 
 -- | Get an atomic snapshot of the pool's current statistics.
 --
@@ -512,7 +534,7 @@ recycleCheck pool entry now = case poolRecyclingMethod (pConfig pool) of
           Right (Right _) -> do
             -- DISCARD ALL deallocates all prepared statements on the server,
             -- so the client-side cache must be cleared to stay in sync.
-            writeIORef (connStmtCache (peConn entry)) PSQ.empty
+            Sieve.clear (connStmtCache (peConn entry))
             pure True
           _ -> pure False
 

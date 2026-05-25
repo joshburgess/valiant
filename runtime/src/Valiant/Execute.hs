@@ -55,14 +55,13 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS8
 import Data.IORef
 import Data.Int (Int64)
-import Data.HashPSQ (HashPSQ)
-import Data.HashPSQ qualified as PSQ
 import Data.Maybe (fromMaybe)
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 import Data.Vector.Unboxed qualified as U
-import Data.Word (Word32, Word64)
+import Data.Word (Word32)
 import PgWire.Async (Request (..), Response (..), ResponseCollector (..), submitRequest, submitExclusive)
+import PgWire.Cache.Sieve qualified as Sieve
 import PgWire.Connection (Connection (..))
 import PgWire.Protocol.Oid qualified as Oid
 import PgWire.Error (PgWireError (..), throwPgWire)
@@ -502,14 +501,10 @@ rawExecute conn sql oids params = do
 -- | Look up or allocate a statement name for raw SQL (same cache as typed).
 lookupOrAllocRaw :: Connection -> ByteString -> IO (ByteString, Bool)
 lookupOrAllocRaw conn sql = do
-  cache <- readIORef (connStmtCache conn)
-  case PSQ.lookup sql cache of
-    Just (_prio, name) -> do
-      tick <- nextTick conn
-      modifyIORef' (connStmtCache conn) (PSQ.insert sql tick name)
-      pure (name, False)
+  mname <- Sieve.lookup (connStmtCache conn) sql
+  case mname of
+    Just name -> pure (name, False)
     Nothing -> do
-      evictIfNeeded conn cache
       counter <- atomicModifyIORef' (connStmtCounter conn) (\n -> (n + 1, n))
       let name = "s" <> BS8.pack (show counter)
       pure (name, True)
@@ -662,7 +657,9 @@ fetchRowsRaw conn stmt params = do
       pure rows
     _ -> throwPgWire (ProtocolError "fetchRows: unexpected response type")
 
--- | Check the statement cache. On miss, allocate a name and evict if needed.
+-- | Check the statement cache. On miss, allocate a fresh name; the actual
+-- cache insert (and any eviction it triggers) happens in 'cacheStmt' once
+-- Parse has succeeded server-side.
 -- When prepared statements are disabled (PgBouncer compatibility), always
 -- returns the unnamed statement ("", True) so queries are parsed each time.
 lookupOrAllocStmt :: Connection -> Statement p r -> IO (ByteString, Bool)
@@ -671,27 +668,31 @@ lookupOrAllocStmt conn stmt
       -- Unprepared mode: always use unnamed statement, always parse
       pure ("", True)
   | otherwise = do
-      cache <- readIORef (connStmtCache conn)
       let sql = stmtSQL stmt
-      case PSQ.lookup sql cache of
-        Just (_prio, name) -> do
-          tick <- nextTick conn
-          modifyIORef' (connStmtCache conn) (PSQ.insert sql tick name)
-          pure (name, False)
+      mname <- Sieve.lookup (connStmtCache conn) sql
+      case mname of
+        Just name -> pure (name, False)
         Nothing -> do
-          evictIfNeeded conn cache
           counter <- atomicModifyIORef' (connStmtCounter conn) (\n -> (n + 1, n))
           let name = "s" <> BS8.pack (show counter)
           pure (name, True)
 
--- | Cache a statement name after successful Parse.
+-- | Cache a statement name after successful Parse, returning any entry
+-- that the SIEVE eviction policy chose to discard so the caller can release
+-- the corresponding server-side prepared statement.
 -- No-op when prepared statements are disabled (unnamed statements are never cached).
 cacheStmt :: Connection -> ByteString -> ByteString -> IO ()
 cacheStmt conn sql name
   | not (connPreparedStatements conn) = pure ()
   | otherwise = do
-      tick <- nextTick conn
-      modifyIORef' (connStmtCache conn) (PSQ.insert sql tick name)
+      evicted <- Sieve.insert (connStmtCache conn) sql name
+      case evicted of
+        Nothing -> pure ()
+        Just (_oldSql, oldName) -> do
+          resp <- submitRequest (connAsync conn) $ ReqClose (Close DescribeStatement oldName)
+          case resp of
+            RespClosed -> pure ()
+            _ -> pure () -- best effort
 
 -- | Decode a list of raw row vectors into typed values.
 decodeRows :: (Vector (Maybe ByteString) -> Either String r) -> [Vector (Maybe ByteString)] -> IO [r]
@@ -709,43 +710,20 @@ batchStreamThreshold = 256
 -- callers that need the statement name before building messages (Pipeline, Fold).
 ensurePrepared :: Connection -> Statement p r -> IO ByteString
 ensurePrepared conn stmt = do
-  cache <- readIORef (connStmtCache conn)
   let sql = stmtSQL stmt
-  case PSQ.lookup sql cache of
-    Just (_prio, name) -> do
-      tick <- nextTick conn
-      modifyIORef' (connStmtCache conn) (PSQ.insert sql tick name)
-      pure name
+  mname <- Sieve.lookup (connStmtCache conn) sql
+  case mname of
+    Just name -> pure name
     Nothing -> do
-      evictIfNeeded conn cache
       counter <- atomicModifyIORef' (connStmtCounter conn) (\n -> (n + 1, n))
       let name = "s" <> BS8.pack (show counter)
           oids = V.map Oid.unOid (stmtParamOids stmt)
       resp <- submitRequest (connAsync conn) $ ReqPrepare (Parse name sql oids)
       case resp of
         RespParsed -> do
-          tick <- nextTick conn
-          modifyIORef' (connStmtCache conn) (PSQ.insert sql tick name)
+          cacheStmt conn sql name
           pure name
         _ -> throwPgWire (ProtocolError "ensurePrepared: unexpected response type")
-
--- | Bump the monotonic tick counter and return the new value.
-nextTick :: Connection -> IO Word64
-nextTick conn = atomicModifyIORef' (connStmtTick conn) (\n -> (n + 1, n + 1))
-
--- | If the cache has reached its limit, evict the least recently used
--- prepared statement (the entry with the lowest tick priority).
-evictIfNeeded :: Connection -> HashPSQ ByteString Word64 ByteString -> IO ()
-evictIfNeeded conn cache
-  | PSQ.size cache < connMaxPreparedStatements conn = pure ()
-  | otherwise = case PSQ.findMin cache of
-      Nothing -> pure ()
-      Just (oldSql, _prio, oldName) -> do
-        resp <- submitRequest (connAsync conn) $ ReqClose (Close DescribeStatement oldName)
-        case resp of
-          RespClosed -> pure ()
-          _ -> pure () -- best effort
-        modifyIORef' (connStmtCache conn) (PSQ.delete oldSql)
 
 ------------------------------------------------------------------------
 -- Streaming batch helpers (exclusive mode, direct wire access)

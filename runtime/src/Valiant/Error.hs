@@ -42,12 +42,15 @@ module Valiant.Error
   , isUndefinedTable
   , isUndefinedColumn
   , isSyntaxError
+
+    -- * Connection fatality
+  , isFatal
   ) where
 
 import Control.Exception (catch, throwIO)
 import Data.Maybe (fromMaybe)
 import Data.ByteString (ByteString)
-import PgWire.Error (PgWireError (..))
+import PgWire.Error (PgWireError (..), isFatal)
 import PgWire.Protocol.Backend (PgError (..))
 
 -- | Extract the SQLSTATE code from a 'PgWireError', if it wraps a

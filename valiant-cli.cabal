@@ -1,6 +1,6 @@
 cabal-version:   3.0
 name:            valiant-cli
-version:         0.1.0.0
+version:         0.1.0.1
 synopsis:        Compile-time checked SQL for Haskell: CLI tool
 description:
   The @valiant@ CLI tool connects to a live PostgreSQL database,
@@ -83,7 +83,7 @@ library cli-internal
     , filepath              >=1.4     && <1.6
     , Glob                  >=0.10    && <0.11
     , optparse-applicative  >=0.18    && <0.19
-    , pg-wire               ==0.1.*
+    , pg-wire               ==0.2.*
     , text                  >=2.0     && <2.2
     , time                  >=1.12    && <1.15
     , vector                >=0.13    && <0.14

@@ -1,6 +1,6 @@
 cabal-version:   3.0
 name:            pg-wire
-version:         0.1.0.0
+version:         0.2.0.0
 synopsis:        Pure Haskell PostgreSQL wire protocol driver
 description:
   A complete implementation of the PostgreSQL v3 wire protocol in
@@ -53,6 +53,7 @@ library
     PgWire.Auth.MD5
     PgWire.Auth.ScramSHA256
     PgWire.Binary.Types
+    PgWire.Cache.Sieve
     PgWire.Cancel
     PgWire.Connection
     PgWire.Connection.Config
@@ -96,7 +97,6 @@ library
     , directory             >=1.3     && <1.4
     , hashable              >=1.4     && <1.6
     , nothunks              >=0.1     && <0.3
-    , psqueues              >=0.2.8   && <0.3
     , random                >=1.2     && <1.4
 
     -- Concurrency / pool
@@ -136,6 +136,7 @@ test-suite pg-wire-test
   other-modules:
     PgWire.Auth.MD5Spec
     PgWire.Auth.ScramFieldsSpec
+    PgWire.Cache.SieveSpec
     PgWire.CancelSpec
     PgWire.Connection.ConfigSpec
     PgWire.Connection.EscapingSpec
@@ -156,6 +157,7 @@ test-suite pg-wire-test
     , async        >=2.2  && <2.3
     , base         >=4.17 && <5
     , bytestring
+    , containers
     , crypton
     , deepseq
     , hedgehog     >=1.2  && <1.6
@@ -166,3 +168,24 @@ test-suite pg-wire-test
     , pg-wire
     , pg-wire:mockserver
     , vector
+
+-- Pure microbenchmarks for the SIEVE-based prepared-statement cache
+-- ('PgWire.Cache.Sieve'), used per-connection by 'Valiant.Execute' and
+-- 'PgWire.Connection'.
+-- Run with:  cabal bench pg-wire-cache-bench
+benchmark pg-wire-cache-bench
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   bench
+  main-is:          Main.hs
+  default-language: GHC2021
+  default-extensions:
+    OverloadedStrings
+  build-depends:
+    , base                  >=4.17    && <5
+    , bytestring
+    , criterion             >=1.6     && <1.8
+    , deepseq
+    , pg-wire
+    , random                >=1.2     && <1.4
+  ghc-options: -O2

@@ -5,6 +5,29 @@ All notable changes to the valiant project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-04-29
+
+### Per-package version bumps
+
+- **pg-wire** 0.1.0.0 → 0.2.0.0: replaced the per-connection
+  prepared-statement cache with SIEVE
+  ([NSDI'24](https://www.usenix.org/conference/nsdi24/presentation/zhang-yazhuo)).
+  Breaking: `Connection` record fields changed (`connStmtCache` is now
+  `SieveCache ByteString ByteString`; `connStmtTick` removed). Added
+  `clear`, `capacity`, `foldEntries` to `PgWire.Cache.Sieve`. Removed
+  `psqueues` dependency.
+- **valiant** 0.1.0.0 → 0.1.0.1: `Valiant.Execute` and `Valiant.Batch`
+  now use the SIEVE cache from `pg-wire` 0.2. No public API change.
+  Removed `psqueues` dependency. Bumped `pg-wire` bound to `==0.2.*`.
+- **valiant-cli** 0.1.0.0 → 0.1.0.1: bumped `pg-wire` bound to `==0.2.*`.
+- **valiant-bluefin**, **valiant-effectful**, **valiant-mtl**,
+  **valiant-fused-effects** 0.1.0.0 → 0.1.0.1: bumped `pg-wire` bound
+  to `>=0.2 && <0.3`.
+
+Streaming adapters (`valiant-conduit`, `valiant-pipes`,
+`valiant-streaming`, `valiant-streamly`) and `valiant-plugin` are
+unchanged at 0.1.0.0.
+
 ## [0.1.0.0] - 2026-04-25
 
 Initial release. The project ships four primary packages plus eight adapter
